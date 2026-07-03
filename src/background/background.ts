@@ -55,6 +55,7 @@ const MESSAGE_TYPES: ReadonlySet<string> = new Set([
   'ZONE_POLLUTION_EVENT',
   'ROUTE_CHANGED',
   'FLOW_EVENT_BATCH',
+  'FRAME_LOADED',
 ]);
 
 const ASYNC_EVENT_TYPES: ReadonlySet<string> = new Set([
@@ -69,6 +70,7 @@ const ASYNC_EVENT_TYPES: ReadonlySet<string> = new Set([
   'ERROR',
   'ZONE_POLLUTION_EVENT',
   'FLOW_EVENT_BATCH',
+  'FRAME_LOADED',
 ]);
 
 // --- Panel Port Connection Handling ---
@@ -114,6 +116,12 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
+/**
+ * Keeps track of registered frame IDs for each tab.
+ * Used for broadcasting commands (like START_TRACKING) to all frames.
+ */
+const tabFrames = new Map<number, Set<number>>();
+
 async function sendPanelMessageToContent(
   tabId: number,
   message: PortMessage
@@ -123,24 +131,49 @@ async function sendPanelMessageToContent(
     timestamp: Date.now(),
   };
 
-  try {
-    return await chrome.tabs.sendMessage(tabId, forwardedMessage);
-  } catch (firstError) {
-    if (!isPanelCommand(message.type)) {
-      throw firstError;
+  // If a specific frameId targets this command, send to that frame only
+  if (typeof message.frameId === 'number') {
+    try {
+      return await chrome.tabs.sendMessage(tabId, forwardedMessage, { frameId: message.frameId });
+    } catch {
+      // Content script may not be ready in the target frame — inject programmatically.
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId, frameIds: [message.frameId] },
+          files: ['content.js'],
+        });
+        return await chrome.tabs.sendMessage(tabId, forwardedMessage, { frameId: message.frameId });
+      } catch (err) {
+        return { success: false, error: String(err) };
+      }
     }
-
-    // Content script not ready — inject it programmatically.
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['content.js'],
-    });
-
-    return chrome.tabs.sendMessage(tabId, {
-      ...forwardedMessage,
-      timestamp: Date.now(),
-    });
   }
+
+  // Otherwise, broadcast to all registered frames of this tab
+  const frames = tabFrames.get(tabId) || new Set([0]);
+  const promises = Array.from(frames).map(async (frameId) => {
+    try {
+      return await chrome.tabs.sendMessage(tabId, forwardedMessage, { frameId });
+    } catch (firstError) {
+      if (!isPanelCommand(message.type)) {
+        return { success: false, error: String(firstError) };
+      }
+
+      // Content script not ready in this frame — inject it programmatically.
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId, frameIds: [frameId] },
+          files: ['content.js'],
+        });
+        return await chrome.tabs.sendMessage(tabId, { ...forwardedMessage, timestamp: Date.now() }, { frameId });
+      } catch (innerError) {
+        return { success: false, error: String(innerError) };
+      }
+    }
+  });
+
+  const results = await Promise.all(promises);
+  return results[0] || { success: true };
 }
 
 function isPanelCommand(type: string): boolean {
@@ -181,8 +214,22 @@ chrome.runtime.onMessage.addListener(
     const senderTabId = sender.tab?.id;
     if (senderTabId != null && ASYNC_EVENT_TYPES.has(message.type)) {
       const port = panelPorts.get(senderTabId);
+
+      // Track the frame if we have frameId
+      const frameId = sender.frameId ?? 0;
+      let frames = tabFrames.get(senderTabId);
+      if (!frames) {
+        frames = new Set<number>();
+        tabFrames.set(senderTabId, frames);
+      }
+      frames.add(frameId);
+
       if (port) {
-        port.postMessage(message);
+        port.postMessage({
+          ...message,
+          frameId,
+          frameUrl: sender.url,
+        });
         sendResponse({ success: true });
         return true;
       }
@@ -235,6 +282,9 @@ chrome.tabs.onUpdated.addListener(
       // Clear previous state for this tab on full navigation
       await clearTabState(tabId);
 
+      // Clear stored frame IDs
+      tabFrames.delete(tabId);
+
       // Notify the DevTools panel that the tab navigated
       const port = panelPorts.get(tabId);
       if (port) {
@@ -255,6 +305,7 @@ chrome.tabs.onUpdated.addListener(
  */
 chrome.tabs.onRemoved.addListener(async (tabId: number) => {
   await removeTabState(tabId);
+  tabFrames.delete(tabId);
 });
 
 // --- Extension Install ---

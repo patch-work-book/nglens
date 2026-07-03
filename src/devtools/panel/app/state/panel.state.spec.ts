@@ -84,7 +84,7 @@ describe('PanelState', () => {
   it('uses min and max render timestamps when capturing snapshot render rate', () => {
     const state = new PanelState();
 
-    state.renderEvents.set([
+    state.rawRenderEvents.set([
       {
         componentName: 'OutOfOrderComponent',
         timestamp: 60_000,
@@ -108,7 +108,7 @@ describe('PanelState', () => {
   it('aggregates allIssues from leak, trackBy, hot, hotspot, and zone pollution sources', () => {
     const state = new PanelState();
 
-    state.leakEvents.set([
+    state.rawLeakEvents.set([
       {
         id: 'leak-1',
         componentName: 'DashboardComponent',
@@ -122,7 +122,7 @@ describe('PanelState', () => {
       },
     ]);
 
-    state.trackByIssues.set([
+    state.rawTrackByIssues.set([
       {
         id: 'tb-1',
         componentName: 'ListComponent',
@@ -133,7 +133,7 @@ describe('PanelState', () => {
       },
     ]);
 
-    state.onPushRecommendations.set([
+    state.rawOnPushRecommendations.set([
       {
         component: 'CardComponent',
         score: 0.7,
@@ -143,7 +143,7 @@ describe('PanelState', () => {
       },
     ]);
 
-    state.renderEvents.set([
+    state.rawRenderEvents.set([
       {
         componentName: 'TableComponent',
         timestamp: 1000,
@@ -158,7 +158,7 @@ describe('PanelState', () => {
       },
     ]);
 
-    state.zonePollutionSources.set([
+    state.rawZonePollutionSources.set([
       {
         source: 'setInterval',
         type: 'macroTask',

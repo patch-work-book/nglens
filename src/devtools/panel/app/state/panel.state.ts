@@ -28,14 +28,47 @@ export class PanelState {
   readonly selectedComponent = signal<string | null>(null);
   readonly selectedIssue = signal<Issue | null>(null);
 
-  // Data
-  readonly renderEvents = signal<RenderEvent[]>([]);
-  readonly flowEvents = signal<FlowEvent[]>([]);
-  readonly leakEvents = signal<LeakEvent[]>([]);
-  readonly trackByIssues = signal<TrackByIssue[]>([]);
-  readonly onPushRecommendations = signal<OnPushScore[]>([]);
+  // Base raw data stores (private)
+  private readonly rawRenderEvents = signal<RenderEvent[]>([]);
+  private readonly rawFlowEvents = signal<FlowEvent[]>([]);
+  private readonly rawLeakEvents = signal<LeakEvent[]>([]);
+  private readonly rawTrackByIssues = signal<TrackByIssue[]>([]);
+  private readonly rawOnPushRecommendations = signal<OnPushScore[]>([]);
+  private readonly rawZonePollutionSources = signal<PollutionSourceMetrics[]>([]);
+
+  // Navigation / Frame Selection
+  readonly frames = signal<{ id: number; url: string; isTop: boolean }[]>([
+    { id: 0, url: 'Top Window', isTop: true }
+  ]);
+  readonly selectedFrameId = signal<number>(0);
+
+  // Data (computed based on current select frame ID)
+  readonly renderEvents = computed(() => {
+    const target = this.selectedFrameId();
+    return this.rawRenderEvents().filter(e => e.frameId === target || (!e.frameId && target === 0));
+  });
+  readonly flowEvents = computed(() => {
+    const target = this.selectedFrameId();
+    return this.rawFlowEvents().filter(e => e.frameId === target || (!e.frameId && target === 0));
+  });
+  readonly leakEvents = computed(() => {
+    const target = this.selectedFrameId();
+    return this.rawLeakEvents().filter(e => e.frameId === target || (!e.frameId && target === 0));
+  });
+  readonly trackByIssues = computed(() => {
+    const target = this.selectedFrameId();
+    return this.rawTrackByIssues().filter(e => e.frameId === target || (!e.frameId && target === 0));
+  });
+  readonly onPushRecommendations = computed(() => {
+    const target = this.selectedFrameId();
+    return this.rawOnPushRecommendations().filter(e => e.frameId === target || (!e.frameId && target === 0));
+  });
+  readonly zonePollutionSources = computed(() => {
+    const target = this.selectedFrameId();
+    return this.rawZonePollutionSources().filter(e => e.frameId === target || (!e.frameId && target === 0));
+  });
+
   readonly snapshots = signal<PerformanceSnapshot[]>([]);
-  readonly zonePollutionSources = signal<PollutionSourceMetrics[]>([]);
 
   // Computed: aggregate render events into per-component stats
   readonly componentStats = computed(() => this.aggregateStats(this.renderEvents()));
@@ -205,12 +238,14 @@ export class PanelState {
     this.activeTab.set('overview');
     this.selectedComponent.set(null);
     this.selectedIssue.set(null);
-    this.renderEvents.set([]);
-    this.leakEvents.set([]);
-    this.trackByIssues.set([]);
-    this.onPushRecommendations.set([]);
+    this.rawRenderEvents.set([]);
+    this.rawLeakEvents.set([]);
+    this.rawTrackByIssues.set([]);
+    this.rawOnPushRecommendations.set([]);
     this.snapshots.set([]);
-    this.zonePollutionSources.set([]);
+    this.rawZonePollutionSources.set([]);
+    this.frames.set([{ id: 0, url: 'Top Window', isTop: true }]);
+    this.selectedFrameId.set(0);
   }
 
   captureSnapshot(label?: string): void {
@@ -226,14 +261,53 @@ export class PanelState {
   }
 
   clearActivity(): void {
-    this.renderEvents.set([]);
-    this.flowEvents.set([]);
-    this.leakEvents.set([]);
-    this.trackByIssues.set([]);
-    this.onPushRecommendations.set([]);
-    this.zonePollutionSources.set([]);
+    this.rawRenderEvents.set([]);
+    this.rawFlowEvents.set([]);
+    this.rawLeakEvents.set([]);
+    this.rawTrackByIssues.set([]);
+    this.rawOnPushRecommendations.set([]);
+    this.rawZonePollutionSources.set([]);
     this.selectedIssue.set(null);
     this.selectedComponent.set(null);
+  }
+
+  registerFrame(frameId: number, url: string, isTop: boolean): void {
+    this.frames.update(current => {
+      if (current.some(f => f.id === frameId)) {
+        return current.map(f => f.id === frameId ? { ...f, url, isTop } : f);
+      }
+      return [...current, { id: frameId, url, isTop }];
+    });
+  }
+
+  addRenderEvents(events: RenderEvent[], frameId: number): void {
+    const eventsWithFrame = events.map(e => ({ ...e, frameId }));
+    this.rawRenderEvents.update(current => [...current, ...eventsWithFrame]);
+  }
+
+  addLeakEvent(event: LeakEvent, frameId: number): void {
+    this.rawLeakEvents.update(current => [...current, { ...event, frameId }]);
+  }
+
+  addTrackByIssue(issue: TrackByIssue, frameId: number): void {
+    this.rawTrackByIssues.update(current => [...current, { ...issue, frameId }]);
+  }
+
+  addOnPushResult(result: OnPushScore, frameId: number): void {
+    this.rawOnPushRecommendations.update(current => [...current, { ...result, frameId }]);
+  }
+
+  setZonePollutionSources(sources: PollutionSourceMetrics[], frameId: number): void {
+    const sourcesWithFrame = sources.map(s => ({ ...s, frameId }));
+    this.rawZonePollutionSources.update(current => {
+      const otherFrames = current.filter(s => s.frameId !== frameId);
+      return [...otherFrames, ...sourcesWithFrame];
+    });
+  }
+
+  addFlowEvents(events: FlowEvent[], frameId: number): void {
+    const eventsWithFrame = events.map(e => ({ ...e, frameId }));
+    this.rawFlowEvents.update(current => [...current, ...eventsWithFrame]);
   }
 
   setTrackingError(message: string): void {

@@ -83,18 +83,19 @@ const onPushScoreArb: fc.Arbitrary<OnPushScore> = fc.record({
 // This mirrors the switch cases in event-dispatcher.service.ts for non-trigger messages.
 
 function dispatchToState(state: PanelState, message: PortMessage): void {
+  const frameId = message.frameId ?? 0;
   switch (message.type) {
     case 'EVENT_BATCH':
-      state.renderEvents.update(current => [...current, ...(message.payload as { events: RenderEvent[] }).events]);
+      state.addRenderEvents((message.payload as { events: RenderEvent[] }).events, frameId);
       break;
     case 'LEAK_EVENT':
-      state.leakEvents.update(current => [...current, message.payload as LeakEvent]);
+      state.addLeakEvent(message.payload as LeakEvent, frameId);
       break;
     case 'TRACKBY_ISSUE':
-      state.trackByIssues.update(current => [...current, message.payload as TrackByIssue]);
+      state.addTrackByIssue(message.payload as TrackByIssue, frameId);
       break;
     case 'ONPUSH_RESULT':
-      state.onPushRecommendations.update(current => [...current, message.payload as OnPushScore]);
+      state.addOnPushResult(message.payload as OnPushScore, frameId);
       break;
     case 'DEGRADED_MODE':
       state.degradedMode.set(true);
@@ -128,7 +129,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
             const result = state.renderEvents();
             expect(result).toHaveLength(events.length);
-            expect(result).toEqual(events);
+            expect(result).toEqual(events.map(e => ({ ...e, frameId: 0 })));
           }
         ),
         { numRuns: 100 }
@@ -157,7 +158,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
             const result = state.renderEvents();
             expect(result).toHaveLength(batch1.length + batch2.length);
-            expect(result).toEqual([...batch1, ...batch2]);
+            expect(result).toEqual([...batch1, ...batch2].map(e => ({ ...e, frameId: 0 })));
           }
         ),
         { numRuns: 100 }
@@ -186,7 +187,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
           const result = state.leakEvents();
           expect(result).toHaveLength(1);
-          expect(result[0]).toEqual(leakEvent);
+          expect(result[0]).toEqual({ ...leakEvent, frameId: 0 });
         }),
         { numRuns: 100 }
       );
@@ -209,7 +210,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
             const result = state.leakEvents();
             expect(result).toHaveLength(leakEvents.length);
-            expect(result).toEqual(leakEvents);
+            expect(result).toEqual(leakEvents.map(e => ({ ...e, frameId: 0 })));
           }
         ),
         { numRuns: 100 }
@@ -238,7 +239,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
           const result = state.trackByIssues();
           expect(result).toHaveLength(1);
-          expect(result[0]).toEqual(trackByIssue);
+          expect(result[0]).toEqual({ ...trackByIssue, frameId: 0 });
         }),
         { numRuns: 100 }
       );
@@ -261,7 +262,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
             const result = state.trackByIssues();
             expect(result).toHaveLength(issues.length);
-            expect(result).toEqual(issues);
+            expect(result).toEqual(issues.map(e => ({ ...e, frameId: 0 })));
           }
         ),
         { numRuns: 100 }
@@ -290,7 +291,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
           const result = state.onPushRecommendations();
           expect(result).toHaveLength(1);
-          expect(result[0]).toEqual(onPushScore);
+          expect(result[0]).toEqual({ ...onPushScore, frameId: 0 });
         }),
         { numRuns: 100 }
       );
@@ -313,7 +314,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
             const result = state.onPushRecommendations();
             expect(result).toHaveLength(scores.length);
-            expect(result).toEqual(scores);
+            expect(result).toEqual(scores.map(e => ({ ...e, frameId: 0 })));
           }
         ),
         { numRuns: 100 }

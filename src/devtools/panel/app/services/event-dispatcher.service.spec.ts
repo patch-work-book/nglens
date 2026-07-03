@@ -184,7 +184,7 @@ describe('EventDispatcherService', () => {
     });
 
     it('should keep render data after ROUTE_CHANGED by default', () => {
-      state.renderEvents.set([
+      state.rawRenderEvents.set([
         {
           componentName: 'DashboardComponent',
           timestamp: 100,
@@ -214,7 +214,7 @@ describe('EventDispatcherService', () => {
         description: 'Rendering frequently',
         timestamp: 100,
       });
-      state.renderEvents.set([
+      state.rawRenderEvents.set([
         {
           componentName: 'DashboardComponent',
           timestamp: 100,
@@ -222,7 +222,7 @@ describe('EventDispatcherService', () => {
           causes: [{ type: 'zone' }],
         },
       ]);
-      state.trackByIssues.set([
+      state.rawTrackByIssues.set([
         {
           id: 'trackby-1',
           componentName: 'ListComponent',
@@ -232,7 +232,7 @@ describe('EventDispatcherService', () => {
           recommendation: 'Add trackBy',
         },
       ]);
-      state.onPushRecommendations.set([
+      state.rawOnPushRecommendations.set([
         {
           component: 'CardComponent',
           score: 75,
@@ -241,7 +241,7 @@ describe('EventDispatcherService', () => {
           recommendation: 'Consider OnPush',
         },
       ]);
-      state.zonePollutionSources.set([
+      state.rawZonePollutionSources.set([
         {
           source: 'setInterval',
           type: 'macroTask',

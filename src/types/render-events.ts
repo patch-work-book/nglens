@@ -13,6 +13,7 @@ export interface RenderEvent {
   parentComponent?: string | null;
   /** Depth in the cascade tree (0 = triggered directly, 1 = child of trigger, etc.) */
   depth?: number;
+  frameId?: number;
 }
 
 export interface RenderCause {
@@ -42,6 +43,7 @@ export interface FlowEvent {
   /** For route changes: from → to */
   fromRoute?: string;
   toRoute?: string;
+  frameId?: number;
   /** Timestamp of the user interaction that caused this flow event (for grouping) */
   triggeredByInteractionTs?: number;
 }
