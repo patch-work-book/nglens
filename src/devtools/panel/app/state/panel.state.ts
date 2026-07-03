@@ -197,6 +197,7 @@ export class PanelState {
           title: `${stat.componentName} rendered ${stat.renderCount}× from parent cascade`,
           description: `This component re-renders every time its parent does. Add ChangeDetectionStrategy.OnPush so it only re-renders when its inputs change.`,
           timestamp: stat.lastSeen,
+          route: stat.route,
         });
       } else if (stat.renderCount >= 4) {
         issues.push({
@@ -209,6 +210,7 @@ export class PanelState {
             ? `Timers or async operations trigger excessive re-renders. Use OnPush + Signals, or run timers outside Angular zone.`
             : `This component re-renders too frequently. Use OnPush and ensure inputs use immutable references.`,
           timestamp: stat.lastSeen,
+          route: stat.route,
         });
       }
     }
@@ -286,22 +288,59 @@ export class PanelState {
   }
 
   addLeakEvent(event: LeakEvent, frameId: number): void {
-    this.rawLeakEvents.update(current => [...current, { ...event, frameId }]);
+    this.rawLeakEvents.update(current => {
+      // Deduplicate/accumulate leak events
+      const index = current.findIndex(e => e.componentId === event.componentId && e.leakType === event.leakType && e.source === event.source && e.frameId === frameId);
+      if (index !== -1) {
+        const updated = [...current];
+        updated[index] = { ...event, frameId };
+        return updated;
+      }
+      return [...current, { ...event, frameId }];
+    });
   }
 
   addTrackByIssue(issue: TrackByIssue, frameId: number): void {
-    this.rawTrackByIssues.update(current => [...current, { ...issue, frameId }]);
+    this.rawTrackByIssues.update(current => {
+      // Deduplicate/accumulate trackBy issues including route
+      const index = current.findIndex(e => e.componentName === issue.componentName && e.collectionProperty === issue.collectionProperty && e.frameId === frameId && e.route === issue.route);
+      if (index !== -1) {
+        const updated = [...current];
+        updated[index] = { ...issue, frameId };
+        return updated;
+      }
+      return [...current, { ...issue, frameId }];
+    });
   }
 
   addOnPushResult(result: OnPushScore, frameId: number): void {
-    this.rawOnPushRecommendations.update(current => [...current, { ...result, frameId }]);
+    this.rawOnPushRecommendations.update(current => {
+      // Deduplicate/accumulate OnPush recommendations including route
+      const index = current.findIndex(e => e.component === result.component && e.frameId === frameId && e.route === result.route);
+      if (index !== -1) {
+        const updated = [...current];
+        updated[index] = { ...result, frameId };
+        return updated;
+      }
+      return [...current, { ...result, frameId }];
+    });
   }
 
   setZonePollutionSources(sources: PollutionSourceMetrics[], frameId: number): void {
     const sourcesWithFrame = sources.map(s => ({ ...s, frameId }));
     this.rawZonePollutionSources.update(current => {
       const otherFrames = current.filter(s => s.frameId !== frameId);
-      return [...otherFrames, ...sourcesWithFrame];
+      const targetFrameSources = current.filter(s => s.frameId === frameId);
+
+      const sourcesMap = new Map<string, PollutionSourceMetrics>();
+      for (const s of targetFrameSources) {
+        sourcesMap.set(s.source, s);
+      }
+      for (const s of sourcesWithFrame) {
+        sourcesMap.set(s.source, s);
+      }
+
+      return [...otherFrames, ...Array.from(sourcesMap.values())];
     });
   }
 
@@ -333,6 +372,7 @@ export class PanelState {
       causesBreakdown: Record<RenderCause['type'], number>;
       firstSeen: number;
       lastSeen: number;
+      lastRoute?: string;
     }>();
 
     for (const event of events) {
@@ -344,6 +384,7 @@ export class PanelState {
           causesBreakdown: { signal: 0, input: 0, zone: 0, parent: 0, 'manual-cd': 0 },
           firstSeen: event.timestamp,
           lastSeen: event.timestamp,
+          lastRoute: event.route,
         };
         statsMap.set(event.componentName, entry);
       }
@@ -351,7 +392,12 @@ export class PanelState {
       entry.renderCount++;
       entry.totalDuration += event.duration;
       if (event.timestamp < entry.firstSeen) entry.firstSeen = event.timestamp;
-      if (event.timestamp > entry.lastSeen) entry.lastSeen = event.timestamp;
+      if (event.timestamp > entry.lastSeen) {
+        entry.lastSeen = event.timestamp;
+        if (event.route) {
+          entry.lastRoute = event.route;
+        }
+      }
 
       for (const cause of event.causes) {
         entry.causesBreakdown[cause.type]++;
@@ -370,6 +416,7 @@ export class PanelState {
         causesBreakdown: entry.causesBreakdown,
         firstSeen: entry.firstSeen,
         lastSeen: entry.lastSeen,
+        route: entry.lastRoute,
       });
     }
 
@@ -484,6 +531,7 @@ export class PanelState {
           totalDuration: stat.totalDuration,
           primaryCause: this.primaryCause(stat.causesBreakdown),
           reasons,
+          route: stat.route,
         };
       })
       .sort((a, b) => b.score - a.score);
@@ -566,6 +614,7 @@ export class PanelState {
       title: `Possible leak risk in ${event.componentName}`,
       description: `Cleanup not detected for ${event.leakType} from "${event.source}" after component destruction.`,
       timestamp: event.detectedAt,
+      route: event.route,
     };
   }
 
@@ -578,6 +627,7 @@ export class PanelState {
       title: `Missing trackBy in ${issue.componentName}`,
       description: `Collection "${issue.collectionProperty}" has ${issue.collectionSize} items without trackBy.`,
       timestamp: Date.now(),
+      route: issue.route,
     };
   }
 
@@ -590,6 +640,7 @@ export class PanelState {
       title: `Hot component: ${stats.componentName}`,
       description: `Rendering ${Math.round(stats.rendersPerMinute)} times per minute (avg ${stats.averageDuration.toFixed(1)}ms).`,
       timestamp: stats.lastSeen,
+      route: stats.route,
     };
   }
 
@@ -602,6 +653,7 @@ export class PanelState {
       title: `Performance hotspot: ${hotspot.componentName}`,
       description: `${hotspot.score}/100 hotspot score from ${hotspot.reasons.join(', ')}.`,
       timestamp: Date.now(),
+      route: hotspot.route,
     };
   }
 
@@ -619,6 +671,7 @@ export class PanelState {
       title: `Zone pollution: ${source.library ?? source.source} (${Math.round(source.cdCyclesPerMinute)} CD/min)`,
       description: source.fixSuggestion ?? `${source.source} is triggering excessive change detection`,
       timestamp: source.lastSeen,
+      route: source.route,
     };
   }
 }

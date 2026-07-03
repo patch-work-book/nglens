@@ -3,6 +3,7 @@
 // filters Angular internals, and properly attributes causes.
 
 import type { RenderEvent, RenderCause, EventBatch } from '../types/render-events';
+import { FlowTracker } from './flow-tracker';
 
 const PAGE_TO_CONTENT_EVENT = '__ng_perf_to_content';
 
@@ -482,6 +483,7 @@ export class RenderTracker {
         interactionTarget: interaction?.targetSelector ?? undefined,
         parentComponent: node.parent,
         depth: node.depth,
+        route: FlowTracker.getInstance().getCurrentRoute(),
       };
       this.eventBuffer.push(event);
     }

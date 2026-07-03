@@ -29,6 +29,20 @@ export class DevtoolsPortService {
     this.state.connectionState.set('connected');
     this.reconnectAttempts = 0;
 
+    // Direct auto start check on connect/load
+    try {
+      chrome.storage.local.get('auto_start_scan', (result) => {
+        if (result && result['auto_start_scan'] === true) {
+          this.state.isTracking.set(true);
+          this.send({
+            type: 'START_TRACKING',
+            payload: null,
+            timestamp: Date.now(),
+          });
+        }
+      });
+    } catch { /* ignore outside extension context */ }
+
     this.port.onMessage.addListener((msg: PortMessage) => {
       this.dispatcher.dispatch(msg);
     });

@@ -52,6 +52,19 @@ import { CommandService } from '../../services/command.service';
         </select>
       </div>
 
+      <!-- Options/Filters -->
+      <div class="flex items-center gap-1 bg-gray-900 border border-gray-700 rounded px-2 py-0.5">
+        <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400 select-none">
+          <input
+            type="checkbox"
+            [checked]="clearOnRouteChange()"
+            (change)="toggleClearOnRoute()"
+            class="rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0 focus:ring-offset-0 w-3 h-3"
+          />
+          Clear on Route Change
+        </label>
+      </div>
+
       <!-- Spacer -->
       <div class="flex-1"></div>
 

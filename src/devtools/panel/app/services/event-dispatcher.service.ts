@@ -96,6 +96,20 @@ export class EventDispatcherService {
         payload: null,
         timestamp: Date.now(),
       });
+    } else {
+      // Check if auto-start scan is enabled on navigation load
+      try {
+        chrome.storage.local.get('auto_start_scan', (result) => {
+          if (result && result['auto_start_scan'] === true) {
+            this.state.isTracking.set(true);
+            this.portService?.send({
+              type: 'START_TRACKING',
+              payload: null,
+              timestamp: Date.now(),
+            });
+          }
+        });
+      } catch { /* ignore */ }
     }
   }
 
@@ -133,14 +147,15 @@ export class EventDispatcherService {
     this.state.addFlowEvents(payload.events, frameId);
   }
 
-  private handleRouteChanged(payload: { timestamp: number }, frameId: number): void {
+  private handleRouteChanged(payload: { timestamp: number; url?: string }, frameId: number): void {
     // Add a flow event for the route change so it appears in the Render Inspector timeline
     this.state.addFlowEvents([{
       id: `route-${Date.now()}`,
       type: 'route-change' as const,
       timestamp: Date.now(),
-      label: 'Route changed',
+      label: `Route changed: ${payload.url ?? 'Navigation detected'}`,
       detail: 'Navigation detected via router-outlet',
+      toRoute: payload.url,
     }], frameId);
 
     // Optionally clear activity on route change

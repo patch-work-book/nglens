@@ -312,9 +312,20 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
               });
             }
 
+            // Deduplicate scores in test because the state service deduplicates by component and route (under frame 0)
+            const uniqueScores: OnPushScore[] = [];
+            for (const s of scores) {
+              const dupIndex = uniqueScores.findIndex(prev => prev.component === s.component && prev.route === s.route);
+              if (dupIndex !== -1) {
+                uniqueScores[dupIndex] = s;
+              } else {
+                uniqueScores.push(s);
+              }
+            }
+
             const result = state.onPushRecommendations();
-            expect(result).toHaveLength(scores.length);
-            expect(result).toEqual(scores.map(e => ({ ...e, frameId: 0 })));
+            expect(result).toHaveLength(uniqueScores.length);
+            expect(result).toEqual(uniqueScores.map(e => ({ ...e, frameId: 0 })));
           }
         ),
         { numRuns: 100 }

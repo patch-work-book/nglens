@@ -11,7 +11,8 @@ export default defineConfig({
         background: resolve(__dirname, 'src/background/background.ts'),
         content: resolve(__dirname, 'src/content/content.ts'),
         'page-script': resolve(__dirname, 'src/content/page-script.ts'),
-        devtools: resolve(__dirname, 'src/devtools/devtools.ts')
+        devtools: resolve(__dirname, 'src/devtools/devtools.ts'),
+        popup: resolve(__dirname, 'src/popup/popup.ts')
       },
       output: {
         format: 'es',
@@ -37,6 +38,16 @@ export default defineConfig({
 
         // Copy manifest.json
         copyFileSync(resolve(__dirname, 'manifest.json'), resolve(dist, 'manifest.json'));
+
+        // Copy popup.html
+        if (existsSync(resolve(__dirname, 'popup.html'))) {
+          copyFileSync(resolve(__dirname, 'popup.html'), resolve(dist, 'popup.html'));
+        }
+
+        // Copy popup.css
+        if (existsSync(resolve(__dirname, 'src/popup/popup.css'))) {
+          copyFileSync(resolve(__dirname, 'src/popup/popup.css'), resolve(dist, 'popup.css'));
+        }
 
         // Copy devtools.html
         copyFileSync(resolve(__dirname, 'src/devtools/devtools.html'), resolve(dist, 'devtools.html'));

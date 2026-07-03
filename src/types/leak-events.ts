@@ -13,6 +13,7 @@ export interface LeakEvent {
   detectedAt: number;
   lifecycleState: 'destroyed';
   frameId?: number;
+  route?: string;
 }
 
 export interface ComponentLifecycle {

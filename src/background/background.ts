@@ -224,6 +224,34 @@ chrome.runtime.onMessage.addListener(
       }
       frames.add(frameId);
 
+      // Handle FRAME_LOADED for top-level frame specifically:
+      // Clear state and send TAB_NAVIGATED to panel on real page load/reload
+      if (message.type === 'FRAME_LOADED') {
+        const payload = message.payload as { url: string; isTop: boolean } | null;
+        if (payload?.isTop) {
+          // Real document navigation/reload occurred!
+          clearTabState(senderTabId).then(() => {
+            tabFrames.delete(senderTabId);
+            // Re-add top frame
+            let freshFrames = tabFrames.get(senderTabId);
+            if (!freshFrames) {
+              freshFrames = new Set<number>();
+              tabFrames.set(senderTabId, freshFrames);
+            }
+            freshFrames.add(0);
+
+            if (port) {
+              port.postMessage({
+                type: 'TAB_NAVIGATED',
+                payload: { url: payload.url || '' },
+                tabId: senderTabId,
+                timestamp: Date.now(),
+              });
+            }
+          }).catch(() => { /* ignore */ });
+        }
+      }
+
       if (port) {
         port.postMessage({
           ...message,
@@ -273,30 +301,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // --- Tab Lifecycle ---
 
 /**
- * When a tab navigates to a new URL, clear stored state, re-inject the content script,
- * and notify the DevTools panel (if connected) so it can reset its state.
+ * Tab state clearing and navigation notifications are handled on real 
+ * content script frame loads (on FRAME_LOADED with isTop === true) 
+ * instead of the noisy tabs.onUpdated status transitions, preserving
+ * accumulated findings across client-side SPA routing changes.
  */
 chrome.tabs.onUpdated.addListener(
   async (tabId, changeInfo, tab) => {
-    if (changeInfo.status === 'complete') {
-      // Clear previous state for this tab on full navigation
-      await clearTabState(tabId);
-
-      // Clear stored frame IDs
-      tabFrames.delete(tabId);
-
-      // Notify the DevTools panel that the tab navigated
-      const port = panelPorts.get(tabId);
-      if (port) {
-        const message: PortMessage<{ url: string }> = {
-          type: 'TAB_NAVIGATED',
-          payload: { url: tab.url || '' },
-          tabId: tabId,
-          timestamp: Date.now(),
-        };
-        port.postMessage(message);
-      }
-    }
+    // Left as a no-op placeholder to avoid unnecessary clear-outs on SPA route updates
   }
 );
 
