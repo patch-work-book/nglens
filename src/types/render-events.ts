@@ -15,6 +15,14 @@ export interface RenderEvent {
   depth?: number;
   frameId?: number;
   route?: string;
+  // CD-MER metrics
+  cdCount?: number;
+  mutationCount?: number;
+  // Custom template metrics from Ivy context
+  totalTemplateBindings?: number;
+  totalOutputListeners?: number;
+  hasHighFrequencyZonePollution?: boolean;
+  highFrequencyEvents?: string[];
 }
 
 export interface RenderCause {

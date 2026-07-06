@@ -133,6 +133,14 @@ export class BestPracticesDetector extends BaseAnalyzer {
         element
       );
       issues.push(...trackByIssues);
+
+      // Detect template metrics issues (Binding Density and High-Frequency Listeners)
+      const templateMetricsIssues = this.detectTemplateMetrics(
+        element,
+        component,
+        componentName
+      );
+      issues.push(...templateMetricsIssues);
     }
 
     const duration = now() - startTime;
@@ -353,6 +361,100 @@ export class BestPracticesDetector extends BaseAnalyzer {
       },
       elementSelector: this.buildSelector(element),
     };
+  }
+
+  /**
+   * Adopts custom template metrics scanning from Ivy LView/TView context.
+   */
+  private detectTemplateMetrics(
+    element: Element,
+    component: any,
+    componentName: string
+  ): AnalysisIssue[] {
+    const issues: AnalysisIssue[] = [];
+    const ng = (globalThis as any).ng;
+
+    try {
+      if (!ng) return issues;
+      
+      const cmpDef = component.constructor?.ɵcmp;
+      const lViews = ng.getInternalComponents?.(element) || [];
+      const lView = lViews[0] || (element as any).__ngContext__;
+      const tView = lView ? lView[1] : null;
+
+      if (!tView) return issues;
+
+      // 1. Calculate binding density properties
+      const totalBindingsCount = tView.bindingStartIndex ? (lView.length - tView.bindingStartIndex) : 0;
+      
+      // 2. Inspect Event Listeners tied to this template's DOM footprint
+      const nativeListeners = ng.getListeners?.(element) || [];
+      const highFrequencyTriggers = nativeListeners.filter((l: any) => 
+        ['mousemove', 'scroll', 'pointermove', 'wheel'].includes(l.name)
+      );
+
+      // Flag 1: High frequency zone pollution listeners
+      if (highFrequencyTriggers.length > 0) {
+        issues.push({
+          id: `best-practices-high-freq-listeners-${componentName}`,
+          analyzer: this.type,
+          component: componentName,
+          severity: 'high',
+          category: 'best-practices',
+          title: 'High-frequency listeners tied to DOM footprint',
+          description: `Component ${componentName} has active event listeners for high-frequency triggers: [${highFrequencyTriggers.map((t: any) => t.name).join(', ')}]. These run inside Angular's Zone, forcing a complete change detection sweep for every single mouse move/scroll tick.`,
+          recommendation: `Move high-frequency event handlers (e.g. scroll, mousemove) outside the Angular zone using NgZone.runOutsideAngular() or use RxJS throttleTime/debounceTime with passive listeners.`,
+          metadata: {
+            highFrequencyEvents: highFrequencyTriggers.map((t: any) => t.name),
+            totalListeners: nativeListeners.length
+          },
+          elementSelector: this.buildSelector(element)
+        });
+      }
+
+      // Flag 2: Extreme template binding density (e.g., > 50)
+      if (totalBindingsCount > 50) {
+        issues.push({
+          id: `best-practices-extreme-bindings-${componentName}`,
+          analyzer: this.type,
+          component: componentName,
+          severity: 'medium',
+          category: 'best-practices',
+          title: `Bloated Template Binding Density (${totalBindingsCount} bindings)`,
+          description: `Component ${componentName} has ${totalBindingsCount} active template expressions/bindings. On every change detection pass, Angular must evaluate and diff all ${totalBindingsCount} reference values, which degrades rendering performance.`,
+          recommendation: `Refactor this template by breaking it into smaller nested child components, using ChangeDetectionStrategy.OnPush, or leveraging pure pipes to memoize heavy sub-calculations.`,
+          metadata: {
+            totalTemplateBindings: totalBindingsCount
+          },
+          elementSelector: this.buildSelector(element)
+        });
+      }
+
+      // Flag 3: High bindings count + Default Change Detection Strategy
+      const isDefaultCD = !cmpDef || cmpDef.changeDetection === 0;
+      if (isDefaultCD && totalBindingsCount > 25) {
+        issues.push({
+          id: `best-practices-default-cd-heavy-${componentName}`,
+          analyzer: this.type,
+          component: componentName,
+          severity: 'medium',
+          category: 'best-practices',
+          title: `Default Change Detection in heavy component (${totalBindingsCount} bindings)`,
+          description: `Component ${componentName} uses the Default change detection strategy despite containing a substantial volume of template bindings (${totalBindingsCount}). This forces Angular to evaluate all bindings on every single change detection cycle regardless of input change.`,
+          recommendation: `Adopt ChangeDetectionStrategy.OnPush for ${componentName} to skip parsing these ${totalBindingsCount} template bindings during unrelated parent rendering cascades.`,
+          metadata: {
+            totalTemplateBindings: totalBindingsCount,
+            currentStrategy: 'Default',
+            recommendedStrategy: 'OnPush'
+          },
+          elementSelector: this.buildSelector(element)
+        });
+      }
+    } catch {
+      // Silently catch exceptions to prevent breaking the orchestrator
+    }
+
+    return issues;
   }
 
   /**

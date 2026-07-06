@@ -140,8 +140,57 @@ export class RenderTracker {
     this.isRunning = false;
   }
 
+  // CD-MER metrics counts
+  private readonly componentCdCounts = new Map<string, number>();
+  private readonly componentMutationCounts = new Map<string, number>();
+
+  private hookComponentChangeDetection(ctorOrInstance: any, name: string): void {
+    if (!ctorOrInstance) return;
+    const proto = typeof ctorOrInstance === 'function' ? ctorOrInstance.prototype : ctorOrInstance.constructor?.prototype;
+    if (!proto || proto.__nglens_cd_hooked__) return;
+
+    proto.__nglens_cd_hooked__ = true;
+    const originalDoCheck = proto.ngDoCheck;
+    const tracker = this;
+
+    proto.ngDoCheck = function (this: any, ...args: any[]) {
+      if (tracker.isRunning) {
+        tracker.incrementCdCount(name);
+      }
+      if (originalDoCheck) {
+        return originalDoCheck.apply(this, args);
+      }
+    };
+  }
+
+  private incrementCdCount(name: string): void {
+    this.componentCdCounts.set(name, (this.componentCdCounts.get(name) ?? 0) + 1);
+  }
+
+  private incrementMutationCount(name: string): void {
+    this.componentMutationCounts.set(name, (this.componentMutationCounts.get(name) ?? 0) + 1);
+  }
+
+  getCdCount(name: string): number {
+    return this.componentCdCounts.get(name) ?? 0;
+  }
+
+  getMutationCount(name: string): number {
+    return this.componentMutationCounts.get(name) ?? 0;
+  }
+
+  getCdMer(name: string): number {
+    const cd = this.getCdCount(name);
+    const mut = this.getMutationCount(name);
+    return cd > 0 ? (mut / cd) * 100 : 100;
+  }
+
   getBuffer(): RenderEvent[] { return this.eventBuffer; }
-  clearBuffer(): RenderEvent[] { return this.eventBuffer.splice(0); }
+  clearBuffer(): RenderEvent[] {
+    this.componentCdCounts.clear();
+    this.componentMutationCounts.clear();
+    return this.eventBuffer.splice(0);
+  }
   getIsRunning(): boolean { return this.isRunning; }
 
   // ═══ User Interaction Capture ═══════════════════════════════════════════════
@@ -252,6 +301,7 @@ export class RenderTracker {
             const name = this.resolveComponentName(component, el);
             if (name && !isInternalName(name)) {
               this.componentElements.set(el, name);
+              this.hookComponentChangeDetection(component, name);
             }
             continue;
           }
@@ -276,6 +326,7 @@ export class RenderTracker {
           const name = this.resolveComponentName(component, el);
           if (name && !isInternalName(name)) {
             this.componentElements.set(el, name);
+            this.hookComponentChangeDetection(component, name);
           }
           return;
         }
@@ -324,10 +375,12 @@ export class RenderTracker {
       if (typeof ngCtx === 'number') return;
 
       let name: string | null = null;
+      let ctor: any = null;
       if (Array.isArray(ngCtx)) {
         // LView array — tView is at index 1, type holds the component constructor
         const tView = ngCtx[1];
         if (tView?.type && typeof tView.type === 'function') {
+          ctor = tView.type;
           const typeName = tView.type.name ?? null;
           // Only accept names that look like components (>2 chars, not minified)
           if (typeName && typeName.length > 2) {
@@ -343,6 +396,9 @@ export class RenderTracker {
 
       if (name && !isInternalName(name)) {
         this.componentElements.set(el, name);
+        if (ctor) {
+          this.hookComponentChangeDetection(ctor, name);
+        }
       }
     } catch { /* ignore */ }
   }
@@ -474,6 +530,37 @@ export class RenderTracker {
     const hierarchy = this.buildHierarchy(elements);
 
     for (const node of hierarchy) {
+      this.incrementMutationCount(node.name);
+
+      // Safe Extraction of Template Ivy Metrics on the main thread
+      let totalBindings = 0;
+      let totalListeners = 0;
+      let hasHiFreqZonePollution = false;
+      let hiFreqEvents: string[] = [];
+
+      try {
+        const ng = (globalThis as any).ng;
+        if (ng && node.element) {
+          const componentInstance = ng.getComponent(node.element);
+          if (componentInstance) {
+            const lViews = ng.getInternalComponents?.(node.element) || [];
+            const lView = lViews[0] || (node.element as any).__ngContext__;
+            const tView = lView ? lView[1] : null;
+
+            if (tView) {
+              totalBindings = tView.bindingStartIndex ? (lView.length - tView.bindingStartIndex) : 0;
+              const nativeListeners = ng.getListeners?.(node.element) || [];
+              totalListeners = nativeListeners.length;
+              const hf = nativeListeners.filter((l: any) => 
+                ['mousemove', 'scroll', 'pointermove', 'wheel'].includes(l.name)
+              );
+              hasHiFreqZonePollution = hf.length > 0;
+              hiFreqEvents = hf.map((t: any) => t.name);
+            }
+          }
+        }
+      } catch { /* ignore parsing errors during runtime render passes */ }
+
       const event: RenderEvent = {
         componentName: node.name,
         timestamp: Date.now(),
@@ -484,6 +571,12 @@ export class RenderTracker {
         parentComponent: node.parent,
         depth: node.depth,
         route: FlowTracker.getInstance().getCurrentRoute(),
+        cdCount: this.getCdCount(node.name),
+        mutationCount: this.getMutationCount(node.name),
+        totalTemplateBindings: totalBindings > 0 ? totalBindings : undefined,
+        totalOutputListeners: totalListeners > 0 ? totalListeners : undefined,
+        hasHighFrequencyZonePollution: hasHiFreqZonePollution ? true : undefined,
+        highFrequencyEvents: hiFreqEvents.length > 0 ? hiFreqEvents : undefined,
       };
       this.eventBuffer.push(event);
     }
@@ -566,6 +659,7 @@ export class RenderTracker {
             const cName = this.resolveComponentName(component, current);
             if (cName && !isInternalName(cName)) {
               this.componentElements.set(current, cName);
+              this.hookComponentChangeDetection(component, cName);
               return { element: current, name: cName };
             }
           }

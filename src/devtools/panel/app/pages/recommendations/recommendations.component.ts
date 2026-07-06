@@ -3,7 +3,6 @@ import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
 import { displayName } from '../../utils/display-name';
 import {
-  ActionConfidence,
   buildRecommendationActions,
   confidenceClass,
   difficultyClass,

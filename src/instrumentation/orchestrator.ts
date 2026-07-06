@@ -46,6 +46,9 @@ type InstrumentationStartCandidate = {
   currentStrategy: 'Default';
   factors: Array<{ name: string; weight: number; met: boolean; description: string }>;
   recommendation: string;
+  cdCount?: number;
+  mutationCount?: number;
+  cdMer?: number;
 };
 
 function safeInvoke(action: () => void): void {
@@ -114,17 +117,45 @@ function collectOnPushCandidates(limit: number): InstrumentationStartCandidate[]
     // Simple heuristic: count inputs
     const inputCount = cmp.inputs ? Object.keys(cmp.inputs).length : 0;
 
+    // Change Detection Mutation Efficiency Ratio (CD-MER) metrics
+    const cdCount = renderTracker.getCdCount(name);
+    const mutationCount = renderTracker.getMutationCount(name);
+    const cdMer = renderTracker.getCdMer(name);
+
+    const hasCdData = cdCount >= 5;
+    const isInefficient = hasCdData && cdMer < 25;
+
+    const factors: Array<{ name: string; weight: number; met: boolean; description: string }> = [
+      { name: 'Has inputs', weight: 0.3, met: inputCount > 0, description: `${inputCount} input(s)` },
+      { name: 'Not using OnPush', weight: 0.25, met: true, description: 'Currently Default strategy' },
+    ];
+
+    if (hasCdData) {
+      factors.push({
+        name: 'Change Detection Efficiency',
+        weight: 0.45,
+        met: isInefficient,
+        description: `CD-MER: ${cdMer.toFixed(1)}% (${mutationCount} muts in ${cdCount} CDs)`
+      });
+    }
+
+    // Dynamic scoring adjustment based on CD-MER data
+    let score = inputCount > 0 ? 75 : 40;
+    if (isInefficient) {
+      score = Math.min(100, score + Math.round((100 - cdMer) / 2));
+    }
+
     candidates.push({
       component: name,
-      score: inputCount > 0 ? 75 : 40,
+      score,
       currentStrategy: 'Default',
-      factors: [
-        { name: 'Has inputs', weight: 0.3, met: inputCount > 0, description: `${inputCount} input(s)` },
-        { name: 'Not using OnPush', weight: 0.25, met: true, description: 'Currently Default strategy' },
-      ],
-      recommendation: inputCount > 0
-        ? 'Recommended: ChangeDetectionStrategy.OnPush'
-        : 'Consider OnPush if data flows through inputs',
+      factors,
+      recommendation: isInefficient
+        ? `Low Change Detection Efficiency! CD-MER is only ${cdMer.toFixed(1)}%. Checked ${cdCount} times but only mutated ${mutationCount} times. Recheck is wasteful. Switch to ChangeDetectionStrategy.OnPush.`
+        : (inputCount > 0 ? 'Recommended: ChangeDetectionStrategy.OnPush' : 'Consider OnPush if data flows through inputs'),
+      cdCount,
+      mutationCount,
+      cdMer,
     });
   });
 
@@ -201,6 +232,17 @@ function handleStartTracking(): void {
  * Stops all continuous detectors.
  */
 function handleStopTracking(): void {
+  // Dispatch finalized OnPush / CD-MER suitability candidate results before stopping
+  safeInvoke(() => {
+    const analyzed = collectOnPushCandidates(500);
+    for (const result of analyzed) {
+      dispatchToContent('ONPUSH_RESULT', {
+        ...result,
+        route: FlowTracker.getInstance().getCurrentRoute(),
+      });
+    }
+  });
+
   renderTracker.stop();
   leakDetector.stop();
   performanceGuard.stop();
