@@ -75,7 +75,7 @@ export class PanelState {
 
   // Computed: components exceeding 100 renders per minute
   readonly hotComponents = computed(() =>
-    this.componentStats().filter(s => s.rendersPerMinute > 100)
+    this.componentStats().filter(s => s.renderFrequency > 0.1 || s.renderCount > 1)
   );
 
   readonly componentHotspots = computed<ComponentHotspot[]>(() =>
@@ -373,6 +373,12 @@ export class PanelState {
       firstSeen: number;
       lastSeen: number;
       lastRoute?: string;
+      cdCount: number;
+      mutationCount: number;
+      totalTemplateBindings: number;
+      totalOutputListeners: number;
+      hasHighFrequencyZonePollution: boolean;
+      highFrequencyEvents: string[];
     }>();
 
     for (const event of events) {
@@ -385,6 +391,12 @@ export class PanelState {
           firstSeen: event.timestamp,
           lastSeen: event.timestamp,
           lastRoute: event.route,
+          cdCount: 0,
+          mutationCount: 0,
+          totalTemplateBindings: 0,
+          totalOutputListeners: 0,
+          hasHighFrequencyZonePollution: false,
+          highFrequencyEvents: [],
         };
         statsMap.set(event.componentName, entry);
       }
@@ -399,24 +411,90 @@ export class PanelState {
         }
       }
 
+      // Collect running maximum metrics from event payload
+      if (event.cdCount !== undefined && event.cdCount > entry.cdCount) {
+        entry.cdCount = event.cdCount;
+      }
+      if (event.mutationCount !== undefined && event.mutationCount > entry.mutationCount) {
+        entry.mutationCount = event.mutationCount;
+      }
+      if (event.totalTemplateBindings !== undefined && event.totalTemplateBindings > entry.totalTemplateBindings) {
+        entry.totalTemplateBindings = event.totalTemplateBindings;
+      }
+      if (event.totalOutputListeners !== undefined && event.totalOutputListeners > entry.totalOutputListeners) {
+        entry.totalOutputListeners = event.totalOutputListeners;
+      }
+      if (event.hasHighFrequencyZonePollution !== undefined && event.hasHighFrequencyZonePollution) {
+        entry.hasHighFrequencyZonePollution = true;
+      }
+      if (event.highFrequencyEvents !== undefined && event.highFrequencyEvents.length > entry.highFrequencyEvents.length) {
+        entry.highFrequencyEvents = event.highFrequencyEvents;
+      }
+
       for (const cause of event.causes) {
         entry.causesBreakdown[cause.type]++;
       }
     }
 
+    const activeFlowEvents = this.flowEvents();
     const results: ComponentStats[] = [];
     for (const [componentName, entry] of statsMap) {
-      const timeSpanMinutes = Math.max((entry.lastSeen - entry.firstSeen) / 60000, 1 / 60);
+      const cd = entry.cdCount;
+      const mut = entry.mutationCount || entry.renderCount; // fallback to render count
+      const cdMer = cd > 0 ? (mut / cd) * 100 : 100;
+
+      // Get all render events specifically for this component
+      const componentRenders = events.filter(e => e.componentName === componentName);
+
+      // 1. Route changes that actually caused this component to render (component rendered within 1000ms of any route change)
+      const routeChangesCount = activeFlowEvents.filter(e => 
+        e.type === 'route-change' && 
+        componentRenders.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
+      ).length;
+
+      // 2. User interactions that actually caused this component to render 
+      // (either a user-interaction flow event with a render within 1000ms, or the render itself specifies an interactionComponent/interactionTarget)
+      const userInteractionsCount = activeFlowEvents.filter(e => 
+        e.type === 'user-interaction' && 
+        componentRenders.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
+      ).length || componentRenders.filter(r => !!r.interactionComponent).length;
+
+      // 3. Microtasks that actually caused this component to render (render causes contain microTask/Promise.then)
+      const microTasksCount = componentRenders.reduce((sum, r) => {
+        const hasMicrotask = r.causes.some(c => c.type === 'zone' && (c.source === 'Promise.then' || c.source?.includes('Promise') || c.source?.includes('microTask')));
+        return sum + (hasMicrotask ? 1 : 0);
+      }, 0);
+
+      // 4. Server pushes that actually caused this component to render (http-response with a render within 1000ms, or render cause contains XMLHttpRequest/fetch/WebSocket)
+      const serverPushesCount = activeFlowEvents.filter(e => 
+        e.type === 'http-response' && 
+        componentRenders.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
+      ).length || componentRenders.reduce((sum, r) => {
+        const hasServerPush = r.causes.some(c => c.type === 'zone' && (c.source === 'XMLHttpRequest' || c.source?.includes('fetch') || c.source?.includes('WebSocket')));
+        return sum + (hasServerPush ? 1 : 0);
+      }, 0);
+
+      const totalTriggerEvents = routeChangesCount + userInteractionsCount + microTasksCount + serverPushesCount;
+      const computedFrequency = totalTriggerEvents > 0 ? (entry.renderCount / totalTriggerEvents) : entry.renderCount;
+
       results.push({
         componentName,
         renderCount: entry.renderCount,
-        rendersPerMinute: entry.renderCount / timeSpanMinutes,
+        renderFrequency: computedFrequency,
         averageDuration: entry.totalDuration / entry.renderCount,
         totalDuration: entry.totalDuration,
         causesBreakdown: entry.causesBreakdown,
         firstSeen: entry.firstSeen,
         lastSeen: entry.lastSeen,
         route: entry.lastRoute,
+        cdCount: cd,
+        mutationCount: mut,
+        cdMer: Math.min(100, Math.max(0, cdMer)),
+        triggerCount: totalTriggerEvents,
+        totalTemplateBindings: entry.totalTemplateBindings,
+        totalOutputListeners: entry.totalOutputListeners,
+        hasHighFrequencyZonePollution: entry.hasHighFrequencyZonePollution,
+        highFrequencyEvents: entry.highFrequencyEvents,
       });
     }
 
@@ -429,12 +507,35 @@ export class PanelState {
     const renderCount = events.length;
     const totalRenderDuration = stats.reduce((sum, stat) => sum + stat.totalDuration, 0);
     const averageRenderDuration = renderCount > 0 ? totalRenderDuration / renderCount : 0;
-    const renderTimestamps = events.map(event => event.timestamp);
-    const firstRender = renderTimestamps.length > 0 ? Math.min(...renderTimestamps) : null;
-    const lastRender = renderTimestamps.length > 0 ? Math.max(...renderTimestamps) : null;
-    const elapsedMinutes = firstRender !== null && lastRender !== null
-      ? Math.max((lastRender - firstRender) / 60000, 1 / 60)
-      : 1 / 60;
+
+    const activeFlowEvents = this.flowEvents();
+    
+    // Globally count active triggers that produced at least one render in the system
+    const routeChangesCount = activeFlowEvents.filter(e => 
+      e.type === 'route-change' && 
+      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
+    ).length;
+
+    const userInteractionsCount = activeFlowEvents.filter(e => 
+      e.type === 'user-interaction' && 
+      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
+    ).length || events.filter(r => !!r.interactionComponent).length;
+
+    const microTasksCount = events.reduce((sum, r) => {
+      const hasMicrotask = r.causes.some(c => c.type === 'zone' && (c.source === 'Promise.then' || c.source?.includes('Promise') || c.source?.includes('microTask')));
+      return sum + (hasMicrotask ? 1 : 0);
+    }, 0);
+
+    const serverPushesCount = activeFlowEvents.filter(e => 
+      e.type === 'http-response' && 
+      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
+    ).length || events.reduce((sum, r) => {
+      const hasServerPush = r.causes.some(c => c.type === 'zone' && (c.source === 'XMLHttpRequest' || c.source?.includes('fetch') || c.source?.includes('WebSocket')));
+      return sum + (hasServerPush ? 1 : 0);
+    }, 0);
+
+    const totalTriggerEvents = routeChangesCount + userInteractionsCount + microTasksCount + serverPushesCount;
+    const computedGlobalFrequency = totalTriggerEvents > 0 ? (renderCount / totalTriggerEvents) : 1;
 
     return {
       id: `snapshot-${Date.now()}`,
@@ -444,7 +545,7 @@ export class PanelState {
         issues: this.allIssues().length,
         components: stats.length,
         renders: renderCount,
-        rendersPerMinute: renderCount / elapsedMinutes,
+        renderFrequency: computedGlobalFrequency,
         averageRenderDuration,
         totalRenderDuration,
         leaks: this.leakEvents().length,
@@ -485,7 +586,7 @@ export class PanelState {
       issues: current.metrics.issues - baseline.metrics.issues,
       components: current.metrics.components - baseline.metrics.components,
       renders: current.metrics.renders - baseline.metrics.renders,
-      rendersPerMinute: current.metrics.rendersPerMinute - baseline.metrics.rendersPerMinute,
+      renderFrequency: current.metrics.renderFrequency - baseline.metrics.renderFrequency,
       averageRenderDuration: current.metrics.averageRenderDuration - baseline.metrics.averageRenderDuration,
       totalRenderDuration: current.metrics.totalRenderDuration - baseline.metrics.totalRenderDuration,
       leaks: current.metrics.leaks - baseline.metrics.leaks,
@@ -511,12 +612,17 @@ export class PanelState {
     return stats
       .map(stat => {
         const reasons: string[] = [];
-        const renderRateScore = Math.min(stat.rendersPerMinute / 120, 1) * 40;
+        // Math.min(stat.renderFrequency / 120, 1) became very low under trigger density (e.g. 1.0 or 2.0).
+        // Since trigger density usually operates in safe bounds [0, 5], we adjust the indicator score weights
+        // so components with trigger frequency > 1.0 safely register higher hotspots.
+        const renderRateScore = stat.renderFrequency >= 1.0
+          ? Math.min(stat.renderFrequency * 20, 40)
+          : Math.min(stat.renderFrequency / 120, 1) * 40;
         const durationScore = Math.min(stat.averageDuration / 16, 1) * 30;
         const totalCostScore = Math.min(stat.totalDuration / 250, 1) * 20;
         const cascadeScore = stat.causesBreakdown.parent > 5 ? 10 : 0;
 
-        if (stat.rendersPerMinute > 100) reasons.push('excessive render frequency');
+        if (stat.renderFrequency > 1.0) reasons.push('excessive render frequency');
         if (stat.averageDuration > 16) reasons.push('slow average render time');
         if (stat.totalDuration > 250) reasons.push('high cumulative render cost');
         if (stat.causesBreakdown.parent > 5) reasons.push('frequent parent-triggered renders');
@@ -526,7 +632,7 @@ export class PanelState {
           componentName: stat.componentName,
           score: Math.round(Math.min(renderRateScore + durationScore + totalCostScore + cascadeScore, 100)),
           renderCount: stat.renderCount,
-          rendersPerMinute: stat.rendersPerMinute,
+          renderFrequency: stat.renderFrequency,
           averageDuration: stat.averageDuration,
           totalDuration: stat.totalDuration,
           primaryCause: this.primaryCause(stat.causesBreakdown),
@@ -579,8 +685,8 @@ export class PanelState {
     }).reverse();
   }
 
-  private countCauses(causes: RenderCause[]): Record<RenderCause['type'], number> {
-    const counts: Record<RenderCause['type'], number> = {
+  private countCauses(causes: RenderCause[]): Record<string, number> {
+    const counts: Record<string, number> = {
       signal: 0,
       input: 0,
       zone: 0,
@@ -593,7 +699,7 @@ export class PanelState {
     return counts;
   }
 
-  private primaryCause(causes: Record<RenderCause['type'], number>): RenderCause['type'] | 'unknown' {
+  private primaryCause(causes: Record<string, number>): RenderCause['type'] | 'unknown' {
     let winner: RenderCause['type'] | 'unknown' = 'unknown';
     let highest = 0;
     for (const [cause, count] of Object.entries(causes) as [RenderCause['type'], number][]) {
@@ -638,7 +744,7 @@ export class PanelState {
       componentName: stats.componentName,
       severity: 'WARNING',
       title: `Hot component: ${stats.componentName}`,
-      description: `Rendering ${Math.round(stats.rendersPerMinute)} times per minute (avg ${stats.averageDuration.toFixed(1)}ms).`,
+      description: `Rendering ${Math.round(stats.renderFrequency)} times per minute (avg ${stats.averageDuration.toFixed(1)}ms).`,
       timestamp: stats.lastSeen,
       route: stats.route,
     };

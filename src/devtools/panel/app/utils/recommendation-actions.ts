@@ -3,6 +3,7 @@ import type { ComponentHotspot, ComponentStats } from '../../../../types/panel';
 import type { OnPushScore, TrackByIssue } from '../../../../types/recommendation-events';
 import type { RenderCause } from '../../../../types/render-events';
 import type { PollutionSourceMetrics } from '../../../../types/zone-pollution-events';
+import { formatRenderRate } from './display-name';
 
 export type ActionConfidence = 'High' | 'Medium' | 'Heuristic';
 export type ActionDifficulty = 'Easy' | 'Medium' | 'Hard';
@@ -144,17 +145,29 @@ function onPushAction(item: OnPushScore): RecommendationAction {
   const confidence: ActionConfidence = score >= 85 ? 'High' : score >= 70 ? 'Medium' : 'Heuristic';
   const gain: ActionGain = score >= 80 ? 'Large' : 'Medium';
 
+  let evidence = `OnPush score ${score}/100. ${met}/${total} suitability factors matched while using ${item.currentStrategy} change detection.`;
+  let suggestedFix = 'Switch to OnPush after checking that inputs use new references and local state updates still mark the view.';
+  let title = `Consider ChangeDetectionStrategy.OnPush for ${item.component}`;
+
+  if (item.cdMer !== undefined && item.cdCount !== undefined && item.cdCount >= 5) {
+    evidence += ` Observed Change Detection Mutation Efficiency Ratio (CD-MER) is ${item.cdMer.toFixed(1)}% (${item.mutationCount} DOM mutations inside ${item.cdCount} CD cycles).`;
+    if (item.cdMer < 25) {
+      title = `Low Change Detection Efficiency (CD-MER: ${item.cdMer.toFixed(1)}%) in ${item.component}`;
+      suggestedFix = `Low mutation efficiency detected! Switch to OnPush strategy or migrate to Signals to avoid executing this component's change detection unless dynamic bindings/inputs actually change.`;
+    }
+  }
+
   return {
     id: `onpush-${item.component}`,
     kind: 'onpush',
-    title: 'Consider ChangeDetectionStrategy.OnPush',
+    title,
     componentName: item.component,
     source: item.component,
     confidence,
-    evidence: `OnPush score ${score}/100. ${met}/${total} suitability factors matched while using ${item.currentStrategy} change detection.`,
+    evidence,
     difficulty: 'Easy',
     expectedGain: gain,
-    suggestedFix: 'Switch to OnPush after checking that inputs use new references and local state updates still mark the view.',
+    suggestedFix,
     rankScore: 70 + score / 3,
     snippet: `@Component({\n  changeDetection: ChangeDetectionStrategy.OnPush\n})`,
     route: item.route,
@@ -167,6 +180,11 @@ function zoneAction(source: PollutionSourceMetrics): RecommendationAction {
   const gain: ActionGain = source.severity === 'critical' ? 'Large' : 'Medium';
   const owner = source.library ?? source.source;
 
+  let cdRateStr = `${Math.round(source.cdCyclesPerMinute)}/min`;
+  if (source.cdCyclesPerMinute >= 60) {
+    cdRateStr = `${(source.cdCyclesPerMinute / 60).toFixed(1)}/sec`;
+  }
+
   return {
     id: `zone-${source.source}`,
     kind: 'zone',
@@ -174,7 +192,7 @@ function zoneAction(source: PollutionSourceMetrics): RecommendationAction {
     componentName: owner,
     source: owner,
     confidence,
-    evidence: `${Math.round(source.cdCyclesPerMinute)} change-detection cycles/min from ${source.taskCount} ${source.type} task(s).`,
+    evidence: `${cdRateStr} change-detection frequency from ${source.taskCount} ${source.type} task(s).`,
     difficulty: 'Medium',
     expectedGain: gain,
     suggestedFix: source.fixSuggestion ?? 'Wrap high-frequency async work in runOutsideAngular and re-enter Angular only when UI state changes.',
@@ -192,7 +210,7 @@ function hotspotAction(hotspot: ComponentHotspot): RecommendationAction {
     componentName: hotspot.componentName,
     source: hotspot.componentName,
     confidence: hotspot.score >= 90 ? 'High' : hotspot.score >= 70 ? 'Medium' : 'Heuristic',
-    evidence: `${hotspot.renderCount} renders, ${hotspot.rendersPerMinute.toFixed(1)}/min, ${hotspot.averageDuration.toFixed(1)}ms avg. Main cause: ${causeLabel(hotspot.primaryCause)}.`,
+    evidence: `${hotspot.renderCount} renders, ${formatRenderRate(hotspot.renderFrequency)} frequency, ${hotspot.averageDuration.toFixed(1)}ms avg. Main cause: ${causeLabel(hotspot.primaryCause)}.`,
     difficulty: hotspot.primaryCause === 'parent' || hotspot.primaryCause === 'zone' ? 'Medium' : 'Hard',
     expectedGain: hotspot.score >= 80 ? 'Large' : 'Medium',
     suggestedFix: hotspotFix(hotspot.primaryCause),
@@ -383,6 +401,25 @@ function renderDiagnosticActions(stats: ComponentStats[], excludeComponents: Set
         expectedGain: 'Medium',
         suggestedFix: 'Use ChangeDetectionStrategy.OnPush and convert state to signals so Angular only marks this component dirty when its dependencies actually change.',
         rankScore: 60 + Math.min(stat.renderCount, 20),
+        route: stat.route,
+      });
+    }
+
+    // Dynamic low CD-MER (wasteful rendering) diagnostic action
+    if (stat.cdCount && stat.cdCount >= 5 && stat.cdMer !== undefined && stat.cdMer < 25) {
+      actions.push({
+        id: `render-cd-mer-low-${stat.componentName}`,
+        kind: 'render-hotspot',
+        title: `Low Change Detection Efficiency Ratio (CD-MER: ${stat.cdMer.toFixed(1)}%) in ${stat.componentName}`,
+        componentName: stat.componentName,
+        source: stat.componentName,
+        confidence: stat.cdCount >= 10 ? 'High' : 'Medium',
+        evidence: `CD-MER efficiency ratio is ${stat.cdMer.toFixed(1)}%. Checked ${stat.cdCount} times by change detection, but only produced ${stat.mutationCount} DOM mutations. Checks are predominantly wasteful.`,
+        difficulty: 'Easy',
+        expectedGain: 'Large',
+        suggestedFix: 'Add ChangeDetectionStrategy.OnPush or convert view dependencies to Signals. This prevents Angular from checking the template when unaffected async tasks or parent views run change detection.',
+        rankScore: 82 + Math.min((100 - stat.cdMer) / 4, 18),
+        snippet: `@Component({\n  changeDetection: ChangeDetectionStrategy.OnPush\n})`,
         route: stat.route,
       });
     }

@@ -2,7 +2,7 @@ import { Component, inject, computed, signal } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { Router } from '@angular/router';
 import { PanelState } from '../../state/panel.state';
-import { displayName } from '../../utils/display-name';
+import { displayName, formatRenderRate } from '../../utils/display-name';
 import {
   buildRecommendationActions,
   confidenceClass,
@@ -12,6 +12,7 @@ import {
   type RecommendationAction,
 } from '../../utils/recommendation-actions';
 import type { ComponentHotspot, SnapshotComparison, Issue } from '../../../../../types/panel';
+import type { RenderEvent } from '../../../../../types/render-events';
 
 interface HealthSummary {
   label: string;
@@ -107,7 +108,7 @@ type EvidenceTab = 'hotspots' | 'environment' | 'compare';
                 <span class="hint-icon" [ngClass]="scoreClass(hotspot.score)">{{ expanded().issue ? '▼' : '▶' }}</span>
                 <span class="hint-label">Top Issue</span>
                 <span class="flex-1 text-xs text-gray-200 truncate">
-                  {{ displayName(hotspot.componentName) }} — {{ hotspot.rendersPerMinute.toFixed(0) }}/min from {{ formatCauses(hotspot.primaryCause) }}
+                  {{ displayName(hotspot.componentName) }} — {{ formatRenderRate(hotspot.renderFrequency) }} from {{ formatCauses(hotspot.primaryCause) }}
                 </span>
                 <span class="hint-badge" [ngClass]="scoreClass(hotspot.score)">{{ hotspot.score }}/100</span>
                 <button type="button" class="hint-go" (click)="navigateToComponentInRenderTab(hotspot.componentName); $event.stopPropagation()">Go →</button>
@@ -116,7 +117,7 @@ type EvidenceTab = 'hotspots' | 'environment' | 'compare';
                 <div class="hint-body">
                   <div class="grid grid-cols-4 gap-3 text-xs">
                     <div><span class="text-gray-500">Renders</span><br><strong>{{ hotspot.renderCount }}</strong></div>
-                    <div><span class="text-gray-500">Rate</span><br><strong>{{ hotspot.rendersPerMinute.toFixed(1) }}/min</strong></div>
+                    <div><span class="text-gray-500">Rate</span><br><strong>{{ formatRenderRate(hotspot.renderFrequency) }}</strong></div>
                     <div><span class="text-gray-500">Avg Cost</span><br><strong>{{ hotspot.averageDuration.toFixed(1) }}ms</strong></div>
                     <div><span class="text-gray-500">Cause</span><br><strong [ngClass]="scoreClass(hotspot.score)">{{ formatCauses(hotspot.primaryCause) }}</strong></div>
                   </div>
@@ -241,7 +242,7 @@ type EvidenceTab = 'hotspots' | 'environment' | 'compare';
                           </div>
                           <div class="flex gap-2 mt-2 text-xs">
                             <span class="evidence-chip">{{ hotspot.renderCount }} renders</span>
-                            <span class="evidence-chip">{{ hotspot.rendersPerMinute.toFixed(1) }}/min</span>
+                            <span class="evidence-chip">{{ formatRenderRate(hotspot.renderFrequency) }}</span>
                             <span class="evidence-chip">{{ hotspot.averageDuration.toFixed(1) }}ms avg</span>
                           </div>
                         </div>
@@ -258,32 +259,32 @@ type EvidenceTab = 'hotspots' | 'environment' | 'compare';
                   <div>
                     <div class="text-xs font-semibold text-gray-400 uppercase mb-2">Recording Metrics</div>
                     <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      <div class="metric-cell">
+                      <div class="metric-cell cursor-help" title="Total re-renders captured across all active components since tracking started.">
                         <span>Recorded renders</span>
                         <strong>{{ state.renderEvents().length }}</strong>
                         <small>events captured</small>
                       </div>
-                      <div class="metric-cell">
+                      <div class="metric-cell cursor-help" title="The number of unique Angular components discovered and tracked in the active DOM tree.">
                         <span>Components seen</span>
                         <strong>{{ componentsCount() }}</strong>
                         <small>rendered at least once</small>
                       </div>
-                      <div class="metric-cell">
+                      <div class="metric-cell cursor-help" title="System-wide re-render rate and frequency across all tracked components.">
                         <span>Render frequency</span>
-                        <strong>{{ renderRate() }}/min</strong>
+                        <strong>{{ formatRenderRate(renderRateNumber()) }}</strong>
                         <small>all components</small>
                       </div>
-                      <div class="metric-cell">
+                      <div class="metric-cell cursor-help" title="The average CPU execution duration of a single component render pass.">
                         <span>Avg render cost</span>
                         <strong>{{ averageRenderDuration() }}ms</strong>
                         <small>per captured render</small>
                       </div>
-                      <div class="metric-cell">
+                      <div class="metric-cell cursor-help" title="RxJS subscriptions, timers, or event listeners left context-active when components were destroyed, flagging potential leaks.">
                         <span>Cleanup risks</span>
                         <strong>{{ memoryRiskCount() }}</strong>
                         <small>missing teardown</small>
                       </div>
-                      <div class="metric-cell">
+                      <div class="metric-cell cursor-help" title="The count of user interaction cycles (clicks, inputs, keypresses) that triggered downstream rendering cascades inside Zone.js.">
                         <span>Action windows</span>
                         <strong>{{ interactionsCount() }}</strong>
                         <small>render bursts grouped</small>
@@ -300,7 +301,7 @@ type EvidenceTab = 'hotspots' | 'environment' | 'compare';
                           <div class="p-2 border border-amber-500/30 bg-amber-500/5 rounded">
                             <div class="text-xs font-medium text-amber-300">{{ source.source }}</div>
                             <div class="text-[11px] text-gray-400 mt-1">
-                              {{ source.cdCyclesPerMinute.toFixed(1) }} CD cycles/min
+                              {{ formatRenderRate(source.cdCyclesPerMinute) }} CD cycles
                               &middot; Severity: {{ source.severity }}
                             </div>
                             @if (source.fixSuggestion) {
@@ -353,7 +354,7 @@ type EvidenceTab = 'hotspots' | 'environment' | 'compare';
                       <tbody>
                         @for (metric of comparisonMetrics(comparison); track metric.label) {
                           <tr class="border-b border-gray-900 last:border-b-0">
-                            <td class="py-2 px-2 text-gray-300 font-medium">{{ metric.label }}</td>
+                            <td class="py-2 px-2 text-gray-300 font-medium cursor-help" [attr.title]="getMetricTooltip(metric.label)">{{ metric.label }}</td>
                             <td class="py-2 px-2 text-right text-gray-400">{{ metric.baseline }}</td>
                             <td class="py-2 px-2 text-right text-gray-200">{{ metric.current }}</td>
                             <td class="py-2 px-2 text-right" [title]="metricWhyLabel(metric.label, metric.verdict)">
@@ -652,6 +653,39 @@ export class OverviewComponent {
     { id: 'compare' as EvidenceTab, label: 'Compare Runs', count: computed(() => this.state.snapshots().length) },
   ];
 
+  readonly renderRateNumber = computed(() => {
+    const events = this.state.renderEvents();
+    if (events.length === 0) return 0;
+
+    const activeFlowEvents = this.state.flowEvents();
+    
+    const routeChangesCount = activeFlowEvents.filter(e => 
+      e.type === 'route-change' && 
+      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
+    ).length;
+
+    const userInteractionsCount = activeFlowEvents.filter(e => 
+      e.type === 'user-interaction' && 
+      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
+    ).length || events.filter(r => !!r.interactionComponent).length;
+
+    const microTasksCount = events.reduce((sum, r) => {
+      const hasMicrotask = r.causes.some(c => c.type === 'zone' && (c.source === 'Promise.then' || c.source?.includes('Promise') || c.source?.includes('microTask')));
+      return sum + (hasMicrotask ? 1 : 0);
+    }, 0);
+
+    const serverPushesCount = activeFlowEvents.filter(e => 
+      e.type === 'http-response' && 
+      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
+    ).length || events.reduce((sum, r) => {
+      const hasServerPush = r.causes.some(c => c.type === 'zone' && (c.source === 'XMLHttpRequest' || c.source?.includes('fetch') || c.source?.includes('WebSocket')));
+      return sum + (hasServerPush ? 1 : 0);
+    }, 0);
+
+    const totalTriggerEvents = routeChangesCount + userInteractionsCount + microTasksCount + serverPushesCount;
+    return totalTriggerEvents > 0 ? (events.length / totalTriggerEvents) : 1;
+  });
+
   // ── Core computed data ──
   readonly actions = computed(() => buildRecommendationActions({
     trackByIssues: this.state.trackByIssues(),
@@ -776,7 +810,7 @@ export class OverviewComponent {
     if (!hotspot) return null;
     const cause = this.formatCauses(hotspot.primaryCause);
     const gain = this.impactEstimate();
-    return `${displayName(hotspot.componentName)} renders ${hotspot.rendersPerMinute.toFixed(0)}x/min from ${cause}${gain > 0 ? ` — ${gain}% gain if fixed` : ''}`;
+    return `${displayName(hotspot.componentName)} (${formatRenderRate(hotspot.renderFrequency)}) from ${cause}${gain > 0 ? ` — ${gain}% gain if fixed` : ''}`;
   });
 
   // ── Navigation ──
@@ -840,7 +874,7 @@ export class OverviewComponent {
 
     return [
       this.lowerIsBetter('Render events', baseline.renders, current.renders, delta.renders),
-      this.lowerIsBetter('Render frequency', baseline.rendersPerMinute, current.rendersPerMinute, delta.rendersPerMinute, '/min'),
+      this.lowerIsBetter('Render frequency', baseline.renderFrequency, current.renderFrequency, delta.renderFrequency, '', (val) => formatRenderRate(val)),
       this.lowerIsBetter('Avg render cost', baseline.averageRenderDuration, current.averageRenderDuration, delta.averageRenderDuration, 'ms'),
       this.lowerIsBetter('Total render cost', baseline.totalRenderDuration, current.totalRenderDuration, delta.totalRenderDuration, 'ms'),
       this.lowerIsBetter('Open risks', baseline.issues, current.issues, delta.issues),
@@ -849,14 +883,64 @@ export class OverviewComponent {
     ];
   }
 
+  getMetricTooltip(label: string): string {
+    switch (label) {
+      case 'Render events':
+        return 'Total count of component re-render events captured across the application.';
+      case 'Render frequency':
+        return 'The human-friendly re-rendering interval or frequency across all active components.';
+      case 'Avg render cost':
+        return 'The average CPU execution duration of a single rendering pass in milliseconds.';
+      case 'Total render cost':
+        return 'The cumulative CPU execution time spent rendering all active components.';
+      case 'Open risks':
+        return 'The total count of performance risk indicators and anti-patterns currently active.';
+      case 'Cleanup risks':
+        return 'The count of active memory cleanup risks (un-unsubscribed RxJS subscriptions, intervals, list keys, etc.).';
+      case 'Render hotspots':
+        return 'Components that re-render excessively, causing significant CPU bottlenecks.';
+      default:
+        return '';
+    }
+  }
+
   // ── Formatting helpers ──
+  formatRenderRate(renderFrequency: number): string {
+    return formatRenderRate(renderFrequency);
+  }
+
   renderRate(): string {
     const events = this.state.renderEvents();
     if (events.length === 0) return '0.0';
-    const first = events[0].timestamp;
-    const last = events[events.length - 1].timestamp;
-    const minutes = Math.max((last - first) / 60000, 1 / 60);
-    return (events.length / minutes).toFixed(1);
+
+    const activeFlowEvents = this.state.flowEvents();
+    
+    const routeChangesCount = activeFlowEvents.filter(e => 
+      e.type === 'route-change' && 
+      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
+    ).length;
+
+    const userInteractionsCount = activeFlowEvents.filter(e => 
+      e.type === 'user-interaction' && 
+      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
+    ).length || events.filter(r => !!r.interactionComponent).length;
+
+    const microTasksCount = events.reduce((sum, r) => {
+      const hasMicrotask = r.causes.some(c => c.type === 'zone' && (c.source === 'Promise.then' || c.source?.includes('Promise') || c.source?.includes('microTask')));
+      return sum + (hasMicrotask ? 1 : 0);
+    }, 0);
+
+    const serverPushesCount = activeFlowEvents.filter(e => 
+      e.type === 'http-response' && 
+      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
+    ).length || events.reduce((sum, r) => {
+      const hasServerPush = r.causes.some(c => c.type === 'zone' && (c.source === 'XMLHttpRequest' || c.source?.includes('fetch') || c.source?.includes('WebSocket')));
+      return sum + (hasServerPush ? 1 : 0);
+    }, 0);
+
+    const totalTriggerEvents = routeChangesCount + userInteractionsCount + microTasksCount + serverPushesCount;
+    const rate = totalTriggerEvents > 0 ? (events.length / totalTriggerEvents) : 1;
+    return rate.toFixed(1);
   }
 
   averageRenderDuration(): string {
@@ -943,12 +1027,21 @@ export class OverviewComponent {
   }
 
   // ── Private helpers ──
-  private lowerIsBetter(label: string, baseline: number, current: number, delta: number, unit = ''): CompareMetric {
+  private lowerIsBetter(
+    label: string,
+    baseline: number,
+    current: number,
+    delta: number,
+    unit = '',
+    formatFn?: (val: number) => string
+  ): CompareMetric {
     return {
       label,
-      baseline: this.fmtValue(baseline, unit),
-      current: this.fmtValue(current, unit),
-      delta: this.fmtDelta(delta, unit),
+      baseline: formatFn ? formatFn(baseline) : this.fmtValue(baseline, unit),
+      current: formatFn ? formatFn(current) : this.fmtValue(current, unit),
+      delta: formatFn
+        ? `${delta > 0 ? '+' : ''}${formatFn(delta)}`
+        : this.fmtDelta(delta, unit),
       verdict: delta < 0 ? 'better' : delta > 0 ? 'worse' : 'same',
     };
   }

@@ -21,6 +21,9 @@ export interface OnPushScore {
   recommendation: string;
   frameId?: number;
   route?: string;
+  cdCount?: number;
+  mutationCount?: number;
+  cdMer?: number;
 }
 
 export interface OnPushFactor {

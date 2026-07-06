@@ -1,7 +1,7 @@
 import { Component, inject, computed } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
-import { displayName } from '../../utils/display-name';
+import { displayName, formatRenderRate } from '../../utils/display-name';
 import type { ComponentStats } from '../../../../../types/panel';
 import type { RenderCause } from '../../../../../types/render-events';
 
@@ -38,36 +38,58 @@ interface CauseEntry {
         </div>
       } @else {
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-          <div class="detail-cell">
+          <div class="detail-cell cursor-help" title="The cumulative number of times this component has re-rendered since tracking started.">
             <span>Total renders</span>
             <strong>{{ selectedStats()!.renderCount }}</strong>
           </div>
-          <div class="detail-cell">
+          <div class="detail-cell cursor-help" title="The number of times this component has re-rendered during the last 60 seconds of activity.">
             <span>Recent renders</span>
             <strong>{{ recentRenderCount() }}</strong>
           </div>
-          <div class="detail-cell">
-            <span>Render rate</span>
-            <strong>{{ selectedStats()!.rendersPerMinute.toFixed(1) }}/min</strong>
+          <div class="detail-cell cursor-help" [attr.title]="'The human-friendly re-rendering frequency of this component over triggers. Triggered ' + (selectedStats()?.triggerCount ?? 0) + ' times total during this component lifetime.'">
+            <span>Render Frequency</span>
+            <strong>{{ formatRenderRate(selectedStats()!.renderFrequency) }}</strong>
           </div>
-          <div class="detail-cell">
+          <div class="detail-cell cursor-help" title="The average CPU execution duration of a single rendering cycle for this component in milliseconds.">
             <span>Avg duration</span>
             <strong>{{ selectedStats()!.averageDuration.toFixed(1) }}ms</strong>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4">
-          <div class="detail-cell">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-4">
+          <div class="detail-cell cursor-help" title="The primary execution cause that triggered rendering (e.g. signal write, input change, event zone trigger, or parent cascade).">
             <span>Render cause</span>
             <strong>{{ causeLabel(dominantCause()) }}</strong>
           </div>
-          <div class="detail-cell">
+          <div class="detail-cell cursor-help" title="The specific method, component, async task source, or interaction trigger initiating the render.">
             <span>Trigger source</span>
             <strong>{{ triggerSource() }}</strong>
           </div>
-          <div class="detail-cell">
+          <div class="detail-cell cursor-help" title="The volume and ratio of re-renders forced downstream of a re-rendering parent component.">
             <span>Parent cascade</span>
             <strong [ngClass]="cascadeClass()">{{ cascadeIndicator() }}</strong>
+          </div>
+          <div class="detail-cell cursor-help" title="Change Detection Mutation Efficiency Ratio. The percentage of checked change detection cycles that produced actual child DOM updates. Low efficiency means wasteful CPU checks.">
+            <span>CD Efficiency (CD-MER)</span>
+            <strong [ngClass]="cdMerClass(selectedStats()?.cdMer)">
+              {{ selectedStats()?.cdMer !== undefined ? selectedStats()?.cdMer!.toFixed(1) + '%' : 'N/A' }}
+            </strong>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 mb-4">
+          <div class="detail-cell cursor-help" title="Total active template Expressions, interpols, properties binding count calculated in Ivy context. High density increases change detection diff workload.">
+            <span>Template Expressions</span>
+            <strong>{{ selectedStats()?.totalTemplateBindings !== undefined ? selectedStats()?.totalTemplateBindings : 'Discovering...' }}</strong>
+          </div>
+          <div class="detail-cell cursor-help" [attr.title]="selectedStats()?.hasHighFrequencyZonePollution ? 'High frequency event listeners are running inside Zone.js: ' + (selectedStats()?.highFrequencyEvents?.join(', ') || '') + '! This forces major change detection passes recursively.' : 'Standard event handlers footprint checks.'">
+            <span>Output Listeners</span>
+            <strong [ngClass]="selectedStats()?.hasHighFrequencyZonePollution ? 'text-red-400 font-bold' : ''">
+              {{ selectedStats()?.totalOutputListeners !== undefined ? selectedStats()?.totalOutputListeners : 'Discovering...' }}
+              @if (selectedStats()?.hasHighFrequencyZonePollution) {
+                <span class="text-[10px] text-red-500 font-semibold block mt-0.5 animate-pulse">🛑 Noisy: {{ selectedStats()?.highFrequencyEvents?.join(', ') }}</span>
+              }
+            </strong>
           </div>
         </div>
 
@@ -216,8 +238,19 @@ export class WhyPanelComponent {
   readonly renderExplanation = computed(() => {
     const stats = this.selectedStats();
     if (!stats) return 'Select a rendered component to inspect cause evidence.';
-    return `${stats.renderCount} renders at ${stats.rendersPerMinute.toFixed(1)}/min, mostly from ${causeLabel(this.dominantCause())}.`;
+    let explanation = `${stats.renderCount} renders (${formatRenderRate(stats.renderFrequency)}), mostly from ${causeLabel(this.dominantCause())}.`;
+    if (stats.cdCount && stats.cdCount > 0) {
+      explanation += ` CD-MER CD efficiency is ${stats.cdMer?.toFixed(1)}% (${stats.mutationCount}/${stats.cdCount} cycles mutated).`;
+    }
+    return explanation;
   });
+
+  cdMerClass(cdMer?: number): string {
+    if (cdMer === undefined) return 'text-gray-400';
+    if (cdMer < 25) return 'text-red-400 font-bold';
+    if (cdMer < 60) return 'text-amber-400';
+    return 'text-green-400';
+  }
 
   readonly confidenceLabel = computed(() => {
     const events = this.selectedEvents();
@@ -230,6 +263,10 @@ export class WhyPanelComponent {
 
   dismiss(): void {
     this.state.selectedComponent.set(null);
+  }
+
+  formatRenderRate(renderFrequency: number): string {
+    return formatRenderRate(renderFrequency);
   }
 
   causeLabel(cause: RenderCause['type'] | null): string {
@@ -297,7 +334,7 @@ export function getSuggestedFix(
   dominantCause: RenderCause['type'] | null,
   stats?: ComponentStats | null
 ): string {
-  if (stats?.rendersPerMinute && stats.rendersPerMinute > 100) {
+  if (stats?.renderFrequency && stats.renderFrequency > 100) {
     return 'This component renders very frequently. Check parent state churn, list trackBy coverage, and repeated async callbacks before micro-optimizing the template.';
   }
 

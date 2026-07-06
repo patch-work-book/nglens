@@ -9,9 +9,9 @@ export type SeverityLabel = 'HOT' | 'EXCESSIVE' | 'CASCADE' | 'ZONE TRIGGERED';
 export function getSeverityLabels(stats: ComponentStats): SeverityLabel[] {
   const labels: SeverityLabel[] = [];
 
-  if (stats.rendersPerMinute > 100) {
+  if (stats.renderFrequency > 100) {
     labels.push('EXCESSIVE');
-  } else if (stats.rendersPerMinute > 60) {
+  } else if (stats.renderFrequency > 60) {
     labels.push('HOT');
   }
 
