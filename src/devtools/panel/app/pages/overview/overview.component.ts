@@ -224,7 +224,14 @@ type EvidenceTab = 'hotspots' | 'environment' | 'compare';
                         <div class="flex-1 min-w-0">
                           <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
-                              <div class="text-sm font-medium text-gray-100 truncate">{{ displayName(hotspot.componentName) }}</div>
+                              <div class="text-sm font-medium text-gray-100 truncate flex items-center gap-2">
+                                <span>{{ displayName(hotspot.componentName) }}</span>
+                                @if (hotspot.route) {
+                                  <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-950/45 text-indigo-300 border border-indigo-900/30 uppercase font-semibold">
+                                    🧭 {{ hotspot.route }}
+                                  </span>
+                                }
+                              </div>
                               <div class="text-xs text-gray-500 mt-0.5 truncate">{{ hotspot.reasons.join(', ') }}</div>
                             </div>
                             <div class="text-right flex-shrink-0">

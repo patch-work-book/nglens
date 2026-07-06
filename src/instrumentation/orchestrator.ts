@@ -168,7 +168,10 @@ function handleStartTracking(): void {
     // console.log('[ngLens] TrackBy analysis:', trackByIssues.length, 'issues');
     if (trackByIssues.length > 0) {
       for (const issue of trackByIssues) {
-        dispatchToContent('TRACKBY_ISSUE', issue);
+        dispatchToContent('TRACKBY_ISSUE', {
+          ...issue,
+          route: FlowTracker.getInstance().getCurrentRoute(),
+        });
       }
     }
   } catch (err) {
@@ -179,7 +182,10 @@ function handleStartTracking(): void {
   safeInvoke(() => {
     const analyzed = collectOnPushCandidates(500);
     for (const result of analyzed) {
-      dispatchToContent('ONPUSH_RESULT', result);
+      dispatchToContent('ONPUSH_RESULT', {
+        ...result,
+        route: FlowTracker.getInstance().getCurrentRoute(),
+      });
     }
   });
 
@@ -204,6 +210,52 @@ function handleStopTracking(): void {
   templateExpressionTracker.setEnabled(false);
   dispatchToContent('TRACKING_STOPPED', {
     timestamp: performance.now(),
+  });
+}
+
+/**
+ * Triggers re-running of on-demand scans (trackBy and OnPush) on route changes,
+ * and increments instrumented component list for expression tracking.
+ * This accumulates findings for new pages as the user navigates!
+ */
+function handleRouteChanged(toUrl: string): void {
+  // Sync the FlowTracker's current route explicitly so subsequent events get the correct route
+  safeInvoke(() => {
+    FlowTracker.getInstance().setCurrentRoute(toUrl);
+  });
+
+  // Let the dispatcher know about the route change so it can display a flow event / timeline entry
+  dispatchToContent('ROUTE_CHANGED', { timestamp: Date.now(), url: toUrl });
+
+  // Re-run analyzers on newly loaded components of the target route
+  safeInvoke(() => {
+    const trackByIssues = trackByDetector.analyze();
+    if (trackByIssues.length > 0) {
+      for (const issue of trackByIssues) {
+        dispatchToContent('TRACKBY_ISSUE', {
+          ...issue,
+          route: toUrl,
+        });
+      }
+    }
+  });
+
+  safeInvoke(() => {
+    const analyzed = collectOnPushCandidates(500);
+    for (const result of analyzed) {
+      dispatchToContent('ONPUSH_RESULT', {
+        ...result,
+        route: toUrl,
+      });
+    }
+  });
+
+  // Re-instrument newly mounted components for template expressions
+  safeInvoke(() => {
+    forEachAngularComponent(1000, (component, index) => {
+      const name = component.constructor?.name ?? `Component_${index}`;
+      templateExpressionTracker.instrumentComponent(component, name);
+    });
   });
 }
 
@@ -289,4 +341,5 @@ function handleCommand(event: Event): void {
  */
 export function initOrchestrator(): void {
   globalThis.addEventListener(CONTENT_TO_PAGE_EVENT, handleCommand);
+  (globalThis as any).__nglens_orchestrator_on_route_changed = handleRouteChanged;
 }

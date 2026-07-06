@@ -26,24 +26,36 @@ export class EventDispatcherService {
   }
 
   dispatch(message: PortMessage): void {
+    const frameId = message.frameId ?? 0;
+    const frameUrl = message.frameUrl ?? '';
+
+    if (frameId !== 0 && frameUrl) {
+      this.state.registerFrame(frameId, frameUrl, false);
+    }
+
     switch (message.type) {
+      case 'FRAME_LOADED': {
+        const payload = message.payload as { url: string; isTop: boolean };
+        this.state.registerFrame(frameId, payload.url, payload.isTop);
+        break;
+      }
       case 'EVENT_BATCH':
-        this.handleEventBatch(message.payload as { events: RenderEvent[] });
+        this.handleEventBatch(message.payload as { events: RenderEvent[] }, frameId);
         break;
       case 'LEAK_EVENT':
-        this.handleLeakEvent(message.payload as LeakEvent);
+        this.handleLeakEvent(message.payload as LeakEvent, frameId);
         break;
       case 'TRACKBY_ISSUE':
-        this.handleTrackByIssue(message.payload as TrackByIssue);
+        this.handleTrackByIssue(message.payload as TrackByIssue, frameId);
         break;
       case 'ONPUSH_RESULT':
-        this.handleOnPushResult(message.payload as OnPushScore);
+        this.handleOnPushResult(message.payload as OnPushScore, frameId);
         break;
       case 'ZONE_POLLUTION_EVENT':
-        this.handleZonePollutionEvent(message.payload as ZonePollutionEvent);
+        this.handleZonePollutionEvent(message.payload as ZonePollutionEvent, frameId);
         break;
       case 'FLOW_EVENT_BATCH':
-        this.handleFlowEventBatch(message.payload as { events: FlowEvent[] });
+        this.handleFlowEventBatch(message.payload as { events: FlowEvent[] }, frameId);
         break;
       case 'DEGRADED_MODE':
         this.state.degradedMode.set(true);
@@ -59,7 +71,7 @@ export class EventDispatcherService {
         this.handleError(message.payload as { message?: string; error?: string });
         break;
       case 'ROUTE_CHANGED':
-        this.handleRouteChanged(message.payload as { timestamp: number });
+        this.handleRouteChanged(message.payload as { timestamp: number }, frameId);
         break;
       case 'TAB_NAVIGATED':
         this.handleTabNavigated();
@@ -84,23 +96,37 @@ export class EventDispatcherService {
         payload: null,
         timestamp: Date.now(),
       });
+    } else {
+      // Check if auto-start scan is enabled on navigation load
+      try {
+        chrome.storage.local.get('auto_start_scan', (result) => {
+          if (result && result['auto_start_scan'] === true) {
+            this.state.isTracking.set(true);
+            this.portService?.send({
+              type: 'START_TRACKING',
+              payload: null,
+              timestamp: Date.now(),
+            });
+          }
+        });
+      } catch { /* ignore */ }
     }
   }
 
-  private handleEventBatch(payload: { events: RenderEvent[] }): void {
-    this.state.renderEvents.update(current => [...current, ...payload.events]);
+  private handleEventBatch(payload: { events: RenderEvent[] }, frameId: number): void {
+    this.state.addRenderEvents(payload.events, frameId);
   }
 
-  private handleLeakEvent(payload: LeakEvent): void {
-    this.state.leakEvents.update(current => [...current, payload]);
+  private handleLeakEvent(payload: LeakEvent, frameId: number): void {
+    this.state.addLeakEvent(payload, frameId);
   }
 
-  private handleTrackByIssue(payload: TrackByIssue): void {
-    this.state.trackByIssues.update(current => [...current, payload]);
+  private handleTrackByIssue(payload: TrackByIssue, frameId: number): void {
+    this.state.addTrackByIssue(payload, frameId);
   }
 
-  private handleOnPushResult(payload: OnPushScore): void {
-    this.state.onPushRecommendations.update(current => [...current, payload]);
+  private handleOnPushResult(payload: OnPushScore, frameId: number): void {
+    this.state.addOnPushResult(payload, frameId);
   }
 
   private handleError(payload: { message?: string; error?: string }): void {
@@ -113,23 +139,24 @@ export class EventDispatcherService {
     );
   }
 
-  private handleZonePollutionEvent(payload: ZonePollutionEvent): void {
-    this.state.zonePollutionSources.set(payload.sources);
+  private handleZonePollutionEvent(payload: ZonePollutionEvent, frameId: number): void {
+    this.state.setZonePollutionSources(payload.sources, frameId);
   }
 
-  private handleFlowEventBatch(payload: { events: FlowEvent[] }): void {
-    this.state.flowEvents.update(current => [...current, ...payload.events]);
+  private handleFlowEventBatch(payload: { events: FlowEvent[] }, frameId: number): void {
+    this.state.addFlowEvents(payload.events, frameId);
   }
 
-  private handleRouteChanged(payload: { timestamp: number }): void {
+  private handleRouteChanged(payload: { timestamp: number; url?: string }, frameId: number): void {
     // Add a flow event for the route change so it appears in the Render Inspector timeline
-    this.state.flowEvents.update(current => [...current, {
+    this.state.addFlowEvents([{
       id: `route-${Date.now()}`,
       type: 'route-change' as const,
       timestamp: Date.now(),
-      label: 'Route changed',
+      label: `Route changed: ${payload.url ?? 'Navigation detected'}`,
       detail: 'Navigation detected via router-outlet',
-    }]);
+      toRoute: payload.url,
+    }], frameId);
 
     // Optionally clear activity on route change
     if (this.state.clearOnRouteChange()) {

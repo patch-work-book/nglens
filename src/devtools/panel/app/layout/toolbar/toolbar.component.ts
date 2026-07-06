@@ -36,6 +36,35 @@ import { CommandService } from '../../services/command.service';
         </a>
       </nav>
 
+      <!-- Frame Selector option -->
+      <div class="ml-4 flex items-center gap-1.5 bg-gray-900 border border-gray-700 rounded px-2 py-0.5">
+        <span class="text-[10px] text-gray-500 uppercase font-semibold select-none">Target:</span>
+        <select
+          [value]="selectedFrameId()"
+          (change)="onFrameChange($event)"
+          class="bg-transparent text-xs text-gray-200 border-0 outline-none cursor-pointer focus:ring-0 max-w-48 truncate py-0.5"
+        >
+          @for (frame of frames(); track frame.id) {
+            <option [value]="frame.id" class="bg-gray-800 text-gray-200">
+              {{ frame.isTop ? 'Top Window' : getUrlHost(frame.url) }}
+            </option>
+          }
+        </select>
+      </div>
+
+      <!-- Options/Filters -->
+      <div class="flex items-center gap-1 bg-gray-900 border border-gray-700 rounded px-2 py-0.5">
+        <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400 select-none">
+          <input
+            type="checkbox"
+            [checked]="clearOnRouteChange()"
+            (change)="toggleClearOnRoute()"
+            class="rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0 focus:ring-offset-0 w-3 h-3"
+          />
+          Clear on Route Change
+        </label>
+      </div>
+
       <!-- Spacer -->
       <div class="flex-1"></div>
 
@@ -84,6 +113,8 @@ export class ToolbarComponent {
   readonly clearOnRouteChange = this.state.clearOnRouteChange;
   readonly trackingError = this.state.trackingError;
   readonly criticalPollutionCount = this.state.criticalPollutionCount;
+  readonly frames = this.state.frames;
+  readonly selectedFrameId = this.state.selectedFrameId;
 
   readonly connectionDotClass = computed(() => {
     switch (this.state.connectionState()) {
@@ -95,6 +126,21 @@ export class ToolbarComponent {
         return 'bg-amber-500';
     }
   });
+
+  getUrlHost(url: string): string {
+    if (!url || url === 'Top Window') return 'Top Window';
+    try {
+      const parsed = new URL(url);
+      return `Iframe: ${parsed.host}${parsed.pathname}`;
+    } catch {
+      return `Iframe: ${url}`;
+    }
+  }
+
+  onFrameChange(event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    this.state.selectedFrameId.set(Number(select.value));
+  }
 
   toggleTracking(): void {
     const currentlyTracking = this.state.isTracking();

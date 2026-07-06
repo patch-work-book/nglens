@@ -19,6 +19,7 @@ import {
   isInStartupPeriod,
 } from './zone-pollution-utils';
 import { PerformanceGuard } from './performance-guard';
+import { FlowTracker } from './flow-tracker';
 
 const PAGE_TO_CONTENT_EVENT = '__ng_perf_to_content';
 
@@ -388,6 +389,7 @@ export class ZonePollutionDetector {
       severity,
       taskCount: records.length,
       lastSeen: lastRecord.timestamp,
+      route: FlowTracker.getInstance().getCurrentRoute(),
     };
 
     if (severity !== 'low') {

@@ -3,6 +3,7 @@ import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
 import { displayName } from '../../utils/display-name';
 import {
+  ActionConfidence,
   buildRecommendationActions,
   confidenceClass,
   difficultyClass,
@@ -19,6 +20,7 @@ interface ComponentGroup {
   topKind: ActionKind;
   totalCount: number;
   highestConfidence: ActionConfidence;
+  routes: string[];
 }
 
 @Component({
@@ -81,7 +83,7 @@ interface ComponentGroup {
       } @else {
         <!-- Component groups -->
         <div class="space-y-2">
-          @for (group of filteredGroups(); track group.componentName) {
+          @for (group of filteredGroups(); track group.componentName; let i = $index) {
             <section class="border border-gray-800 rounded bg-gray-900 overflow-hidden">
               <!-- Component header (clickable to expand) -->
               <button
@@ -89,6 +91,10 @@ interface ComponentGroup {
                 class="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-800/50 transition-colors"
                 (click)="toggleGroup(group.componentName)"
               >
+                <!-- Index badge -->
+                <div class="w-5 h-5 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-[10px] font-bold text-gray-400 flex-shrink-0">
+                  {{ i + 1 }}
+                </div>
                 <span class="text-[10px] text-gray-500">
                   {{ isExpanded(group.componentName) ? '▼' : '▶' }}
                 </span>
@@ -99,14 +105,19 @@ interface ComponentGroup {
                       {{ group.totalCount }} {{ group.totalCount === 1 ? 'issue' : 'issues' }}
                     </span>
                   </div>
-                  <div class="flex gap-1.5 mt-1">
+                  <div class="flex gap-1.5 mt-1 items-center flex-wrap">
                     @for (action of group.actions.slice(0, 3); track action.id) {
                       <span class="kind-pill" [ngClass]="kindClass(action.kind)">
                         {{ kindLabel(action.kind) }}
                       </span>
                     }
                     @if (group.actions.length > 3) {
-                      <span class="text-[10px] text-gray-500">+{{ group.actions.length - 3 }} more</span>
+                      <span class="text-[10px] text-gray-500 mr-2">+{{ group.actions.length - 3 }} more</span>
+                    }
+                    @for (r of group.routes; track r) {
+                      <span class="text-[9px] px-1.5 py-0.5 rounded-sm bg-indigo-950/50 text-indigo-300 border border-indigo-900/50 uppercase font-semibold tracking-wide">
+                        🧭 {{ r }}
+                      </span>
                     }
                   </div>
                 </div>
@@ -118,15 +129,21 @@ interface ComponentGroup {
               <!-- Expanded: issues grouped by category -->
               @if (isExpanded(group.componentName)) {
                 <div class="border-t border-gray-800 divide-y divide-gray-800/50">
-                  @for (action of group.actions; track action.id) {
+                  @for (action of group.actions; track action.id; let subIdx = $index) {
                     <div class="px-4 py-3 pl-10">
                       <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                           <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-[10px] font-mono font-bold text-gray-500">#{{ i + 1 }}.{{ subIdx + 1 }}</span>
                             <span class="kind-pill" [ngClass]="kindClass(action.kind)">
                               {{ kindLabel(action.kind) }}
                             </span>
                             <span class="text-xs font-medium text-gray-100">{{ action.title }}</span>
+                            @if (action.route) {
+                              <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-950/40 text-indigo-300 border border-indigo-900/40 font-semibold uppercase tracking-wider">
+                                🧭 Route: {{ action.route }}
+                              </span>
+                            }
                           </div>
                           <p class="text-xs text-gray-400 mt-1">{{ action.evidence }}</p>
                           <p class="text-xs text-gray-500 mt-1 italic">Fix: {{ action.suggestedFix }}</p>
@@ -282,6 +299,8 @@ export class RecommendationsComponent {
         (confidencePriority[a.confidence] ?? 0) > (confidencePriority[best.confidence] ?? 0) ? a : best
       );
 
+      const routes = Array.from(new Set(actions.map(a => a.route).filter(Boolean))) as string[];
+
       groups.push({
         componentName,
         displayName: displayName(componentName),
@@ -289,6 +308,7 @@ export class RecommendationsComponent {
         topKind: actions[0].kind,
         totalCount: actions.length,
         highestConfidence: highest.confidence,
+        routes,
       });
     }
 

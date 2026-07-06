@@ -3,76 +3,37 @@
 <head>
   <meta charset="UTF-8" />
   <title>ngLens</title>
-  <link rel="stylesheet" href="./src/popup/popup.css">
+  <link rel="stylesheet" href="./popup.css">
 </head>
 <body>
   <div class="devtools-container">
-    <!-- Header with tabs -->
+    <!-- Header with Auto Scan Options -->
     <div class="devtools-header">
       <div class="logo">
         <span class="logo-icon">◈</span>
         <span class="logo-text">ngLens</span>
       </div>
-      <div class="tabs">
-        <button class="tab active" data-tab="issues">Issues</button>
-        <button class="tab" data-tab="performance">Performance</button>
+      <div class="autostart-container">
+        <label class="autostart-label" id="autoStartSettingLabel">
+          <input type="checkbox" id="autoStartToggle" aria-labelledby="autoStartSettingLabel" />
+          Auto Scan
+        </label>
       </div>
     </div>
 
-    <!-- Toolbar with scan button and filters -->
-    <div class="devtools-toolbar">
-      <button id="scanBtn" class="scan-button">
-        <span class="scan-icon">▶</span> Run Analysis
-      </button>
-      <div class="filter-controls" style="display: none;">
-        <select id="severityFilter" class="filter-select">
-          <option value="">All Severities</option>
-          <option value="critical">Critical</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
-          <option value="info">Info</option>
-        </select>
-        <select id="categoryFilter" class="filter-select">
-          <option value="">All Categories</option>
-          <option value="change-detection">Change Detection</option>
-          <option value="dom-complexity">DOM Complexity</option>
-          <option value="render-performance">Render Performance</option>
-          <option value="best-practices">Best Practices</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- Content area -->
+    <!-- Content area with simple details and instruction -->
     <div class="devtools-content">
-      <!-- Status messages -->
-      <div id="status" class="status-area"></div>
-
-      <!-- Score panel (performance tab) -->
-      <div id="scorePanel" class="score-panel" style="display: none;">
-        <div class="score-gauge-container">
-          <svg class="score-gauge" viewBox="0 0 200 200">
-            <circle class="gauge-bg" cx="100" cy="100" r="80" />
-            <circle class="gauge-progress" cx="100" cy="100" r="80" />
-            <text class="gauge-score" x="100" y="90"></text>
-            <text class="gauge-label" x="100" y="125">Performance</text>
-          </svg>
-        </div>
-        <div class="subscores-container"></div>
+      <div class="message-box info">
+        <strong>ngLens DevTools Panel Active</strong>
+        <p style="margin-top: 8px; line-height: 1.45;">ngLens is designed to run directly inside Chrome DevTools. Right-click, select <strong>Inspect</strong>, and switch to the <strong>ngLens</strong> tab to open the full metrics dashboard.</p>
+        <p style="margin-top: 8px; line-height: 1.45;">When <strong>Auto Scan</strong> is checked, starting Devtools will automatically activate the Angular scanning profile.</p>
       </div>
-
-      <!-- Issues panel (issues tab) -->
-      <div id="issuesPanel" class="issues-panel">
-        <div id="results" class="issues-list"></div>
-      </div>
+      <div id="status" class="status-area" style="display: none;"></div>
+      <div id="results" class="issues-list" style="display: none;"></div>
     </div>
 
-    <!-- Footer with stats -->
-    <div class="devtools-footer">
-      <div class="footer-stats">
-        <span id="componentCount"></span>
-        <span id="issueCount"></span>
-      </div>
+    <!-- Footer with setting only -->
+    <div class="devtools-footer justify-end">
       <div class="analytics-setting" id="analyticsSettingContainer">
         <span class="analytics-setting-label" id="analyticsSettingLabel">Usage analytics</span>
         <label class="analytics-toggle">
@@ -83,6 +44,6 @@
     </div>
   </div>
 
-  <script type="module" src="./src/popup/popup.ts"></script>
+  <script type="module" src="./popup.js"></script>
 </body>
 </html>

@@ -19,6 +19,8 @@ export interface PollutionSourceMetrics {
   taskCount: number;
   lastSeen: number;
   fixSuggestion?: string;
+  frameId?: number;
+  route?: string;
 }
 
 export interface ZonePollutionEvent {

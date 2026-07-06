@@ -19,6 +19,7 @@ export class FlowTracker {
   private isRunning = false;
   private flushInterval: ReturnType<typeof setInterval> | null = null;
   private eventId = 0;
+  private currentRoute = typeof window !== 'undefined' ? (window.location.pathname + window.location.search + window.location.hash) : '/';
 
   // Original prototypes for cleanup
   private originalSubjectNext: Function | null = null;
@@ -28,9 +29,20 @@ export class FlowTracker {
   private originalXhrSend: Function | null = null;
   private routerSubscription: any = null;
   // Track which signal instances we've already patched (avoid double-patching)
-  private readonly patchedSignals = new WeakSet<object>();
+  private patchedSignals = new WeakSet<object>();
   // Track which component initiated the latest API call
   private lastApiInitiator: string | null = null;
+
+  getCurrentRoute(): string {
+    if (typeof globalThis.location !== 'undefined') {
+      try {
+        return globalThis.location.pathname + globalThis.location.search + globalThis.location.hash;
+      } catch {
+        return this.currentRoute;
+      }
+    }
+    return this.currentRoute;
+  }
 
   private constructor() {}
 
@@ -61,7 +73,7 @@ export class FlowTracker {
     this.unhookRouter();
     this.stopBatching();
     this.buffer.length = 0;
-    this.patchedSignals.clear();
+    this.patchedSignals = new WeakSet<object>();
     this.isRunning = false;
   }
 
@@ -118,7 +130,9 @@ export class FlowTracker {
         } catch { /* ignore instrumentation errors */ }
         finally { inHook = false; }
       }
-      return originalNext.call(this, value);
+      if (originalNext) {
+        return originalNext.call(this, value);
+      }
     };
   }
 
@@ -248,25 +262,52 @@ export class FlowTracker {
     const originalFetch = this.originalFetch;
 
     (globalThis as any).fetch = function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-      const method = init?.method ?? 'GET';
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
-      const shortUrl = tracker.shortenUrl(url);
-      // Capture initiator at CALL time (which component is most likely the caller)
-      const initiator = tracker.detectCurrentComponent();
-      // Capture the interaction context at CALL time (which click caused this fetch)
-      const interactionTs = tracker.getActiveInteractionTimestamp();
+      let method = 'GET';
+      let url = '';
+      let shortUrl = '';
+      let initiator: string | null = null;
+      let interactionTs: number | undefined;
+
+      try {
+        method = init?.method ?? 'GET';
+        if (typeof input === 'string') {
+          url = input;
+        } else if (input instanceof URL) {
+          url = input.href;
+        } else if (input && typeof (input as any).url === 'string') {
+          url = (input as any).url;
+        } else if (input) {
+          url = String(input);
+        }
+        shortUrl = tracker.shortenUrl(url);
+        // Capture initiator at CALL time (which component is most likely the caller)
+        initiator = tracker.detectCurrentComponent();
+        // Capture the interaction context at CALL time (which click caused this fetch)
+        interactionTs = tracker.getActiveInteractionTimestamp();
+      } catch (err) {
+        // Suppress any tracking parameter deduction errors so the native fetch doesn't fail
+      }
 
       return originalFetch.call(globalThis, input, init).then((response: Response) => {
-        if (tracker.isRunning && tracker.isApiCall(url, response.headers.get('content-type'))) {
-          tracker.buffer.push({
-            id: `flow-${++tracker.eventId}`,
-            type: 'http-response',
-            timestamp: Date.now(),
-            label: `${method} ${shortUrl} → ${response.status}`,
-            detail: `${method} ${shortUrl} (${response.status} ${response.statusText})`,
-            ownerClass: initiator ?? undefined,
-            triggeredByInteractionTs: interactionTs,
-          });
+        try {
+          if (tracker.isRunning && response && url) {
+            const contentType = response.headers && typeof response.headers.get === 'function'
+              ? response.headers.get('content-type')
+              : null;
+            if (tracker.isApiCall(url, contentType)) {
+              tracker.buffer.push({
+                id: `flow-${++tracker.eventId}`,
+                type: 'http-response',
+                timestamp: Date.now(),
+                label: `${method} ${shortUrl} → ${response.status}`,
+                detail: `${method} ${shortUrl} (${response.status} ${response.statusText})`,
+                ownerClass: initiator ?? undefined,
+                triggeredByInteractionTs: interactionTs,
+              });
+            }
+          }
+        } catch (err) {
+          // Suppress parsing/logging errors to ensure the underlying network call never errors out
         }
         return response;
       });
@@ -291,29 +332,43 @@ export class FlowTracker {
     const tracker = this;
 
     XHR.open = function(this: any, method: string, url: string, ...args: any[]) {
-      this.__nglens_method = method;
-      this.__nglens_url = url;
+      try {
+        this.__nglens_method = method;
+        this.__nglens_url = url;
+      } catch (err) {
+        // Suppress setting tracking headers to prevent crashes
+      }
       return (tracker.originalXhrOpen as Function).apply(this, [method, url, ...args]);
     };
 
     XHR.send = function(this: any, ...args: any[]) {
       const xhr = this;
-      xhr.addEventListener('load', () => {
-        if (tracker.isRunning) {
-          const shortUrl = tracker.shortenUrl(xhr.__nglens_url ?? '');
-          const ct = xhr.getResponseHeader?.('content-type') ?? null;
-          if (tracker.isApiCall(xhr.__nglens_url ?? '', ct)) {
-            tracker.buffer.push({
-              id: `flow-${++tracker.eventId}`,
-              type: 'http-response',
-              timestamp: Date.now(),
-              label: `${xhr.__nglens_method ?? 'XHR'} ${shortUrl} → ${xhr.status}`,
-              detail: `${xhr.__nglens_method} ${shortUrl} (${xhr.status})`,
-              triggeredByInteractionTs: tracker.getActiveInteractionTimestamp(),
-            });
+      try {
+        xhr.addEventListener('load', () => {
+          try {
+            if (tracker.isRunning) {
+              const shortUrl = tracker.shortenUrl(xhr.__nglens_url ?? '');
+              const ct = xhr.getResponseHeader && typeof xhr.getResponseHeader === 'function'
+                ? xhr.getResponseHeader('content-type')
+                : null;
+              if (tracker.isApiCall(xhr.__nglens_url ?? '', ct)) {
+                tracker.buffer.push({
+                  id: `flow-${++tracker.eventId}`,
+                  type: 'http-response',
+                  timestamp: Date.now(),
+                  label: `${xhr.__nglens_method ?? 'XHR'} ${shortUrl} → ${xhr.status}`,
+                  detail: `${xhr.__nglens_method} ${shortUrl} (${xhr.status})`,
+                  triggeredByInteractionTs: tracker.getActiveInteractionTimestamp(),
+                });
+              }
+            }
+          } catch (err) {
+            // Suppress callback monitoring errors
           }
-        }
-      }, { once: true });
+        }, { once: true });
+      } catch (err) {
+        // Suppress listener injection errors
+      }
       return (tracker.originalXhrSend as Function).apply(this, args);
     };
   }
@@ -454,6 +509,16 @@ export class FlowTracker {
 
   // ═══ Router Navigation Tracking ═════════════════════════════════════════════
 
+  /**
+   * Updates current route state. Can be set programmatically (e.g. by Orchestrator on route changes)
+   * to guarantee synchronization when lazy routing occurs.
+   */
+  setCurrentRoute(route: string): void {
+    if (route) {
+      this.currentRoute = route;
+    }
+  }
+
   private hookRouter(): void {
     try {
       const ng = (globalThis as any).ng;
@@ -471,11 +536,13 @@ export class FlowTracker {
             const router = injector.get(token, null, { optional: true });
             if (router && typeof router.events?.subscribe === 'function') {
               let lastUrl = router.url ?? '/';
+              this.currentRoute = lastUrl;
               this.routerSubscription = router.events.subscribe((event: any) => {
                 if (!this.isRunning) return;
                 // NavigationEnd event
                 if (event.constructor?.name === 'NavigationEnd' || event.type === 1) {
                   const toUrl = event.urlAfterRedirects ?? event.url ?? '';
+                  this.currentRoute = toUrl;
                   this.buffer.push({
                     id: `flow-${++this.eventId}`,
                     type: 'route-change',
@@ -485,6 +552,13 @@ export class FlowTracker {
                     toRoute: toUrl,
                   });
                   lastUrl = toUrl;
+
+                  // Notify orchestrator of a route change so it can run scans
+                  if ((globalThis as any).__nglens_orchestrator_on_route_changed) {
+                    try {
+                      (globalThis as any).__nglens_orchestrator_on_route_changed(toUrl);
+                    } catch { /* ignore */ }
+                  }
                 }
               });
               break;

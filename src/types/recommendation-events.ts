@@ -9,6 +9,8 @@ export interface TrackByIssue {
   collectionSize: number;
   severity: SeverityLevel;
   recommendation: string;
+  frameId?: number;
+  route?: string;
 }
 
 export interface OnPushScore {
@@ -17,6 +19,8 @@ export interface OnPushScore {
   currentStrategy: 'Default' | 'OnPush';
   factors: OnPushFactor[];
   recommendation: string;
+  frameId?: number;
+  route?: string;
 }
 
 export interface OnPushFactor {

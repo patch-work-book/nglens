@@ -36,7 +36,8 @@ export type MessageType =
   | 'DEGRADED_MODE'
   | 'ZONE_POLLUTION_EVENT'
   | 'ROUTE_CHANGED'
-  | 'FLOW_EVENT_BATCH';
+  | 'FLOW_EVENT_BATCH'
+  | 'FRAME_LOADED';
 
 export interface ExtensionMessage<T = unknown> {
   type: MessageType;
