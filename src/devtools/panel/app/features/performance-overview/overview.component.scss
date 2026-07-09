@@ -1,0 +1,239 @@
+/* ── TIER 1: Status Banner ── */
+.status-banner {
+  border-bottom: 1px solid rgb(55 65 81 / 0.6);
+  flex-shrink: 0;
+}
+.status-banner.banner-red {
+  background: linear-gradient(135deg, rgb(127 29 29 / 0.25), rgb(17 24 39 / 0.95));
+  border-left: 4px solid #ef4444;
+}
+.status-banner.banner-amber {
+  background: linear-gradient(135deg, rgb(120 53 15 / 0.2), rgb(17 24 39 / 0.95));
+  border-left: 4px solid #f59e0b;
+}
+.status-banner.banner-green {
+  background: linear-gradient(135deg, rgb(6 78 59 / 0.15), rgb(17 24 39 / 0.95));
+  border-left: 4px solid #10b981;
+}
+.status-banner.banner-neutral {
+  background: rgb(17 24 39 / 0.85);
+  border-left: 4px solid #6b7280;
+}
+
+.banner-metric {
+  min-width: 44px;
+}
+.banner-metric strong {
+  display: block;
+  font-size: 15px;
+  color: #f3f4f6;
+  line-height: 1.2;
+}
+.banner-metric span {
+  display: block;
+  font-size: 9px;
+  color: #9ca3af;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-top: 1px;
+}
+
+/* ── CTA Buttons ── */
+.cta-button {
+  border: 1px solid rgb(75 85 99 / 0.75);
+  border-radius: 4px;
+  color: #d1d5db;
+  background: rgb(31 41 55 / 0.65);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 10px;
+  transition: background 120ms ease, border-color 120ms ease;
+  cursor: pointer;
+}
+.cta-button:hover:not(:disabled) {
+  background: rgb(55 65 81 / 0.85);
+  border-color: rgb(96 165 250 / 0.55);
+  color: #f3f4f6;
+}
+.cta-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.cta-button.primary {
+  background: rgb(59 130 246 / 0.2);
+  border-color: rgb(59 130 246 / 0.5);
+  color: #93c5fd;
+}
+.cta-button.primary:hover:not(:disabled) {
+  background: rgb(59 130 246 / 0.35);
+  border-color: rgb(96 165 250 / 0.7);
+}
+.cta-button.muted {
+  color: #9ca3af;
+  background: rgb(17 24 39 / 0.45);
+}
+
+/* ── TIER 2: Hint Cards (collapsible) ── */
+.hint-card {
+  background: rgb(17 24 39 / 0.5);
+  border: 1px solid rgb(55 65 81 / 0.5);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.hint-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 100ms;
+  text-align: left;
+}
+.hint-header:hover {
+  background: rgb(31 41 55 / 0.6);
+}
+.hint-icon {
+  font-size: 9px;
+  flex-shrink: 0;
+  width: 12px;
+}
+.hint-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  min-width: 60px;
+}
+.hint-badge {
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.hint-go {
+  font-size: 10px;
+  font-weight: 700;
+  color: #93c5fd;
+  background: rgb(59 130 246 / 0.15);
+  border: 1px solid rgb(59 130 246 / 0.3);
+  border-radius: 3px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 100ms;
+}
+.hint-go:hover {
+  background: rgb(59 130 246 / 0.3);
+}
+.hint-body {
+  padding: 8px 12px 12px 32px;
+  border-top: 1px solid rgb(55 65 81 / 0.4);
+}
+
+/* ── TIER 3: Evidence Tabs ── */
+.tab-button {
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9ca3af;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  transition: color 120ms, border-color 120ms;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tab-button:hover {
+  color: #d1d5db;
+}
+.tab-button.tab-active {
+  color: #93c5fd;
+  border-bottom-color: #3b82f6;
+}
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: rgb(55 65 81 / 0.7);
+  font-size: 9px;
+  font-weight: 700;
+  color: #d1d5db;
+}
+
+/* ── Shared ── */
+.metric-cell {
+  background: rgb(31 41 55 / 0.45);
+  border: 1px solid rgb(55 65 81 / 0.55);
+  border-radius: 4px;
+  padding: 8px;
+}
+.metric-cell span {
+  display: block;
+  color: #9ca3af;
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.metric-cell strong {
+  display: block;
+  color: #f3f4f6;
+  font-size: 14px;
+  margin-top: 2px;
+}
+.metric-cell small {
+  display: block;
+  color: #6b7280;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.rank-pill {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid rgb(75 85 99 / 0.7);
+  background: rgb(31 41 55 / 0.55);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.evidence-chip {
+  border: 1px solid rgb(75 85 99 / 0.55);
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: #d1d5db;
+  background: rgb(17 24 39 / 0.45);
+  font-size: 11px;
+}
+
+.badge {
+  border: 1px solid rgb(75 85 99 / 0.55);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.change-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  border-radius: 4px;
+  border: 1px solid rgb(75 85 99 / 0.6);
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 800;
+}

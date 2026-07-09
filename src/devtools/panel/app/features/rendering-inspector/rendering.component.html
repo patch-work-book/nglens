@@ -1,0 +1,280 @@
+<div class="h-full overflow-auto">
+
+  <!-- ═══ Status Bar ═══ -->
+  <div class="sticky top-0 z-20 px-4 py-2.5 bg-gray-900/95 backdrop-blur border-b border-gray-800 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <h2 class="text-sm font-semibold text-gray-100">Render Inspector</h2>
+      <div class="flex items-center gap-2 text-[11px]">
+        <span class="text-gray-500 cursor-help" title="Deduplicated render count (events within 50ms of same component are coalesced)">
+          {{ deduplicatedRenderCount() }} renders
+        </span>
+        <span class="text-gray-700">·</span>
+        <span class="text-gray-500">{{ state.componentStats().length }} components</span>
+        @if (state.renderEvents().length !== deduplicatedRenderCount()) {
+          <span class="text-gray-600 text-[9px]">({{ state.renderEvents().length }} raw events)</span>
+        }
+      </div>
+    </div>
+    <span
+      class="text-[10px] px-2 py-1 rounded-full font-medium"
+      [ngClass]="state.isTracking()
+        ? 'bg-green-500/15 text-green-400 border border-green-500/30'
+        : 'bg-gray-800 text-gray-500 border border-gray-700'"
+    >{{ state.isTracking() ? '● Recording' : '○ Stopped' }}</span>
+  </div>
+
+  <!-- ═══ Empty State ═══ -->
+  @if (state.renderEvents().length === 0) {
+    <div class="flex flex-col items-center justify-center p-8 text-center">
+      <div class="text-3xl opacity-20 mb-3">⚡</div>
+      <h3 class="text-sm font-medium text-gray-300 mb-1">No render activity captured</h3>
+      <p class="text-xs text-gray-500 max-w-md">
+        Start recording to see the full action flow — which components re-render on each interaction and why.
+      </p>
+      @if (!state.isTracking()) {
+        <div class="mt-3 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] text-amber-300">
+          Press <strong>Start</strong> in the toolbar to begin recording.
+        </div>
+      }
+    </div>
+  } @else {
+  <div class="p-4 space-y-3">
+
+    <!-- ═══ Action Replay Cards ═══ -->
+    @for (action of actionReplays(); track action.id) {
+      <div class="rounded-lg border overflow-hidden transition-colors"
+           [ngClass]="expandedActions().has(action.id) ? 'border-gray-600 bg-gray-800/30' : 'border-gray-800 hover:border-gray-700'">
+
+        <!-- Action header: what the user did -->
+        <div class="px-4 py-3 flex items-center gap-3 cursor-pointer select-none"
+             (click)="toggleAction(action.id)">
+          <span class="text-lg flex-shrink-0">{{ action.triggerIcon }}</span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-semibold text-gray-100">{{ action.trigger }}</span>
+              @if (action.targetSelector) {
+                <code class="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded font-mono">{{ action.targetSelector }}</code>
+              }
+              @if (action.triggerComponent) {
+                <span class="text-[10px] text-indigo-400">in {{ displayName(action.triggerComponent) }}</span>
+              }
+            </div>
+            <div class="flex items-center gap-3 mt-1 text-[10px] text-gray-500">
+              <span><strong class="text-gray-300">{{ action.totalRenders }}</strong> renders</span>
+              <span><strong class="text-gray-300">{{ action.uniqueComponents }}</strong> components</span>
+              @if (countFlowType(action, 'http-response') > 0) {
+                <span class="text-cyan-400"><strong>{{ countFlowType(action, 'http-response') }}</strong> API</span>
+              }
+              @if (countFlowType(action, 'subject-emit') > 0) {
+                <span class="text-purple-400"><strong>{{ countFlowType(action, 'subject-emit') }}</strong> RxJS</span>
+              }
+              @if (countFlowType(action, 'signal-write') > 0) {
+                <span class="text-green-400"><strong>{{ countFlowType(action, 'signal-write') }}</strong> signals</span>
+              }
+              <span>{{ action.duration.toFixed(0) }}ms</span>
+              <span class="text-gray-600">{{ formatTime(action.timestamp) }}</span>
+            </div>
+          </div>
+          <span class="text-gray-600 text-sm">{{ expandedActions().has(action.id) ? '▾' : '▸' }}</span>
+        </div>
+
+        <!-- Expanded: organized flow showing Data Flow → Render Cascade → Performance -->
+        @if (expandedActions().has(action.id)) {
+          <div class="border-t border-gray-700/50 bg-gray-900/40">
+
+            <!-- ═══ DATA FLOW Section (unattributed — couldn't link to a component) ═══ -->
+            @if (unattributedFlows(action).length > 0) {
+              <div class="px-4 py-2.5 border-b border-gray-800/60">
+                <div class="text-[9px] text-gray-500 uppercase tracking-wide font-semibold mb-2 flex items-center gap-1.5 cursor-pointer select-none hover:text-gray-300"
+                     (click)="toggleDataFlow(action.id)">
+                  <span class="text-[10px]">{{ expandedDataFlow().has(action.id) ? '▼' : '▶' }}</span>
+                  <span>Data Flow</span>
+                  <span class="text-cyan-400 normal-case">· {{ unattributedFlows(action).length }} call{{ unattributedFlows(action).length > 1 ? 's' : '' }}</span>
+                  <span class="text-gray-600 normal-case">· not linked to a component</span>
+                </div>
+                @if (expandedDataFlow().has(action.id)) {
+                  <div class="space-y-3">
+                    @if (unattributedFlows(action).length === 0) {
+                      <div class="bg-gray-900/40 border border-gray-800/50 rounded p-3 text-center">
+                        <div class="text-[9px] text-gray-500">No user-defined state flows detected in this action.</div>
+                        <div class="text-[8px] text-gray-600 mt-1">Framework-level subjects and internals are filtered for clarity.</div>
+                      </div>
+                    } @else {
+                      <!-- Dynamically render each flow type -->
+                      @for (flowType of ['subject-emit', 'signal-write', 'facade-method', 'store-dispatch', 'store-select', 'http-response', 'websocket']; track flowType) {
+                        @if (flowsByType(unattributedFlows(action), flowType).length > 0) {
+                          <div class="bg-gray-900/40 border border-gray-800/50 rounded p-2">
+                            <div class="text-[8px] text-gray-500 uppercase font-semibold mb-2 opacity-70 flex items-center gap-1 cursor-pointer select-none hover:text-gray-300"
+                                 (click)="toggleFlowType(flowType)">
+                              <span>{{ flowTypeIcon(flowType) }}</span>
+                              <span>{{ flowTypeLabel(flowType) }}</span>
+                              <span class="text-cyan-300 ml-auto">{{ flowsByType(unattributedFlows(action), flowType).length }}</span>
+                            </div>
+                            @if (expandedFlowTypes().has(flowType)) {
+                              <div class="flex flex-wrap gap-2">
+                                @for (flow of flowsByType(unattributedFlows(action), flowType); track flow.id) {
+                                <div class="flex items-center gap-2">
+                                  <!-- Source Flow Card -->
+                                  <div class="flex flex-col items-center gap-1">
+                                    <div [ngClass]="'px-2 py-1.5 rounded border text-center relative ' + flowTypeColor(flowType)">
+                                      <div class="text-[9px] font-medium">{{ flow.label }}</div>
+                                      @if (flow.sourceComponent) {
+                                        <div class="text-[8px] text-blue-300 cursor-pointer hover:underline"
+                                             (click)="navigateToComponent(flow.sourceComponent)">
+                                          {{ displayName(flow.sourceComponent) }}
+                                        </div>
+                                      } @else if (flow.ownerClass) {
+                                        <div class="text-[8px] text-blue-300 cursor-pointer hover:underline"
+                                             (click)="navigateToComponent(flow.ownerClass)">
+                                          {{ displayName(flow.ownerClass) }}
+                                        </div>
+                                      }
+                                      @if (flow.value || flow.detail) {
+                                        <div class="text-[7px] text-yellow-300/80 font-mono truncate max-w-28">{{ flow.value || flow.detail }}</div>
+                                      }
+                                      <!-- Tooltip icon - always visible, click to toggle -->
+                                      <div class="absolute top-0.5 right-0.5 cursor-pointer hover:opacity-100 opacity-70 transition-opacity"
+                                           [appTooltip]="getFlowTooltip(flow)"
+                                           tooltipMaxWidth="400px"
+                                           title="Click to view full value">
+                                        <span class="text-[9px]">📋</span>
+                                      </div>
+                                      @if (flowType === 'websocket' && flow.connectionStatus) {
+                                        <div class="text-[7px]"
+                                             [ngClass]="flow.connectionStatus === 'connected' ? 'text-green-400' : flow.connectionStatus === 'connecting' ? 'text-amber-400' : 'text-red-400'">
+                                          {{ flow.connectionStatus }}
+                                        </div>
+                                      }
+                                    </div>
+                                  </div>
+                                  <!-- Arrow -->
+                                  <div class="text-gray-500 text-sm">→</div>
+                                  <!-- Subscriber Flow Cards -->
+                                  @if (flow.subscribers && flow.subscribers.length > 0) {
+                                    @for (subscriber of flow.subscribers; let last = $last; track subscriber) {
+                                      <div class="flex items-center gap-2">
+                                        <div class="flex flex-col items-center gap-1">
+                                          <div class="px-2 py-1.5 rounded border border-blue-500/40 bg-blue-900/20 text-center">
+                                            <div class="text-[9px] font-medium text-blue-300">{{ displayName(subscriber) }}</div>
+                                          </div>
+                                        </div>
+                                        @if (!last) {
+                                          <div class="text-gray-500 text-sm">→</div>
+                                        }
+                                      </div>
+                                    }
+                                  }
+                                </div>
+                              }
+                            </div>
+                            }
+                          </div>
+                        }
+                      }
+                    }
+                  </div>
+                }
+              </div>
+            }
+
+            <!-- ═══ RENDER CASCADE Section ═══ -->
+            <div class="px-4 py-2.5">
+              <div class="text-[9px] text-gray-500 uppercase tracking-wide font-semibold mb-2 flex items-center justify-between">
+                <span>Render Cascade</span>
+                <span class="text-gray-600 normal-case">{{ hotCount(action) }} hot · click row to inspect</span>
+              </div>
+              @for (node of flattenTree(action.tree); track node.componentName + '-' + node.depth) {
+                <div class="flex items-center gap-2 py-1.5 px-1.5 rounded transition-colors"
+                     [ngClass]="rowClass(node)"
+                     [style.marginLeft.px]="node.depth * 16"
+                     [title]="node.componentName + ' — rendered ' + node.count + '× (' + node.totalDuration.toFixed(1) + 'ms). ' + renderHint(node)">
+                  @if (node.depth > 0) {
+                    <span class="text-gray-600 text-[10px] flex-shrink-0">↳</span>
+                  }
+                  <span class="text-xs flex-shrink-0 w-4 text-center">{{ renderSeverity(node) === 'high' ? '🔥' : renderSeverity(node) === 'medium' ? '⚠️' : '🔄' }}</span>
+                  <span class="text-[11px] min-w-0 truncate"
+                        [ngClass]="node.depth === 0 ? 'text-white font-semibold' : 'text-gray-200'">
+                    {{ displayName(node.componentName) }}
+                  </span>
+                  @if (node.count > 1) {
+                    <span class="text-[9px] px-1.5 rounded flex-shrink-0 font-bold"
+                          [ngClass]="renderSeverity(node) === 'high' ? 'bg-red-500/25 text-red-300' : renderSeverity(node) === 'medium' ? 'bg-amber-500/20 text-amber-300' : 'bg-gray-700/60 text-gray-300'">
+                      ×{{ node.count }}
+                    </span>
+                  }
+                  <span class="text-[9px] text-gray-500 truncate flex-1 min-w-0">{{ formatCauseSource(node.cause) }}</span>
+                  <span class="text-[10px] font-mono w-14 text-right flex-shrink-0"
+                        [ngClass]="node.totalDuration > 16 ? 'text-red-400' : node.totalDuration > 5 ? 'text-amber-400' : 'text-gray-600'">
+                    {{ node.totalDuration.toFixed(1) }}ms
+                  </span>
+                </div>
+                @if (renderSeverity(node) !== 'none') {
+                  <div class="text-[10px] text-gray-400 pl-8 pb-1 pt-0.5"
+                       [style.marginLeft.px]="node.depth * 16">
+                    <span [ngClass]="renderSeverity(node) === 'high' ? 'text-red-300' : 'text-amber-300'">{{ renderHint(node) }}</span>
+                  </div>
+                }
+                <!-- API/store/state events triggered by this component -->
+                @for (flow of flowsForComponent(action, node.componentName); track flow.id) {
+                  <div class="flex flex-col gap-1 py-1.5 px-2 rounded hover:bg-gray-800/20 border border-gray-800/40"
+                       [style.marginLeft.px]="(node.depth + 1) * 16">
+                    <!-- Flow line -->
+                    <div class="flex items-center gap-2">
+                      <span class="text-gray-600 text-[9px] flex-shrink-0">↳</span>
+                      <span class="text-xs flex-shrink-0 w-4 text-center">{{ flow.icon }}</span>
+                      <div class="flex items-center gap-1 text-[9px] flex-1 min-w-0">
+                        <span class="text-purple-300 font-medium truncate cursor-help"
+                              [appTooltip]="getFlowTooltip(flow)"
+                              tooltipMaxWidth="600px">
+                          {{ flow.label }}
+                        </span>
+                        @if (flow.subscribers && flow.subscribers.length > 0) {
+                          <span class="text-gray-600">→</span>
+                          <span class="text-green-300 text-[8px] truncate">
+                            {{ flow.subscribers.slice(0, 2).map(c => displayName(c)).join(', ') }}
+                            @if (flow.subscribers.length > 2) {
+                              <span class="text-gray-500">+{{ flow.subscribers.length - 2 }}</span>
+                            }
+                          </span>
+                        }
+                      </div>
+                    </div>
+                    <!-- Value detail -->
+                    @if (flow.value || flow.detail) {
+                      <div class="flex items-center gap-2 pl-7 text-[8px]">
+                        <span class="text-gray-500">Value:</span>
+                        <span class="font-mono text-yellow-300 truncate max-w-xs cursor-help" 
+                              [appTooltip]="getFlowTooltip(flow)"
+                              tooltipMaxWidth="600px">{{ flow.value || flow.detail }}</span>
+                      </div>
+                    }
+                  </div>
+                }
+              }
+            </div>
+
+            <!-- ═══ PERFORMANCE Section ═══ -->
+            @if (action.frameBudgetExceeded) {
+              <div class="px-4 py-2 border-t border-gray-800/60 bg-red-950/20 flex items-center gap-2">
+                <span class="text-red-400 text-[10px] font-semibold">⚠ JANK</span>
+                <span class="text-[10px] text-red-300">
+                  {{ action.duration.toFixed(0) }}ms total — {{ action.framesDropped }} frames dropped (budget: 16ms/frame)
+                </span>
+              </div>
+            }
+
+            <!-- Fix suggestion -->
+            @if (getSuggestion(action)) {
+              <div class="px-4 py-2 border-t border-gray-800/60 bg-indigo-950/20">
+                <span class="text-[9px] text-gray-500 uppercase font-semibold">Suggestion</span>
+                <p class="text-[11px] text-indigo-300 mt-0.5">{{ getSuggestion(action) }}</p>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+
+  </div>
+  }
+</div>

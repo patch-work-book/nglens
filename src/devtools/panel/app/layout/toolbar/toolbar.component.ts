@@ -1,111 +1,31 @@
-import { Component, computed, inject } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { Component, computed, inject, ChangeDetectionStrategy, signal, effect } from '@angular/core';
+import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { PanelState } from '../../state/panel.state';
 import { CommandService } from '../../services/command.service';
 
 @Component({
   selector: 'app-toolbar',
   standalone: true,
-  imports: [RouterLink, RouterLinkActive],
-  template: `
-    <div class="h-12 flex items-center px-3 bg-gray-800 border-b border-gray-700 gap-2">
-      <!-- Logo -->
-      <span class="text-sm font-semibold text-gray-100 mr-4">ngLens</span>
-
-      <!-- Navigation tabs -->
-      <nav class="flex gap-1">
-        <a routerLink="/overview"
-           routerLinkActive="bg-gray-700 text-white"
-           class="px-3 py-1.5 text-xs text-gray-400 rounded hover:text-gray-200 transition-colors">
-          Overview
-        </a>
-        <a routerLink="/rendering"
-           routerLinkActive="bg-gray-700 text-white"
-           class="px-3 py-1.5 text-xs text-gray-400 rounded hover:text-gray-200 transition-colors">
-          Render Inspector
-        </a>
-        <a routerLink="/memory"
-           routerLinkActive="bg-gray-700 text-white"
-           class="px-3 py-1.5 text-xs text-gray-400 rounded hover:text-gray-200 transition-colors">
-          Memory
-        </a>
-        <a routerLink="/recommendations"
-           routerLinkActive="bg-gray-700 text-white"
-           class="px-3 py-1.5 text-xs text-gray-400 rounded hover:text-gray-200 transition-colors">
-          Recommendations
-        </a>
-      </nav>
-
-      <!-- Frame Selector option -->
-      <div class="ml-4 flex items-center gap-1.5 bg-gray-900 border border-gray-700 rounded px-2 py-0.5">
-        <span class="text-[10px] text-gray-500 uppercase font-semibold select-none">Target:</span>
-        <select
-          [value]="selectedFrameId()"
-          (change)="onFrameChange($event)"
-          class="bg-transparent text-xs text-gray-200 border-0 outline-none cursor-pointer focus:ring-0 max-w-48 truncate py-0.5"
-        >
-          @for (frame of frames(); track frame.id) {
-            <option [value]="frame.id" class="bg-gray-800 text-gray-200">
-              {{ frame.isTop ? 'Top Window' : getUrlHost(frame.url) }}
-            </option>
-          }
-        </select>
-      </div>
-
-      <!-- Options/Filters -->
-      <div class="flex items-center gap-1 bg-gray-900 border border-gray-700 rounded px-2 py-0.5">
-        <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400 select-none">
-          <input
-            type="checkbox"
-            [checked]="clearOnRouteChange()"
-            (change)="toggleClearOnRoute()"
-            class="rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0 focus:ring-offset-0 w-3 h-3"
-          />
-          Clear on Route Change
-        </label>
-      </div>
-
-      <!-- Spacer -->
-      <div class="flex-1"></div>
-
-      <!-- Action buttons -->
-      <button
-        (click)="toggleTracking()"
-        class="px-2 py-1 text-xs rounded border transition-colors"
-        [class]="isTracking() ? 'border-red-500 text-red-400 hover:bg-red-500/10' : 'border-green-500 text-green-400 hover:bg-green-500/10'">
-        {{ isTracking() ? 'Stop' : 'Start' }}
-      </button>
-      <button
-        (click)="clearData()"
-        class="px-2 py-1 text-xs rounded border border-gray-600 text-gray-400 hover:bg-gray-700 transition-colors">
-        Clear
-      </button>
-
-      <!-- Connection status indicator -->
-      <span
-        class="w-2 h-2 rounded-full"
-        [class]="connectionDotClass()"
-        [title]="connectionState()">
-      </span>
-
-      <!-- Degraded mode badge -->
-      @if (degradedMode()) {
-        <span class="text-xs text-amber-400 font-medium">Degraded</span>
-      }
-      @if (criticalPollutionCount() > 0) {
-        <span class="text-xs text-red-400 font-medium animate-pulse">⚡ {{ criticalPollutionCount() }} Zone</span>
-      }
-      @if (trackingError()) {
-        <span class="text-xs text-red-400 font-medium truncate max-w-64" [title]="trackingError()!">
-          {{ trackingError() }}
-        </span>
-      }
-    </div>
-  `,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [],
+  templateUrl: './toolbar.component.html',
+  styleUrl: './toolbar.component.scss',
 })
 export class ToolbarComponent {
   private readonly state = inject(PanelState);
   private readonly commandService = inject(CommandService);
+  readonly router = inject(Router);
+  readonly activeRoute = signal<string>('overview');
+
+  constructor() {
+    effect(() => {
+      // Track route changes to update activeRoute signal
+      const urlSegments = this.router.url.split('/').filter(s => s);
+      if (urlSegments.length > 0) {
+        this.activeRoute.set(urlSegments[0]);
+      }
+    });
+  }
 
   readonly isTracking = this.state.isTracking;
   readonly degradedMode = this.state.degradedMode;
@@ -161,5 +81,16 @@ export class ToolbarComponent {
   clearData(): void {
     this.commandService.clearData();
     this.state.clearActivity();
+  }
+
+  /**
+   * Navigate only if not already on that route.
+   * Prevents component re-instantiation and duplicate data when clicking same tab.
+   */
+  navigateTo(route: string): void {
+    if (this.activeRoute() !== route) {
+      this.activeRoute.set(route);
+      this.router.navigate([route]);
+    }
   }
 }

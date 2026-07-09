@@ -32,7 +32,7 @@ export interface RenderCause {
 
 // ── State/Flow Events (RxJS, Signals, Routes, HTTP) ──────────────────────────
 
-export type FlowEventType = 'subject-emit' | 'signal-write' | 'http-response' | 'route-change' | 'user-interaction';
+export type FlowEventType = 'subject-emit' | 'signal-write' | 'http-response' | 'route-change' | 'user-interaction' | 'websocket' | 'facade-method' | 'store-dispatch' | 'store-select';
 
 /** A single event in the reactive flow — captures state changes, HTTP, route, and user actions. */
 export interface FlowEvent {
@@ -52,9 +52,25 @@ export interface FlowEvent {
   /** For route changes: from → to */
   fromRoute?: string;
   toRoute?: string;
+  /** For subject emissions: which component triggered this (e.g., HeaderNavComponent) */
+  sourceComponent?: string;
+  /** For subject emissions: which components/services are subscribing to this (e.g., ["SidebarComponent", "FooterComponent"]) */
+  subscribers?: string[];
+  /** The value being emitted/written (stringified for display) */
+  value?: string;
+  /** For websocket: connection status or message type */
+  connectionStatus?: 'connected' | 'disconnected' | 'connecting';
+  /** For store/facade: method name being called */
+  methodName?: string;
+  /** For store actions: action name (NgRx) */
+  actionName?: string;
+  /** For store selectors: selector name (NgRx) */
+  selectorName?: string;
   frameId?: number;
   /** Timestamp of the user interaction that caused this flow event (for grouping) */
   triggeredByInteractionTs?: number;
+  /** For HTTP: the response body (stringified for display, typically first 500 chars) */
+  responseBody?: string;
 }
 
 /** A batch of flow events dispatched from the page script. */

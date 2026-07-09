@@ -1,0 +1,76 @@
+.summary-cell {
+  background: rgb(31 41 55 / 0.45);
+  border: 1px solid rgb(55 65 81 / 0.55);
+  border-radius: 4px;
+  padding: 4px 10px;
+  min-width: 0;
+  text-align: center;
+}
+
+.summary-cell span {
+  display: block;
+  color: #9ca3af;
+  font-size: 9px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.summary-cell strong {
+  display: block;
+  color: #f3f4f6;
+  font-size: 12px;
+  margin-top: 1px;
+}
+
+.badge,
+.kind-pill {
+  border: 1px solid rgb(75 85 99 / 0.55);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.filter-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.filter-btn-active {
+  background: rgb(59 130 246 / 0.2);
+  border-color: rgb(59 130 246 / 0.5);
+  color: #93c5fd;
+}
+
+.filter-btn-inactive {
+  background: rgb(31 41 55 / 0.45);
+  border-color: rgb(55 65 81 / 0.55);
+  color: #9ca3af;
+}
+
+.filter-btn-inactive:hover {
+  color: #d1d5db;
+  border-color: rgb(75 85 99 / 0.7);
+}
+
+.snippet {
+  margin: 0;
+  max-height: 100px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: rgb(3 7 18 / 0.7);
+  border: 1px solid rgb(55 65 81 / 0.75);
+  border-radius: 4px;
+  color: #bfdbfe;
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 8px;
+}

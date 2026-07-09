@@ -1,0 +1,112 @@
+<div class="h-full flex flex-col p-4 bg-gray-900">
+  <div class="flex items-start justify-between gap-3 mb-4">
+    <div class="min-w-0">
+      <h2 class="text-sm font-bold text-white truncate">{{ componentDisplayName() }}</h2>
+      <p class="text-xs text-gray-400 mt-1">{{ renderExplanation() }}</p>
+    </div>
+    <button
+      type="button"
+      class="text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700"
+      (click)="dismiss()"
+    >Dismiss</button>
+  </div>
+
+  @if (!selectedStats()) {
+    <div class="border border-gray-800 rounded p-3 bg-gray-800/45 text-sm text-gray-500">
+      No render statistics are available for this selection yet.
+    </div>
+  } @else {
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+      <div class="detail-cell cursor-help" title="The cumulative number of times this component has re-rendered since tracking started.">
+        <span>Total renders</span>
+        <strong>{{ selectedStats()!.renderCount }}</strong>
+      </div>
+      <div class="detail-cell cursor-help" title="The number of times this component has re-rendered during the last 60 seconds of activity.">
+        <span>Recent renders</span>
+        <strong>{{ recentRenderCount() }}</strong>
+      </div>
+      <div class="detail-cell cursor-help" [attr.title]="'The human-friendly re-rendering frequency of this component over triggers. Triggered ' + (selectedStats()?.triggerCount ?? 0) + ' times total during this component lifetime.'">
+        <span>Render Frequency</span>
+        <strong>{{ formatRenderRate(selectedStats()!.renderFrequency) }}</strong>
+      </div>
+      <div class="detail-cell cursor-help" title="The average CPU execution duration of a single rendering cycle for this component in milliseconds.">
+        <span>Avg duration</span>
+        <strong>{{ selectedStats()!.averageDuration.toFixed(1) }}ms</strong>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-4">
+      <div class="detail-cell cursor-help" title="The primary execution cause that triggered rendering (e.g. signal write, input change, event zone trigger, or parent cascade).">
+        <span>Render cause</span>
+        <strong>{{ causeLabel(dominantCause()) }}</strong>
+      </div>
+      <div class="detail-cell cursor-help" title="The specific method, component, async task source, or interaction trigger initiating the render.">
+        <span>Trigger source</span>
+        <strong>{{ triggerSource() }}</strong>
+      </div>
+      <div class="detail-cell cursor-help" title="The volume and ratio of re-renders forced downstream of a re-rendering parent component.">
+        <span>Parent cascade</span>
+        <strong [ngClass]="cascadeClass()">{{ cascadeIndicator() }}</strong>
+      </div>
+      <div class="detail-cell cursor-help" title="Change Detection Mutation Efficiency Ratio. The percentage of checked change detection cycles that produced actual child DOM updates. Low efficiency means wasteful CPU checks.">
+        <span>CD Efficiency (CD-MER)</span>
+        <strong [ngClass]="cdMerClass(selectedStats()?.cdMer)">
+          {{ selectedStats()?.cdMer !== undefined ? selectedStats()?.cdMer!.toFixed(1) + '%' : 'N/A' }}
+        </strong>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-2 mb-4">
+      <div class="detail-cell cursor-help" title="Total active template Expressions, interpols, properties binding count calculated in Ivy context. High density increases change detection diff workload.">
+        <span>Template Expressions</span>
+        <strong>{{ selectedStats()?.totalTemplateBindings !== undefined ? selectedStats()?.totalTemplateBindings : 'Discovering...' }}</strong>
+      </div>
+      <div class="detail-cell cursor-help" [attr.title]="selectedStats()?.hasHighFrequencyZonePollution ? 'High frequency event listeners are running inside Zone.js: ' + (selectedStats()?.highFrequencyEvents?.join(', ') || '') + '! This forces major change detection passes recursively.' : 'Standard event handlers footprint checks.'">
+        <span>Output Listeners</span>
+        <strong [ngClass]="selectedStats()?.hasHighFrequencyZonePollution ? 'text-red-400 font-bold' : ''">
+          {{ selectedStats()?.totalOutputListeners !== undefined ? selectedStats()?.totalOutputListeners : 'Discovering...' }}
+          @if (selectedStats()?.hasHighFrequencyZonePollution) {
+            <span class="text-[10px] text-red-500 font-semibold block mt-0.5 animate-pulse">🛑 Noisy: {{ selectedStats()?.highFrequencyEvents?.join(', ') }}</span>
+          }
+        </strong>
+      </div>
+    </div>
+
+    <div class="border border-gray-800 rounded bg-gray-800/45 p-3 mb-4">
+      <div class="flex items-center justify-between gap-3 mb-2">
+        <span class="text-[10px] text-gray-400 uppercase font-bold">Cause evidence</span>
+        <span class="text-[10px] px-1.5 py-0.5 rounded border" [ngClass]="confidenceClass()">
+          {{ confidenceLabel() }} confidence
+        </span>
+      </div>
+
+      <div class="space-y-2">
+        @for (entry of causesBreakdown(); track entry.type) {
+          <div>
+            <div class="flex items-center justify-between gap-2 text-xs mb-1">
+              <span [ngClass]="entry.isDominant ? 'text-gray-100 font-semibold' : 'text-gray-400'">
+                {{ entry.label }}
+              </span>
+              <span class="text-gray-500">{{ entry.count }} renders</span>
+            </div>
+            <div class="h-1.5 bg-gray-900 rounded overflow-hidden">
+              <div
+                class="h-full rounded"
+                [ngClass]="causeBarClass(entry.type)"
+                [style.width.%]="entry.percent"
+              ></div>
+            </div>
+            @if (entry.source !== 'No source captured') {
+              <div class="text-[10px] text-gray-500 mt-1">Source: {{ entry.source }}</div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="border border-gray-800 rounded bg-gray-800/45 p-3">
+      <span class="text-[10px] text-gray-400 uppercase font-bold block mb-1">Likely fix</span>
+      <p class="text-xs text-gray-200 leading-relaxed">{{ suggestedFix() }}</p>
+    </div>
+  }
+</div>

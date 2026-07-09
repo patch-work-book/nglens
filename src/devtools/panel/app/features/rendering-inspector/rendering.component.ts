@@ -3,6 +3,7 @@ import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
 import { displayName } from '../../utils/display-name';
 import { CommandService } from '../../services/command.service';
+import { TooltipDirective } from '../../shared/tooltip.directive';
 import type { InteractionProfile } from '../../../../../types/panel';
 import type { RenderCause, RenderEvent, FlowEvent } from '../../../../../types/render-events';
 
@@ -51,6 +52,14 @@ interface FlowEntry {
   colorClass: string;
   timestamp: number;
   ownerClass?: string;
+  sourceComponent?: string;
+  subscribers?: string[];
+  value?: string;
+  responseBody?: string;
+  connectionStatus?: 'connected' | 'disconnected' | 'connecting';
+  methodName?: string;
+  actionName?: string;
+  selectorName?: string;
 }
 
 /** A node in the render cascade tree. */
@@ -67,191 +76,9 @@ interface CascadeNode {
   selector: 'app-rendering',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass],
-  template: `
-    <div class="h-full overflow-auto">
-
-      <!-- ═══ Status Bar ═══ -->
-      <div class="sticky top-0 z-20 px-4 py-2.5 bg-gray-900/95 backdrop-blur border-b border-gray-800 flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <h2 class="text-sm font-semibold text-gray-100">Render Inspector</h2>
-          <div class="flex items-center gap-2 text-[11px]">
-            <span class="text-gray-500">{{ state.renderEvents().length }} renders</span>
-            <span class="text-gray-700">·</span>
-            <span class="text-gray-500">{{ state.componentStats().length }} components</span>
-          </div>
-        </div>
-        <span
-          class="text-[10px] px-2 py-1 rounded-full font-medium"
-          [ngClass]="state.isTracking()
-            ? 'bg-green-500/15 text-green-400 border border-green-500/30'
-            : 'bg-gray-800 text-gray-500 border border-gray-700'"
-        >{{ state.isTracking() ? '● Recording' : '○ Stopped' }}</span>
-      </div>
-
-      <!-- ═══ Empty State ═══ -->
-      @if (state.renderEvents().length === 0) {
-        <div class="flex flex-col items-center justify-center p-8 text-center">
-          <div class="text-3xl opacity-20 mb-3">⚡</div>
-          <h3 class="text-sm font-medium text-gray-300 mb-1">No render activity captured</h3>
-          <p class="text-xs text-gray-500 max-w-md">
-            Start recording to see the full action flow — which components re-render on each interaction and why.
-          </p>
-          @if (!state.isTracking()) {
-            <div class="mt-3 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] text-amber-300">
-              Press <strong>Start</strong> in the toolbar to begin recording.
-            </div>
-          }
-        </div>
-      } @else {
-      <div class="p-4 space-y-3">
-
-        <!-- ═══ Action Replay Cards ═══ -->
-        @for (action of actionReplays(); track action.id) {
-          <div class="rounded-lg border overflow-hidden transition-colors"
-               [ngClass]="expandedActions().has(action.id) ? 'border-gray-600 bg-gray-800/30' : 'border-gray-800 hover:border-gray-700'">
-
-            <!-- Action header: what the user did -->
-            <div class="px-4 py-3 flex items-center gap-3 cursor-pointer select-none"
-                 (click)="toggleAction(action.id)">
-              <span class="text-lg flex-shrink-0">{{ action.triggerIcon }}</span>
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <span class="text-xs font-semibold text-gray-100">{{ action.trigger }}</span>
-                  @if (action.targetSelector) {
-                    <code class="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded font-mono">{{ action.targetSelector }}</code>
-                  }
-                  @if (action.triggerComponent) {
-                    <span class="text-[10px] text-indigo-400">in {{ displayName(action.triggerComponent) }}</span>
-                  }
-                </div>
-                <div class="flex items-center gap-3 mt-1 text-[10px] text-gray-500">
-                  <span><strong class="text-gray-300">{{ action.totalRenders }}</strong> renders</span>
-                  <span><strong class="text-gray-300">{{ action.uniqueComponents }}</strong> components</span>
-                  @if (countFlowType(action, 'http-response') > 0) {
-                    <span class="text-cyan-400"><strong>{{ countFlowType(action, 'http-response') }}</strong> API</span>
-                  }
-                  @if (countFlowType(action, 'subject-emit') > 0) {
-                    <span class="text-purple-400"><strong>{{ countFlowType(action, 'subject-emit') }}</strong> RxJS</span>
-                  }
-                  @if (countFlowType(action, 'signal-write') > 0) {
-                    <span class="text-green-400"><strong>{{ countFlowType(action, 'signal-write') }}</strong> signals</span>
-                  }
-                  <span>{{ action.duration.toFixed(0) }}ms</span>
-                  <span class="text-gray-600">{{ formatTime(action.timestamp) }}</span>
-                </div>
-              </div>
-              <span class="text-gray-600 text-sm">{{ expandedActions().has(action.id) ? '▾' : '▸' }}</span>
-            </div>
-
-            <!-- Expanded: organized flow showing Data Flow → Render Cascade → Performance -->
-            @if (expandedActions().has(action.id)) {
-              <div class="border-t border-gray-700/50 bg-gray-900/40">
-
-                <!-- ═══ DATA FLOW Section (unattributed — couldn't link to a component) ═══ -->
-                @if (unattributedFlows(action).length > 0) {
-                  <div class="px-4 py-2.5 border-b border-gray-800/60">
-                    <div class="text-[9px] text-gray-500 uppercase tracking-wide font-semibold mb-2 flex items-center gap-1.5 cursor-pointer select-none hover:text-gray-300"
-                         (click)="toggleDataFlow(action.id)">
-                      <span class="text-[10px]">{{ expandedDataFlow().has(action.id) ? '▼' : '▶' }}</span>
-                      <span>Data Flow</span>
-                      <span class="text-cyan-400 normal-case">· {{ unattributedFlows(action).length }} call{{ unattributedFlows(action).length > 1 ? 's' : '' }}</span>
-                      <span class="text-gray-600 normal-case">· not linked to a component</span>
-                    </div>
-                    @if (expandedDataFlow().has(action.id)) {
-                      @for (flow of unattributedFlows(action); track flow.id) {
-                        <div class="flex items-center gap-2.5 py-1.5 rounded hover:bg-gray-800/30"
-                             [title]="flow.label + (flow.detail ? ' — ' + flow.detail : '')">
-                          <span class="text-sm flex-shrink-0 w-5 text-center">{{ flow.icon }}</span>
-                          <span class="text-[11px] font-medium truncate" [ngClass]="flow.colorClass">
-                            {{ flow.label }}
-                          </span>
-                          @if (flow.detail) {
-                            <span class="text-[10px] text-gray-500 truncate flex-1 min-w-0 text-right">{{ flow.detail }}</span>
-                          }
-                        </div>
-                      }
-                    }
-                  </div>
-                }
-
-                <!-- ═══ RENDER CASCADE Section ═══ -->
-                <div class="px-4 py-2.5">
-                  <div class="text-[9px] text-gray-500 uppercase tracking-wide font-semibold mb-2 flex items-center justify-between">
-                    <span>Render Cascade</span>
-                    <span class="text-gray-600 normal-case">{{ hotCount(action) }} hot · click row to inspect</span>
-                  </div>
-                  @for (node of flattenTree(action.tree); track node.componentName + '-' + node.depth) {
-                    <div class="flex items-center gap-2 py-1.5 px-1.5 rounded transition-colors"
-                         [ngClass]="rowClass(node)"
-                         [style.marginLeft.px]="node.depth * 16"
-                         [title]="node.componentName + ' — rendered ' + node.count + '× (' + node.totalDuration.toFixed(1) + 'ms). ' + renderHint(node)">
-                      @if (node.depth > 0) {
-                        <span class="text-gray-600 text-[10px] flex-shrink-0">↳</span>
-                      }
-                      <span class="text-xs flex-shrink-0 w-4 text-center">{{ renderSeverity(node) === 'high' ? '🔥' : renderSeverity(node) === 'medium' ? '⚠️' : '🔄' }}</span>
-                      <span class="text-[11px] min-w-0 truncate"
-                            [ngClass]="node.depth === 0 ? 'text-white font-semibold' : 'text-gray-200'">
-                        {{ displayName(node.componentName) }}
-                      </span>
-                      @if (node.count > 1) {
-                        <span class="text-[9px] px-1.5 rounded flex-shrink-0 font-bold"
-                              [ngClass]="renderSeverity(node) === 'high' ? 'bg-red-500/25 text-red-300' : renderSeverity(node) === 'medium' ? 'bg-amber-500/20 text-amber-300' : 'bg-gray-700/60 text-gray-300'">
-                          ×{{ node.count }}
-                        </span>
-                      }
-                      <span class="text-[9px] text-gray-500 truncate flex-1 min-w-0">{{ formatCauseSource(node.cause) }}</span>
-                      <span class="text-[10px] font-mono w-14 text-right flex-shrink-0"
-                            [ngClass]="node.totalDuration > 16 ? 'text-red-400' : node.totalDuration > 5 ? 'text-amber-400' : 'text-gray-600'">
-                        {{ node.totalDuration.toFixed(1) }}ms
-                      </span>
-                    </div>
-                    @if (renderSeverity(node) !== 'none') {
-                      <div class="text-[10px] text-gray-400 pl-8 pb-1 pt-0.5"
-                           [style.marginLeft.px]="node.depth * 16">
-                        <span [ngClass]="renderSeverity(node) === 'high' ? 'text-red-300' : 'text-amber-300'">{{ renderHint(node) }}</span>
-                      </div>
-                    }
-                    <!-- API/store/state events triggered by this component -->
-                    @for (flow of flowsForComponent(action, node.componentName); track flow.id) {
-                      <div class="flex items-center gap-2 py-1 px-1.5 rounded"
-                           [style.marginLeft.px]="(node.depth + 1) * 16"
-                           [title]="flow.label + (flow.detail ? ' — ' + flow.detail : '')">
-                        <span class="text-gray-600 text-[10px] flex-shrink-0">↳</span>
-                        <span class="text-xs flex-shrink-0 w-4 text-center">{{ flow.icon }}</span>
-                        <span class="text-[10px] truncate min-w-0" [ngClass]="flow.colorClass">{{ flow.label }}</span>
-                      </div>
-                    }
-                  }
-                </div>
-
-                <!-- ═══ PERFORMANCE Section ═══ -->
-                @if (action.frameBudgetExceeded) {
-                  <div class="px-4 py-2 border-t border-gray-800/60 bg-red-950/20 flex items-center gap-2">
-                    <span class="text-red-400 text-[10px] font-semibold">⚠ JANK</span>
-                    <span class="text-[10px] text-red-300">
-                      {{ action.duration.toFixed(0) }}ms total — {{ action.framesDropped }} frames dropped (budget: 16ms/frame)
-                    </span>
-                  </div>
-                }
-
-                <!-- Fix suggestion -->
-                @if (getSuggestion(action)) {
-                  <div class="px-4 py-2 border-t border-gray-800/60 bg-indigo-950/20">
-                    <span class="text-[9px] text-gray-500 uppercase font-semibold">Suggestion</span>
-                    <p class="text-[11px] text-indigo-300 mt-0.5">{{ getSuggestion(action) }}</p>
-                  </div>
-                }
-              </div>
-            }
-          </div>
-        }
-
-      </div>
-      }
-    </div>
-  `,
-  styles: [`:host { display: block; height: 100%; }`],
+  imports: [NgClass, TooltipDirective],
+  templateUrl: './rendering.component.html',
+  styleUrl: './rendering.component.scss',
 })
 export class RenderingComponent {
   readonly state = inject(PanelState);
@@ -260,11 +87,32 @@ export class RenderingComponent {
   readonly expandedActions = signal(new Set<string>());
   readonly expandedFlows = signal(new Set<string>());
   readonly expandedDataFlow = signal(new Set<string>());
+  readonly expandedFlowTypes = signal(new Set<string>(['subject-emit', 'http-response', 'store-dispatch', 'store-select', 'facade-method', 'signal-write', 'websocket']));
 
   // ── Action Replays ────────────────────────────────────────────────────────
 
   /** Time window (ms) from first event that counts as "page load". */
   private readonly PAGE_LOAD_WINDOW = 8000;
+
+  /** Deduplicated render count (coalesces events within 50ms of same component). */
+  readonly deduplicatedRenderCount = computed<number>(() => {
+    const allEvents = this.state.renderEvents();
+    if (allEvents.length === 0) return 0;
+
+    const lastCountedTs = new Map<string, number>();
+    const SAME_CYCLE_MS = 50;
+    let count = 0;
+
+    for (const event of allEvents) {
+      const lastTs = lastCountedTs.get(event.componentName);
+      const isDistinctRender = lastTs == null || (event.timestamp - lastTs) >= SAME_CYCLE_MS;
+      if (isDistinctRender) {
+        count++;
+        lastCountedTs.set(event.componentName, event.timestamp);
+      }
+    }
+    return count;
+  });
 
   readonly actionReplays = computed<ActionReplay[]>(() => {
     const profiles = this.state.interactionProfiles();
@@ -365,8 +213,8 @@ export class RenderingComponent {
       results.push(...relevantProfiles.slice(0, 30).map(p => this.buildReplay(p, allEvents)));
     }
 
-    // Sort all cards chronologically (oldest first = natural reading order)
-    results.sort((a, b) => a.timestamp - b.timestamp);
+    // Sort all cards reverse-chronologically (newest first)
+    results.sort((a, b) => b.timestamp - a.timestamp);
 
     return results;
   });
@@ -391,11 +239,108 @@ export class RenderingComponent {
     this.expandedDataFlow.set(next);
   }
 
+  toggleFlowType(flowType: string): void {
+    const next = new Set(this.expandedFlowTypes());
+    if (next.has(flowType)) { next.delete(flowType); } else { next.add(flowType); }
+    this.expandedFlowTypes.set(next);
+  }
+
   countFlowType(action: ActionReplay, type: string): number {
     return action.flowEntries.filter(f => f.type === type).length;
   }
 
+  /** Filter flows by type for display organization */
+  flowsByType(flows: FlowEntry[], type: string): FlowEntry[] {
+    return flows.filter(f => f.type === type);
+  }
+
+  /** Get label for flow type */
+  flowTypeLabel(type: string): string {
+    switch (type) {
+      case 'subject-emit': return 'RxJS Subjects';
+      case 'signal-write': return 'Signals';
+      case 'http-response': return 'HTTP Services';
+      case 'websocket': return 'WebSocket';
+      case 'facade-method': return 'State Management (Facade)';
+      case 'store-dispatch': return 'Store Dispatch (NgRx)';
+      case 'store-select': return 'Store Selectors (NgRx)';
+      default: return type;
+    }
+  }
+
+  /** Get color class for flow type */
+  flowTypeColor(type: string): string {
+    switch (type) {
+      case 'subject-emit': return 'border-purple-500/40 bg-purple-900/20 text-purple-300';
+      case 'signal-write': return 'border-green-500/40 bg-green-900/20 text-green-300';
+      case 'http-response': return 'border-cyan-500/40 bg-cyan-900/20 text-cyan-300';
+      case 'websocket': return 'border-indigo-500/40 bg-indigo-900/20 text-indigo-300';
+      case 'facade-method': return 'border-orange-500/40 bg-orange-900/20 text-orange-300';
+      case 'store-dispatch': return 'border-red-500/40 bg-red-900/20 text-red-300';
+      case 'store-select': return 'border-pink-500/40 bg-pink-900/20 text-pink-300';
+      default: return 'border-gray-500/40 bg-gray-900/20 text-gray-300';
+    }
+  }
+
+  /** Get icon for flow type */
+  flowTypeIcon(type: string): string {
+    switch (type) {
+      case 'subject-emit': return '📡';
+      case 'signal-write': return '⚡';
+      case 'http-response': return '🌐';
+      case 'websocket': return '🔗';
+      case 'facade-method': return '🏛️';
+      case 'store-dispatch': return '📤';
+      case 'store-select': return '📥';
+      default: return '•';
+    }
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
+
+  /** Format a flow event for display in a tooltip. */
+  getFlowTooltip(flow: FlowEntry): string {
+    // For HTTP responses, show the response body structure
+    if (flow.responseBody) {
+      return `Response:\n${flow.responseBody}`;
+    }
+    // For store/subject events, show the full value
+    if (flow.value) {
+      // If value is short, show it inline; otherwise format nicely
+      return flow.value.length > 100 
+        ? `Value:\n${flow.value}`
+        : `Value: ${flow.value}`;
+    }
+    // Fallback to detail field
+    if (flow.detail) {
+      return `Value: ${flow.detail}`;
+    }
+    return flow.label;
+  }
+
+  /** Navigate to a component file in the DevTools Sources panel. */
+  navigateToComponent(componentName: string): void {
+    try {
+      // Use Chrome DevTools API to search for the component in sources
+      if ((window as any).chrome?.devtools?.inspectedWindow) {
+        // Send a message to the background script to locate the component file
+        chrome.runtime.sendMessage({
+          type: 'LOCATE_COMPONENT',
+          componentName: componentName,
+        }, (response: any) => {
+          if (response?.sourceFile) {
+            // Use DevTools API to open the file
+            (window as any).chrome.devtools.panels.openResource(response.sourceFile, 0);
+          }
+        });
+      } else {
+        // Fallback: just log the component name for manual inspection
+        console.log(`Component: ${componentName}`);
+      }
+    } catch (err) {
+      console.log(`Could not navigate to component: ${componentName}`);
+    }
+  }
 
   formatTime(ts: number): string {
     return new Date(ts).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -854,7 +799,7 @@ export class RenderingComponent {
 
   private buildFlowEntries(flowEvents: FlowEvent[]): FlowEntry[] {
     return flowEvents
-      .filter(f => !this.isNoiseFlow(f))
+      .filter(f => !this.isNoiseFlow(f) && !this.isFrameworkFlow(f))
       .sort((a, b) => a.timestamp - b.timestamp)
       .map((f, i) => {
         const isStoreAction = f.label.startsWith('Store:');
@@ -867,6 +812,14 @@ export class RenderingComponent {
           colorClass: isStoreAction ? 'text-orange-300' : this.flowColor(f.type),
           timestamp: f.timestamp,
           ownerClass: f.ownerClass,
+          sourceComponent: f.sourceComponent,
+          subscribers: f.subscribers,
+          value: f.value,
+          responseBody: f.responseBody,
+          connectionStatus: f.connectionStatus,
+          methodName: f.methodName,
+          actionName: f.actionName,
+          selectorName: f.selectorName,
         };
       });
   }
@@ -877,6 +830,33 @@ export class RenderingComponent {
     const url = (f.detail ?? f.label).toLowerCase();
     // Chrome extension internal requests
     if (url.includes('chrome-extension://')) return true;
+    return false;
+  }
+
+  /** Filter out framework-level subjects (Angular internals, RxJS internals) */
+  private isFrameworkFlow(f: FlowEvent): boolean {
+    const label = f.label.toLowerCase();
+    const ownerClass = f.ownerClass?.toLowerCase() ?? '';
+    
+    // Filter Angular framework subjects
+    if (label.includes('ngzone') || ownerClass.includes('ngzone')) return true;
+    if (label.includes('zone.run') || label.includes('zone.js')) return true;
+    if (label.includes('async') && label.includes('scheduler')) return true;
+    if (ownerClass.includes('applicationref')) return true;
+    if (ownerClass.includes('changedetectorref')) return true;
+    if (ownerClass.includes('injector')) return true;
+    if (ownerClass.includes('platformref')) return true;
+    
+    // Filter RxJS internals
+    if (label.includes('subscription')) return true;
+    if (label.includes('subject') && !label.includes('user') && !label.includes('data')) return true;
+    if (ownerClass.includes('rxjs') && !label.includes('custom')) return true;
+    
+    // Filter Angular core services
+    if (ownerClass.includes('router') && label.includes('internal')) return true;
+    if (ownerClass.includes('formsgroup') || ownerClass.includes('formscontrol')) return true;
+    
+    // Only show user-defined services and components
     return false;
   }
 

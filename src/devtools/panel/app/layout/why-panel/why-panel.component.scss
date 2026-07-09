@@ -1,0 +1,25 @@
+.detail-cell {
+  background: rgb(31 41 55 / 0.45);
+  border: 1px solid rgb(55 65 81 / 0.55);
+  border-radius: 4px;
+  padding: 8px;
+  min-width: 0;
+}
+
+.detail-cell span {
+  display: block;
+  color: #9ca3af;
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.detail-cell strong {
+  display: block;
+  color: #f3f4f6;
+  font-size: 13px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

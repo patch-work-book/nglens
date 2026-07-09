@@ -125,6 +125,8 @@ export class FlowTracker {
             ownerClass: isNgrxAction ? 'Store' : ownerInfo?.className,
             propertyName: isNgrxAction ? value.type : ownerInfo?.propName,
             detail,
+            value: detail,
+            sourceComponent: tracker.detectCurrentComponent() ?? undefined,
             triggeredByInteractionTs: tracker.getActiveInteractionTimestamp(),
           });
         } catch { /* ignore instrumentation errors */ }
@@ -295,6 +297,23 @@ export class FlowTracker {
               ? response.headers.get('content-type')
               : null;
             if (tracker.isApiCall(url, contentType)) {
+              // Clone response to read body without consuming the original
+              const clonedResponse = response.clone();
+              
+              // Try to extract response body
+              let responseBodyStr: string | undefined;
+              if (contentType && (contentType.includes('application/json') || contentType.includes('text'))) {
+                clonedResponse.text().then((text) => {
+                  try {
+                    responseBodyStr = tracker.truncateResponseBody(text);
+                  } catch {
+                    // Ignore parsing errors
+                  }
+                }).catch(() => {
+                  // Ignore read errors
+                });
+              }
+              
               tracker.buffer.push({
                 id: `flow-${++tracker.eventId}`,
                 type: 'http-response',
@@ -303,6 +322,7 @@ export class FlowTracker {
                 detail: `${method} ${shortUrl} (${response.status} ${response.statusText})`,
                 ownerClass: initiator ?? undefined,
                 triggeredByInteractionTs: interactionTs,
+                responseBody: responseBodyStr,
               });
             }
           }
@@ -352,6 +372,16 @@ export class FlowTracker {
                 ? xhr.getResponseHeader('content-type')
                 : null;
               if (tracker.isApiCall(xhr.__nglens_url ?? '', ct)) {
+                // Extract response body from XHR
+                let responseBodyStr: string | undefined;
+                try {
+                  if (xhr.responseText && ct && (ct.includes('application/json') || ct.includes('text'))) {
+                    responseBodyStr = tracker.truncateResponseBody(xhr.responseText);
+                  }
+                } catch {
+                  // Ignore parsing errors
+                }
+                
                 tracker.buffer.push({
                   id: `flow-${++tracker.eventId}`,
                   type: 'http-response',
@@ -359,6 +389,7 @@ export class FlowTracker {
                   label: `${xhr.__nglens_method ?? 'XHR'} ${shortUrl} → ${xhr.status}`,
                   detail: `${xhr.__nglens_method} ${shortUrl} (${xhr.status})`,
                   triggeredByInteractionTs: tracker.getActiveInteractionTimestamp(),
+                  responseBody: responseBodyStr,
                 });
               }
             }
@@ -479,6 +510,7 @@ export class FlowTracker {
     signal[method] = function(this: any, ...args: any[]) {
       if (tracker.isRunning) {
         const value = method === 'set' ? args[0] : '(updater fn)';
+        const summarized = tracker.summarizeValue(value);
         tracker.buffer.push({
           id: `flow-${++tracker.eventId}`,
           type: 'signal-write',
@@ -486,7 +518,9 @@ export class FlowTracker {
           label: `${className}.${propName}.${method}()`,
           ownerClass: className,
           propertyName: propName,
-          detail: tracker.summarizeValue(value),
+          detail: summarized,
+          value: summarized,
+          sourceComponent: tracker.detectCurrentComponent() ?? undefined,
           triggeredByInteractionTs: tracker.getActiveInteractionTimestamp(),
         });
       }
@@ -581,15 +615,44 @@ export class FlowTracker {
   private summarizeValue(value: any, skipType = false): string {
     if (value === null) return 'null';
     if (value === undefined) return 'undefined';
-    if (typeof value === 'string') return value.length > 30 ? `"${value.slice(0, 30)}…"` : `"${value}"`;
+    if (typeof value === 'string') return value.length > 60 ? `"${value.slice(0, 60)}…"` : `"${value}"`;
     if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-    if (Array.isArray(value)) return `Array(${value.length})`;
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '[]';
+      const sample = this.summarizeValue(value[0], skipType);
+      return `[${sample}${value.length > 1 ? ', ...' : ''}]`;
+    }
     if (typeof value === 'object') {
       const keys = Object.keys(value).filter(k => skipType ? k !== 'type' : true);
       if (keys.length === 0) return '{}';
-      const name = value.constructor?.name;
-      if (name && name !== 'Object' && !skipType) return name;
-      return keys.length <= 3 ? `{${keys.join(', ')}}` : `{${keys.slice(0, 3).join(', ')}, …}`;
+      
+      // For objects with a few keys, show key: value pairs
+      if (keys.length <= 5) {
+        const pairs = keys.map(k => {
+          const v = value[k];
+          if (v === null) return `${k}: null`;
+          if (v === undefined) return `${k}: undefined`;
+          if (typeof v === 'string') return `${k}: "${v.slice(0, 30)}${v.length > 30 ? '…' : ''}"`;
+          if (typeof v === 'number' || typeof v === 'boolean') return `${k}: ${v}`;
+          if (Array.isArray(v)) return `${k}: [${v.length} items]`;
+          if (typeof v === 'object') return `${k}: {...}`;
+          return `${k}: ${typeof v}`;
+        }).join(', ');
+        return `{${pairs}}`;
+      }
+      
+      // For larger objects, show first 5 keys with values
+      const pairs = keys.slice(0, 5).map(k => {
+        const v = value[k];
+        if (v === null) return `${k}: null`;
+        if (v === undefined) return `${k}: undefined`;
+        if (typeof v === 'string') return `${k}: "${v.slice(0, 20)}${v.length > 20 ? '…' : ''}"`;
+        if (typeof v === 'number' || typeof v === 'boolean') return `${k}: ${v}`;
+        if (Array.isArray(v)) return `${k}: [${v.length} items]`;
+        if (typeof v === 'object') return `${k}: {...}`;
+        return `${k}: ${typeof v}`;
+      }).join(', ');
+      return `{${pairs}, …}`;
     }
     return typeof value;
   }
@@ -662,6 +725,22 @@ export class FlowTracker {
       return u.pathname + (u.search ? '?' + u.searchParams.toString().slice(0, 30) : '');
     } catch {
       return url.slice(0, 50);
+    }
+  }
+
+  /**
+   * Safely extracts and formats response body for display in tooltip.
+   * Truncates at 500 chars to avoid excessive memory usage.
+   */
+  private truncateResponseBody(responseText: string): string {
+    try {
+      // Try to parse as JSON first for better display
+      const parsed = JSON.parse(responseText);
+      const stringified = JSON.stringify(parsed, null, 2);
+      return stringified.slice(0, 500);
+    } catch {
+      // If not JSON, just truncate the raw text
+      return responseText.slice(0, 500);
     }
   }
 

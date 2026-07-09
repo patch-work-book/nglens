@@ -5,6 +5,28 @@ All notable changes to ngLens will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4] - 2026-07-09
+
+### Fixed 🔧
+
+**Chrome Web Store Validation:**
+- Disabled minification for extension scripts (content.js, background.js) for Chrome Web Store compliance
+- Ensures readable source code for security review
+- Fixed "Package is invalid. Could not load javascript 'content.js'" error on publish
+- All JavaScript now includes source maps for debugging
+
+**UI Improvements:**
+- Fixed duplicate component instantiation when clicking same navigation link repeatedly
+- Prevents state duplication in Render Inspector, Memory Analyzer, and other tabs
+- Improved toolbar navigation with smart route checking
+
+### Build & Architecture 🏗️
+
+- Reorganized DevTools panel from `pages/` to `features/` directory structure
+- Added path aliases (@nglens/*, @types/*, @utils/*, @analyzers/*, @instrumentation/*)
+- Updated build configuration for better readability and maintainability
+- All lazy-loaded chunks properly generated and included in package
+
 ## [1.1.0] - 2026-05-15
 
 ### Added ⚡

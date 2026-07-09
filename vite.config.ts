@@ -3,9 +3,18 @@ import { resolve } from 'node:path';
 import { copyFileSync, cpSync, existsSync, unlinkSync, rmSync } from 'node:fs';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@nglens/types': resolve(__dirname, 'src/types'),
+      '@nglens/utils': resolve(__dirname, 'src/utils'),
+      '@nglens/analyzers': resolve(__dirname, 'src/analyzers'),
+      '@nglens/instrumentation': resolve(__dirname, 'src/instrumentation'),
+    }
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: false,
+    minify: false, // Disable minification for Chrome Web Store compatibility
     rollupOptions: {
       input: {
         background: resolve(__dirname, 'src/background/background.ts'),
