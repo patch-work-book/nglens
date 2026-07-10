@@ -201,7 +201,6 @@ function handleStartTracking(): void {
       for (const issue of trackByIssues) {
         dispatchToContent('TRACKBY_ISSUE', {
           ...issue,
-          route: FlowTracker.getInstance().getCurrentRoute(),
         });
       }
     }
@@ -215,7 +214,7 @@ function handleStartTracking(): void {
     for (const result of analyzed) {
       dispatchToContent('ONPUSH_RESULT', {
         ...result,
-        route: FlowTracker.getInstance().getCurrentRoute(),
+
       });
     }
   });
@@ -238,7 +237,7 @@ function handleStopTracking(): void {
     for (const result of analyzed) {
       dispatchToContent('ONPUSH_RESULT', {
         ...result,
-        route: FlowTracker.getInstance().getCurrentRoute(),
+
       });
     }
   });
@@ -261,11 +260,6 @@ function handleStopTracking(): void {
  * This accumulates findings for new pages as the user navigates!
  */
 function handleRouteChanged(toUrl: string): void {
-  // Sync the FlowTracker's current route explicitly so subsequent events get the correct route
-  safeInvoke(() => {
-    FlowTracker.getInstance().setCurrentRoute(toUrl);
-  });
-
   // Let the dispatcher know about the route change so it can display a flow event / timeline entry
   dispatchToContent('ROUTE_CHANGED', { timestamp: Date.now(), url: toUrl });
 
@@ -276,7 +270,6 @@ function handleRouteChanged(toUrl: string): void {
       for (const issue of trackByIssues) {
         dispatchToContent('TRACKBY_ISSUE', {
           ...issue,
-          route: toUrl,
         });
       }
     }
@@ -287,7 +280,6 @@ function handleRouteChanged(toUrl: string): void {
     for (const result of analyzed) {
       dispatchToContent('ONPUSH_RESULT', {
         ...result,
-        route: toUrl,
       });
     }
   });

@@ -10,7 +10,6 @@ export interface TrackByIssue {
   severity: SeverityLevel;
   recommendation: string;
   frameId?: number;
-  route?: string;
 }
 
 export interface OnPushScore {
@@ -20,7 +19,6 @@ export interface OnPushScore {
   factors: OnPushFactor[];
   recommendation: string;
   frameId?: number;
-  route?: string;
   cdCount?: number;
   mutationCount?: number;
   cdMer?: number;

@@ -12,7 +12,6 @@ export interface Issue {
   title: string;
   description: string;
   timestamp: number;
-  route?: string;
 }
 
 export interface ComponentStats {
@@ -24,7 +23,6 @@ export interface ComponentStats {
   causesBreakdown: Record<RenderCause['type'], number>;
   firstSeen: number;
   lastSeen: number;
-  route?: string;
   // CD-MER metrics
   cdCount?: number;
   mutationCount?: number;
@@ -47,7 +45,6 @@ export interface ComponentHotspot {
   totalDuration: number;
   primaryCause: RenderCause['type'] | 'unknown';
   reasons: string[];
-  route?: string;
 }
 
 export interface InteractionProfile {

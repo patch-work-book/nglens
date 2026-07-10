@@ -23,7 +23,6 @@ export interface RecommendationAction {
   suggestedFix: string;
   rankScore: number;
   snippet?: string;
-  route?: string;
 }
 
 export interface RecommendationActionInput {
@@ -134,7 +133,6 @@ function trackByAction(issue: TrackByIssue): RecommendationAction {
     suggestedFix: 'Add a stable identity function or Angular track expression so unchanged rows are reused.',
     rankScore: 92 + Math.min(issue.collectionSize / 100, 12),
     snippet: `trackById = (_: number, item: { id: unknown }) => item.id;\n\n<li *ngFor="let item of ${issue.collectionProperty}; trackBy: trackById">...</li>`,
-    route: issue.route,
   };
 }
 
@@ -170,7 +168,6 @@ function onPushAction(item: OnPushScore): RecommendationAction {
     suggestedFix,
     rankScore: 70 + score / 3,
     snippet: `@Component({\n  changeDetection: ChangeDetectionStrategy.OnPush\n})`,
-    route: item.route,
   };
 }
 
@@ -198,7 +195,6 @@ function zoneAction(source: PollutionSourceMetrics): RecommendationAction {
     suggestedFix: source.fixSuggestion ?? 'Wrap high-frequency async work in runOutsideAngular and re-enter Angular only when UI state changes.',
     rankScore: severityScore(source.severity) + Math.min(source.cdCyclesPerMinute / 4, 25),
     snippet: `this.ngZone.runOutsideAngular(() => {\n  // timer, scroll, or third-party callback\n});`,
-    route: source.route,
   };
 }
 
@@ -215,7 +211,6 @@ function hotspotAction(hotspot: ComponentHotspot): RecommendationAction {
     expectedGain: hotspot.score >= 80 ? 'Large' : 'Medium',
     suggestedFix: hotspotFix(hotspot.primaryCause),
     rankScore: 45 + hotspot.score / 2,
-    route: hotspot.route,
   };
 }
 
@@ -258,7 +253,6 @@ function groupedMemoryActions(events: LeakEvent[]): RecommendationAction[] {
       snippet: isSubscription
         ? `this.stream$\n  .pipe(takeUntilDestroyed(this.destroyRef))\n  .subscribe();`
         : undefined,
-      route: representative.route,
     });
   }
 
@@ -370,7 +364,6 @@ function renderDiagnosticActions(stats: ComponentStats[], excludeComponents: Set
         suggestedFix: 'Add ChangeDetectionStrategy.OnPush to this component. It will only re-render when its @Input() references change or a signal it reads is written.',
         rankScore: 75 + Math.min(stat.renderCount, 20),
         snippet: `@Component({\n  changeDetection: ChangeDetectionStrategy.OnPush\n})`,
-        route: stat.route,
       });
     } else if (topCause === 'zone' && stat.renderCount >= 4) {
       actions.push({
@@ -386,7 +379,6 @@ function renderDiagnosticActions(stats: ComponentStats[], excludeComponents: Set
         suggestedFix: 'Use OnPush + Signals, or move timer/async logic outside Angular zone with NgZone.runOutsideAngular().',
         rankScore: 70 + Math.min(stat.renderCount, 20),
         snippet: `this.ngZone.runOutsideAngular(() => {\n  setInterval(() => {\n    // update state\n    this.ngZone.run(() => this.signal.set(newValue));\n  }, 5000);\n});`,
-        route: stat.route,
       });
     } else if (stat.renderCount >= 5) {
       actions.push({
@@ -401,7 +393,6 @@ function renderDiagnosticActions(stats: ComponentStats[], excludeComponents: Set
         expectedGain: 'Medium',
         suggestedFix: 'Use ChangeDetectionStrategy.OnPush and convert state to signals so Angular only marks this component dirty when its dependencies actually change.',
         rankScore: 60 + Math.min(stat.renderCount, 20),
-        route: stat.route,
       });
     }
 
@@ -420,7 +411,6 @@ function renderDiagnosticActions(stats: ComponentStats[], excludeComponents: Set
         suggestedFix: 'Add ChangeDetectionStrategy.OnPush or convert view dependencies to Signals. This prevents Angular from checking the template when unaffected async tasks or parent views run change detection.',
         rankScore: 82 + Math.min((100 - stat.cdMer) / 4, 18),
         snippet: `@Component({\n  changeDetection: ChangeDetectionStrategy.OnPush\n})`,
-        route: stat.route,
       });
     }
   }

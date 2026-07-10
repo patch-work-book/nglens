@@ -20,7 +20,6 @@ export interface PollutionSourceMetrics {
   lastSeen: number;
   fixSuggestion?: string;
   frameId?: number;
-  route?: string;
 }
 
 export interface ZonePollutionEvent {

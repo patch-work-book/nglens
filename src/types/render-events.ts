@@ -14,7 +14,6 @@ export interface RenderEvent {
   /** Depth in the cascade tree (0 = triggered directly, 1 = child of trigger, etc.) */
   depth?: number;
   frameId?: number;
-  route?: string;
   // CD-MER metrics
   cdCount?: number;
   mutationCount?: number;

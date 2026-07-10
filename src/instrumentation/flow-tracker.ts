@@ -19,7 +19,6 @@ export class FlowTracker {
   private isRunning = false;
   private flushInterval: ReturnType<typeof setInterval> | null = null;
   private eventId = 0;
-  private currentRoute = typeof window !== 'undefined' ? (window.location.pathname + window.location.search + window.location.hash) : '/';
 
   // Original prototypes for cleanup
   private originalSubjectNext: Function | null = null;
@@ -32,17 +31,6 @@ export class FlowTracker {
   private patchedSignals = new WeakSet<object>();
   // Track which component initiated the latest API call
   private lastApiInitiator: string | null = null;
-
-  getCurrentRoute(): string {
-    if (typeof globalThis.location !== 'undefined') {
-      try {
-        return globalThis.location.pathname + globalThis.location.search + globalThis.location.hash;
-      } catch {
-        return this.currentRoute;
-      }
-    }
-    return this.currentRoute;
-  }
 
   private constructor() {}
 
@@ -543,16 +531,6 @@ export class FlowTracker {
 
   // ═══ Router Navigation Tracking ═════════════════════════════════════════════
 
-  /**
-   * Updates current route state. Can be set programmatically (e.g. by Orchestrator on route changes)
-   * to guarantee synchronization when lazy routing occurs.
-   */
-  setCurrentRoute(route: string): void {
-    if (route) {
-      this.currentRoute = route;
-    }
-  }
-
   private hookRouter(): void {
     try {
       const ng = (globalThis as any).ng;
@@ -570,13 +548,11 @@ export class FlowTracker {
             const router = injector.get(token, null, { optional: true });
             if (router && typeof router.events?.subscribe === 'function') {
               let lastUrl = router.url ?? '/';
-              this.currentRoute = lastUrl;
               this.routerSubscription = router.events.subscribe((event: any) => {
                 if (!this.isRunning) return;
                 // NavigationEnd event
                 if (event.constructor?.name === 'NavigationEnd' || event.type === 1) {
                   const toUrl = event.urlAfterRedirects ?? event.url ?? '';
-                  this.currentRoute = toUrl;
                   this.buffer.push({
                     id: `flow-${++this.eventId}`,
                     type: 'route-change',

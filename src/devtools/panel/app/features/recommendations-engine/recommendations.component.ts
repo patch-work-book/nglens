@@ -19,7 +19,6 @@ interface ComponentGroup {
   topKind: ActionKind;
   totalCount: number;
   highestConfidence: ActionConfidence;
-  routes: string[];
 }
 
 @Component({
@@ -80,8 +79,6 @@ export class RecommendationsComponent {
         (confidencePriority[a.confidence] ?? 0) > (confidencePriority[best.confidence] ?? 0) ? a : best
       );
 
-      const routes = Array.from(new Set(actions.map(a => a.route).filter(Boolean))) as string[];
-
       groups.push({
         componentName,
         displayName: displayName(componentName),
@@ -89,7 +86,6 @@ export class RecommendationsComponent {
         topKind: actions[0].kind,
         totalCount: actions.length,
         highestConfidence: highest.confidence,
-        routes,
       });
     }
 

@@ -13,7 +13,6 @@
 
 import type { ComponentLifecycle, LeakEvent, SubscriptionRecord, TimerRecord } from '../types/leak-events';
 import type { PageMessage } from '../types/messages';
-import { FlowTracker } from './flow-tracker';
 
 /** Custom event name for page-script → content-script communication */
 const PAGE_TO_CONTENT_EVENT = '__ng_perf_to_content';
@@ -228,7 +227,6 @@ export class LeakDetector {
       type: 'LEAK_EVENT',
       payload: {
         ...event,
-        route: FlowTracker.getInstance().getCurrentRoute(),
       },
     };
 
