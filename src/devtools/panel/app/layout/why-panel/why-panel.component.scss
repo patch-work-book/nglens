@@ -22,4 +22,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+
+  // Allow Tailwind text-color utilities to override the default color.
+  // The base rule has specificity (0,2,1) due to ViewEncapsulation scoping;
+  // adding a class here raises it to (0,3,1) so utilities win.
+  &.text-red-400    { color: rgb(248 113 113); }
+  &.text-amber-400  { color: rgb(251 191 36);  }
+  &.text-green-400  { color: rgb(74 222 128);  }
+  &.text-green-300  { color: rgb(134 239 172); }
+  &.text-amber-300  { color: rgb(252 211 77);  }
+  &.text-gray-400   { color: rgb(156 163 175); }
+  &.font-bold       { font-weight: 700; }
 }

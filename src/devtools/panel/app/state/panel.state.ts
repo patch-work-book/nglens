@@ -467,8 +467,10 @@ export class PanelState {
         return sum + (hasServerPush ? 1 : 0);
       }, 0);
 
+      // Restore classic 4 trigger events formula as of original specification
       const totalTriggerEvents = routeChangesCount + userInteractionsCount + microTasksCount + serverPushesCount;
       const computedFrequency = totalTriggerEvents > 0 ? (entry.renderCount / totalTriggerEvents) : entry.renderCount;
+      const finalTriggerCount = totalTriggerEvents > 0 ? totalTriggerEvents : 1;
 
       results.push({
         componentName,
@@ -482,7 +484,7 @@ export class PanelState {
         cdCount: cd,
         mutationCount: mut,
         cdMer: Math.min(100, Math.max(0, cdMer)),
-        triggerCount: totalTriggerEvents,
+        triggerCount: finalTriggerCount,
         totalTemplateBindings: entry.totalTemplateBindings,
         totalOutputListeners: entry.totalOutputListeners,
         hasHighFrequencyZonePollution: entry.hasHighFrequencyZonePollution,
@@ -528,6 +530,7 @@ export class PanelState {
 
     const totalTriggerEvents = routeChangesCount + userInteractionsCount + microTasksCount + serverPushesCount;
     const computedGlobalFrequency = totalTriggerEvents > 0 ? (renderCount / totalTriggerEvents) : 1;
+    const finalGlobalTriggerCount = totalTriggerEvents > 0 ? totalTriggerEvents : renderCount;
 
     return {
       id: `snapshot-${Date.now()}`,

@@ -78,7 +78,7 @@
             <div class="hint-body">
               <div class="grid grid-cols-4 gap-3 text-xs">
                 <div><span class="text-gray-500">Renders</span><br><strong>{{ hotspot.renderCount }}</strong></div>
-                <div><span class="text-gray-500">Rate</span><br><strong>{{ formatRenderRate(hotspot.renderFrequency) }}</strong></div>
+                <div><span class="text-gray-500">Rate</span><br><strong [ngClass]="renderFrequencyClass(hotspot.renderFrequency)">{{ formatRenderRate(hotspot.renderFrequency) }}</strong></div>
                 <div><span class="text-gray-500">Avg Cost</span><br><strong>{{ hotspot.averageDuration.toFixed(1) }}ms</strong></div>
                 <div><span class="text-gray-500">Cause</span><br><strong [ngClass]="scoreClass(hotspot.score)">{{ formatCauses(hotspot.primaryCause) }}</strong></div>
               </div>
@@ -198,7 +198,7 @@
                       </div>
                       <div class="flex gap-2 mt-2 text-xs">
                         <span class="evidence-chip">{{ hotspot.renderCount }} renders</span>
-                        <span class="evidence-chip">{{ formatRenderRate(hotspot.renderFrequency) }}</span>
+                        <span class="evidence-chip" [ngStyle]="renderFrequencyChipStyle(hotspot.renderFrequency)">{{ formatRenderRate(hotspot.renderFrequency) }}</span>
                         <span class="evidence-chip">{{ hotspot.averageDuration.toFixed(1) }}ms avg</span>
                       </div>
                     </div>
@@ -225,10 +225,13 @@
                     <strong>{{ componentsCount() }}</strong>
                     <small>rendered at least once</small>
                   </div>
-                  <div class="metric-cell cursor-help" title="System-wide re-render rate and frequency across all tracked components.">
+                  <div class="metric-cell cursor-help" title="System-wide trigger-based frequency: renders per async trigger (route change, interaction, microtask, HTTP). Optimal <1.0×, Normal 1–2×, Watch 2–5×, Critical ≥5×.">
                     <span>Render frequency</span>
-                    <strong>{{ formatRenderRate(renderRateNumber()) }}</strong>
-                    <small>all components</small>
+                    <strong [ngClass]="renderFrequencyClass(renderRateNumber())">{{ formatRenderRate(renderRateNumber()) }}</strong>
+                    <div class="flex items-center gap-1.5 mt-1">
+                      <span class="text-[9px] px-1 py-0.5 rounded border font-semibold" [ngClass]="renderFrequencyRatingClass(renderRateNumber())">{{ renderFrequencyRating(renderRateNumber()) }}</span>
+                      <span class="text-[10px] text-gray-500">all components</span>
+                    </div>
                   </div>
                   <div class="metric-cell cursor-help" title="The average CPU execution duration of a single component render pass.">
                     <span>Avg render cost</span>

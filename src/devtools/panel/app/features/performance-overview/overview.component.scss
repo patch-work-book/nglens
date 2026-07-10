@@ -186,6 +186,13 @@
   color: #f3f4f6;
   font-size: 14px;
   margin-top: 2px;
+
+  // Allow Tailwind text-color utilities to override the default color.
+  &.text-red-400    { color: rgb(248 113 113); }
+  &.text-amber-400  { color: rgb(251 191 36);  }
+  &.text-green-400  { color: rgb(74 222 128);  }
+  &.text-gray-400   { color: rgb(156 163 175); }
+  &.font-bold       { font-weight: 700; }
 }
 .metric-cell small {
   display: block;

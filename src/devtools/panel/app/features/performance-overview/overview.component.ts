@@ -1,5 +1,5 @@
 import { Component, inject, computed, signal, ChangeDetectionStrategy } from '@angular/core';
-import { NgClass } from '@angular/common';
+import { NgClass, NgStyle } from '@angular/common';
 import { Router } from '@angular/router';
 import { PanelState } from '../../state/panel.state';
 import { displayName, formatRenderRate } from '../../utils/display-name';
@@ -36,7 +36,7 @@ type EvidenceTab = 'hotspots' | 'environment' | 'compare';
   selector: 'app-overview',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass],
+  imports: [NgClass, NgStyle],
   templateUrl: './overview.component.html',
   styleUrl: './overview.component.scss',
 })
@@ -318,6 +318,44 @@ export class OverviewComponent {
   // ── Formatting helpers ──
   formatRenderRate(renderFrequency: number): string {
     return formatRenderRate(renderFrequency);
+  }
+
+  renderFrequencyClass(freq: number): string {
+    if (freq <= 0) return 'text-gray-400';
+    if (freq < 1.0) return 'text-green-400';
+    if (freq < 2.0) return 'text-gray-200';
+    if (freq < 5.0) return 'text-amber-400';
+    return 'text-red-400 font-bold';
+  }
+
+  renderFrequencyRating(freq: number): string {
+    if (freq <= 0) return 'Idle';
+    if (freq < 1.0) return 'Optimal';
+    if (freq < 2.0) return 'Normal';
+    if (freq < 5.0) return 'Watch';
+    return 'Critical';
+  }
+
+  renderFrequencyRatingClass(freq: number): string {
+    switch (this.renderFrequencyRating(freq)) {
+      case 'Optimal':  return 'text-green-400 bg-green-500/15 border-green-500/30';
+      case 'Normal':   return 'text-gray-300 bg-gray-700/25 border-gray-600/30';
+      case 'Watch':    return 'text-amber-400 bg-amber-500/15 border-amber-500/30';
+      case 'Critical': return 'text-red-400 bg-red-500/15 border-red-500/30';
+      default:         return 'text-gray-500 bg-gray-800/25 border-gray-700/30';
+    }
+  }
+
+  /**
+   * Inline styles for the evidence-chip frequency badge in the hotspot list.
+   * Uses [ngStyle] to sidestep Angular ViewEncapsulation specificity issues
+   * that prevent Tailwind utility classes from overriding scoped SCSS rules.
+   */
+  renderFrequencyChipStyle(freq: number): Record<string, string> {
+    if (freq <= 0 || (freq >= 1.0 && freq < 2.0)) return {};
+    if (freq < 1.0) return { 'border-color': 'rgb(74 222 128 / 0.45)', color: 'rgb(74 222 128)' };
+    if (freq < 5.0) return { 'border-color': 'rgb(251 191 36 / 0.45)', color: 'rgb(251 191 36)' };
+    return { 'border-color': 'rgb(248 113 113 / 0.45)', color: 'rgb(248 113 113)' };
   }
 
   renderRate(): string {

@@ -25,9 +25,17 @@
         <span>Recent renders</span>
         <strong>{{ recentRenderCount() }}</strong>
       </div>
-      <div class="detail-cell cursor-help" [attr.title]="'The human-friendly re-rendering frequency of this component over triggers. Triggered ' + (selectedStats()?.triggerCount ?? 0) + ' times total during this component lifetime.'">
+      <div class="detail-cell cursor-help" [attr.title]="'Trigger-based frequency: renders per async trigger event (route change, user interaction, microtask, or HTTP push). ' + (selectedStats()?.triggerCount ?? 0) + ' trigger(s) observed. Optimal <1.0×, Normal 1–2×, Watch 2–5×, Critical ≥5×.'">
         <span>Render Frequency</span>
-        <strong>{{ formatRenderRate(selectedStats()!.renderFrequency) }}</strong>
+        <strong [ngClass]="renderFrequencyClass()">{{ formatRenderRate(selectedStats()!.renderFrequency) }}</strong>
+        <div class="flex items-center gap-1.5 mt-1.5">
+          <span class="text-[9px] px-1 py-0.5 rounded border font-semibold" [ngClass]="renderFrequencyRatingClass()">
+            {{ renderFrequencyRating() }}
+          </span>
+          @if (rendersPerSec() !== null) {
+            <span class="text-[9px] text-gray-500" title="Wall-clock render rate over this component's observed lifetime.">{{ rendersPerSec()!.toFixed(1) }}/s</span>
+          }
+        </div>
       </div>
       <div class="detail-cell cursor-help" title="The average CPU execution duration of a single rendering cycle for this component in milliseconds.">
         <span>Avg duration</span>

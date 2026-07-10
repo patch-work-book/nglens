@@ -43,8 +43,9 @@ To ensure immediate readability during profiling runs, ngLens translates calcula
 
 | Computed Frequency | Displayed Format | Real-World Performance Assessment | Severity Level |
 | :--- | :--- | :--- | :--- |
-| **$\ge 2.0$** | **`X.X  / trigger`** | A single microtask or user action causes **2 or more** complete rendering sweeps. Indicates layout cascades or dual state updates. | 🛑 **Critical** |
-| **$1.0 - 1.9$** | **`X.X  / trigger`** | Typical interactive range. One render pass is triggered per lifecycle action. | ⚠️ **Warning** |
+| **$\ge 5.0$** | **`X.X  / trigger`** | Extreme frame rate churn. A single asynchronous event triggers **5 or more** complete rendering sweeps. Points to deep layout loops or zone pollution. | 🛑 **Critical** |
+| **$2.0 - 4.9$** | **`X.X  / trigger`** | Sub-optimal cascade. A single microtask or user action causes **2 to 5** complete rendering sweeps. Indicates layout cascades or dual state updates. | 🟡 **Watch** |
+| **$1.0 - 1.9$** | **`X.X  / trigger`** | Typical interactive range. One render pass is triggered per lifecycle action. | ⚪ **Normal** |
 | **$< 1.0$** | **`X.X  / trigger`** | High-efficiency rendering. Most application trigger tasks are bypassed safely. | 🟢 **Optimal** |
 | **$0.0$** | **`Idle`** | Completely stationary; zero re-renders observed. | 🟢 **Healthy** |
 

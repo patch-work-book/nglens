@@ -41,6 +41,48 @@ export class WhyPanelComponent {
     return this.state.componentStats().find(stats => stats.componentName === selected) ?? null;
   });
 
+  // ── Render Frequency enrichment ──
+  readonly renderFrequencyClass = computed(() => {
+    const freq = this.selectedStats()?.renderFrequency ?? 0;
+    if (freq <= 0) return 'text-gray-400';
+    if (freq < 1.0) return 'text-green-400';
+    if (freq < 2.0) return 'text-gray-200';
+    if (freq < 5.0) return 'text-amber-400';
+    return 'text-red-400 font-bold';
+  });
+
+  readonly renderFrequencyRating = computed<'Idle' | 'Optimal' | 'Normal' | 'Watch' | 'Critical'>(() => {
+    const freq = this.selectedStats()?.renderFrequency ?? 0;
+    if (freq <= 0) return 'Idle';
+    if (freq < 1.0) return 'Optimal';
+    if (freq < 2.0) return 'Normal';
+    if (freq < 5.0) return 'Watch';
+    return 'Critical';
+  });
+
+  readonly renderFrequencyRatingClass = computed(() => {
+    switch (this.renderFrequencyRating()) {
+      case 'Optimal':  return 'text-green-400 bg-green-500/15 border-green-500/30';
+      case 'Normal':   return 'text-gray-300 bg-gray-700/25 border-gray-600/30';
+      case 'Watch':    return 'text-amber-400 bg-amber-500/15 border-amber-500/30';
+      case 'Critical': return 'text-red-400 bg-red-500/15 border-red-500/30';
+      default:         return 'text-gray-500 bg-gray-800/25 border-gray-700/30';
+    }
+  });
+
+  /**
+   * Wall-clock render rate (renders per second) over the component's observed
+   * lifetime. Complements the trigger-based frequency with a time-anchored view
+   * developers find intuitive for hot-component triage.
+   */
+  readonly rendersPerSec = computed<number | null>(() => {
+    const stats = this.selectedStats();
+    if (!stats || stats.renderCount === 0) return null;
+    const spanMs = stats.lastSeen - stats.firstSeen;
+    if (spanMs < 500) return null; // too short a window for a meaningful rate
+    return stats.renderCount / (spanMs / 1000);
+  });
+
   readonly recentRenderCount = computed(() => {
     const events = this.selectedEvents();
     if (events.length === 0) return 0;
