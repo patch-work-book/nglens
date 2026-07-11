@@ -639,17 +639,41 @@ export class FlowTracker {
    */
   private detectCurrentComponent(): string | null {
     try {
-      // Check RenderTracker's last interaction — if a click just happened, that component is the initiator
+      // Strategy 1: Check RenderTracker's last interaction — if a click just happened, that component is the initiator
       const renderTracker = (globalThis as any).__nglens_render_tracker_ref;
       if (renderTracker?.lastInteraction) {
         const interaction = renderTracker.lastInteraction;
-        if (Date.now() - interaction.timestamp < 1000) {
+        if (Date.now() - interaction.timestamp < 2000) { // Increased to 2 seconds
           return interaction.ownerComponent;
         }
       }
 
-      // Fallback: check the most recently discovered component from recent render events
-      // Use a simple heuristic — the component that rendered most recently is likely the caller
+      // Strategy 2: Try to find the component via Angular's injector
+      const ng = (globalThis as any).ng;
+      const rootEl = document.querySelector('[ng-version]');
+      if (ng?.getInjector && rootEl) {
+        const injector = ng.getInjector(rootEl);
+        const records = injector?._records ?? injector?.records;
+        if (records instanceof Map) {
+          // Look for service instances that might be injectable
+          for (const [token, record] of records) {
+            if (typeof token === 'function' && token.name && token.name.length > 2) {
+              try {
+                const inst = injector.get(token, null, { optional: true } as any);
+                // If we found a service, try to get its component context
+                if (inst && typeof inst === 'object') {
+                  // Return the service name as fallback (it might be called from this service)
+                  if (token.name.endsWith('Service') || token.name.includes('Component')) {
+                    return token.name;
+                  }
+                }
+              } catch { /* ignore */ }
+            }
+          }
+        }
+      }
+
+      // Fallback: return null (will show as "not linked to a component")
       return null;
     } catch { return null; }
   }

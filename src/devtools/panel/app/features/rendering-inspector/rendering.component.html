@@ -130,14 +130,14 @@
                                         </div>
                                       }
                                       @if (flow.value || flow.detail) {
-                                        <div class="text-[7px] text-yellow-300/80 font-mono truncate max-w-28">{{ flow.value || flow.detail }}</div>
+                                        <div class="text-[7px] text-yellow-300/80 font-mono truncate max-w-24">{{ flow.value || flow.detail }}</div>
                                       }
                                       <!-- Tooltip icon - always visible, click to toggle -->
-                                      <div class="absolute top-0.5 right-0.5 cursor-pointer hover:opacity-100 opacity-70 transition-opacity"
+                                      <div class="absolute top-1 right-1 cursor-pointer hover:opacity-100 opacity-70 transition-opacity flex-shrink-0"
                                            [appTooltip]="getFlowTooltip(flow)"
                                            tooltipMaxWidth="400px"
                                            title="Click to view full value">
-                                        <span class="text-[9px]">📋</span>
+                                        <span class="text-[8px] leading-none">📋</span>
                                       </div>
                                       @if (flowType === 'websocket' && flow.connectionStatus) {
                                         <div class="text-[7px]"

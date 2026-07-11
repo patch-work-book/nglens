@@ -14,6 +14,11 @@
        class="px-3 py-1.5 text-xs text-gray-400 rounded hover:text-gray-200 transition-colors">
       Render Inspector
     </button>
+    <button (click)="navigateTo('execution')"
+       [class.bg-gray-700]="activeRoute() === 'execution'"
+       class="px-3 py-1.5 text-xs text-gray-400 rounded hover:text-gray-200 transition-colors">
+      Execution Explorer
+    </button>
     <button (click)="navigateTo('memory')"
        [class.bg-gray-700]="activeRoute() === 'memory'"
        class="px-3 py-1.5 text-xs text-gray-400 rounded hover:text-gray-200 transition-colors">

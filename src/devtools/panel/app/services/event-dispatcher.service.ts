@@ -1,6 +1,7 @@
 import { Injectable, Injector, inject } from '@angular/core';
 import { PanelState } from '../state/panel.state';
 import { DevtoolsPortService } from './devtools-port.service';
+import { ExecutionIntelligenceService } from './execution-intelligence.service';
 import type { PortMessage } from '../../../../types/port-messages';
 import type { RenderEvent, FlowEvent } from '../../../../types/render-events';
 import type { LeakEvent } from '../../../../types/leak-events';
@@ -11,6 +12,7 @@ import type { ZonePollutionEvent } from '../../../../types/zone-pollution-events
 export class EventDispatcherService {
   private readonly state = inject(PanelState);
   private readonly injector = inject(Injector);
+  private readonly executionIntelligence = inject(ExecutionIntelligenceService);
 
   private _portService: DevtoolsPortService | null = null;
 
@@ -83,6 +85,9 @@ export class EventDispatcherService {
   }
 
   private handleTabNavigated(): void {
+    // Clear execution intelligence on tab navigation
+    this.executionIntelligence.clear();
+
     const shouldResumeTracking = this.state.isTracking();
 
     this.state.clearAll();
@@ -115,6 +120,8 @@ export class EventDispatcherService {
 
   private handleEventBatch(payload: { events: RenderEvent[] }, frameId: number): void {
     this.state.addRenderEvents(payload.events, frameId);
+    // Feed render events to execution intelligence pipeline
+    this.executionIntelligence.addRenderEvents(payload.events);
   }
 
   private handleLeakEvent(payload: LeakEvent, frameId: number): void {
@@ -145,18 +152,27 @@ export class EventDispatcherService {
 
   private handleFlowEventBatch(payload: { events: FlowEvent[] }, frameId: number): void {
     this.state.addFlowEvents(payload.events, frameId);
+    // Feed flow events to execution intelligence pipeline
+    this.executionIntelligence.addFlowEvents(payload.events);
   }
 
   private handleRouteChanged(payload: { timestamp: number; url?: string }, frameId: number): void {
+    // Clear execution intelligence on route change
+    this.executionIntelligence.clear();
+
     // Add a flow event for the route change so it appears in the Render Inspector timeline
-    this.state.addFlowEvents([{
+    const routeFlowEvent: FlowEvent = {
       id: `route-${Date.now()}`,
       type: 'route-change' as const,
       timestamp: Date.now(),
       label: `Route changed: ${payload.url ?? 'Navigation detected'}`,
       detail: 'Navigation detected via router-outlet',
       toRoute: payload.url,
-    }], frameId);
+    };
+    
+    this.state.addFlowEvents([routeFlowEvent], frameId);
+    // Feed route change to execution intelligence pipeline
+    this.executionIntelligence.addFlowEvents([routeFlowEvent]);
 
     // Optionally clear activity on route change
     if (this.state.clearOnRouteChange()) {
