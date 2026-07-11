@@ -95,7 +95,6 @@ export class EventNormalizerService {
       subscribers: undefined, // Renders don't have subscribers in the traditional sense
       causedByBoundary: boundary,
       frameId: renderEvent.frameId,
-      route: renderEvent.route,
       metadata: {
         originalType: 'render-event',
         componentName: renderEvent.componentName,
