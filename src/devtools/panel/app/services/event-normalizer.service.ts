@@ -16,6 +16,16 @@ import type { RuntimeEvent, SessionBoundary } from '../../../../types/execution-
 export class EventNormalizerService {
   private eventCounter = 0;
   private eventIdMap = new Map<string, string>(); // Track normalized ID for each raw event
+  private correlationCounter = 0;
+  private activeCorrelationId: string | null = null;
+
+  /**
+   * Set the active correlation ID for a batch of related events.
+   * Called by the batch normalizer to group events from the same user interaction.
+   */
+  private generateCorrelationId(): string {
+    return `corr-${++this.correlationCounter}-${Date.now()}`;
+  }
 
   /**
    * Normalize a FlowEvent (HTTP, RxJS, Signals, Store, etc.) into a RuntimeEvent.
@@ -47,6 +57,7 @@ export class EventNormalizerService {
       responseBody: flowEvent.responseBody,
       subscribers: flowEvent.subscribers,
       causedByBoundary: boundary,
+      correlationId: this.activeCorrelationId || this.generateCorrelationId(),
       frameId: flowEvent.frameId,
       route: flowEvent.toRoute,
       metadata: {
@@ -94,6 +105,7 @@ export class EventNormalizerService {
       detail: causeDetails || 'Change detection triggered',
       subscribers: undefined, // Renders don't have subscribers in the traditional sense
       causedByBoundary: boundary,
+      correlationId: this.activeCorrelationId || this.generateCorrelationId(),
       frameId: renderEvent.frameId,
       metadata: {
         originalType: 'render-event',
@@ -113,8 +125,12 @@ export class EventNormalizerService {
 
   /**
    * Batch normalize multiple events (preserves order).
+   * Events in the same batch share a correlationId (they arrived together from one CD cycle).
    */
   normalizeBatch(flowEvents: FlowEvent[], renderEvents: RenderEvent[]): RuntimeEvent[] {
+    // All events in a batch share a correlation ID (they're from the same interaction/CD cycle)
+    this.activeCorrelationId = this.generateCorrelationId();
+
     const normalized: RuntimeEvent[] = [];
 
     // Add all flow events
@@ -126,6 +142,9 @@ export class EventNormalizerService {
     for (const re of renderEvents) {
       normalized.push(this.normalizeRenderEvent(re));
     }
+
+    // Reset active correlation (next batch gets a new one)
+    this.activeCorrelationId = null;
 
     // Sort by timestamp to maintain chronological order
     normalized.sort((a, b) => a.timestamp - b.timestamp);
@@ -139,6 +158,8 @@ export class EventNormalizerService {
   reset(): void {
     this.eventCounter = 0;
     this.eventIdMap.clear();
+    this.correlationCounter = 0;
+    this.activeCorrelationId = null;
   }
 
   // ──────────────────────────────────────────────────────────────────────────

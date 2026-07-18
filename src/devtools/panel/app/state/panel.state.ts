@@ -15,7 +15,11 @@ import { ExecutionIntelligenceService } from '../services/execution-intelligence
 
 @Injectable({ providedIn: 'root' })
 export class PanelState {
-  private executionIntelligence = inject(ExecutionIntelligenceService);
+  private executionIntelligence: ExecutionIntelligenceService;
+
+  constructor(executionIntelligence: ExecutionIntelligenceService) {
+    this.executionIntelligence = executionIntelligence;
+  }
 
   // Connection
   readonly connectionState = signal<'connected' | 'disconnected' | 'reconnecting'>('disconnected');
@@ -287,6 +291,8 @@ export class PanelState {
   addRenderEvents(events: RenderEvent[], frameId: number): void {
     const eventsWithFrame = events.map(e => ({ ...e, frameId }));
     this.rawRenderEvents.update(current => [...current, ...eventsWithFrame]);
+    // Feed to ExecutionIntelligenceService for story generation
+    this.executionIntelligence.addRenderEvents(eventsWithFrame);
   }
 
   addLeakEvent(event: LeakEvent, frameId: number): void {
@@ -349,6 +355,8 @@ export class PanelState {
   addFlowEvents(events: FlowEvent[], frameId: number): void {
     const eventsWithFrame = events.map(e => ({ ...e, frameId }));
     this.rawFlowEvents.update(current => [...current, ...eventsWithFrame]);
+    // Feed to ExecutionIntelligenceService for story generation
+    this.executionIntelligence.addFlowEvents(eventsWithFrame);
   }
 
   setTrackingError(message: string): void {

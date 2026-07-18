@@ -28,8 +28,8 @@ import type { Chapter, Subsection } from '../../../../../types/execution-narrati
   template: `
     <div class="h-full flex flex-col bg-gray-900 text-2xs overflow-hidden">
       <!-- Ultra-compact header -->
-      <div class="px-2 py-0.5 border-b border-gray-700 bg-gray-800 flex-shrink-0">
-        <span class="font-semibold text-gray-100">📖 Execution Story</span>
+      <div class="px-2 py-0 border-b border-gray-700 bg-gray-800 flex-shrink-0">
+        <span class="font-semibold text-gray-100 text-2xs">📖 Story</span>
       </div>
 
       <!-- Chapters tree -->
@@ -41,7 +41,7 @@ import type { Chapter, Subsection } from '../../../../../types/execution-narrati
             (click)="toggleChapter(chapter.id)"
           >
             <!-- Chapter Header -->
-            <div class="px-2 py-0.5 flex items-center gap-1 bg-gray-850">
+            <div class="px-2 py-0 flex items-center gap-1 bg-gray-850">
               <!-- Expand/Collapse Arrow -->
               <span class="text-xs w-4 flex-shrink-0">
                 {{ isChapterExpanded(chapter.id) ? '▼' : '▶' }}
@@ -54,12 +54,12 @@ import type { Chapter, Subsection } from '../../../../../types/execution-narrati
 
               <!-- Domain Icon + Name -->
               <span class="text-xs flex-shrink-0">{{ chapter.domain.icon }}</span>
-              <span class="text-gray-100 font-semibold truncate flex-1">
+              <span class="text-gray-100 font-semibold truncate flex-1 text-2xs">
                 {{ chapter.domain.name }} Module
               </span>
 
               <!-- Duration -->
-              <span class="text-gray-400 flex-shrink-0">{{ chapter.duration }}ms</span>
+              <span class="text-gray-400 flex-shrink-0 text-2xs">{{ chapter.duration }}ms</span>
 
               <!-- Progress bar (percentage of total time) -->
               @if (totalDuration > 0) {
@@ -77,22 +77,24 @@ import type { Chapter, Subsection } from '../../../../../types/execution-narrati
               <div class="bg-gray-900">
                 @for (subsection of chapter.subsections; track subsection.id) {
                   <div 
-                    class="px-6 py-0.5 border-l-2 border-gray-700 text-gray-300 hover:bg-gray-800/30 cursor-pointer"
+                    class="px-6 py-0 border-l-2 border-gray-700 text-gray-300 hover:bg-gray-800/30 cursor-pointer"
                     (click)="onSubsectionClick(subsection, $event)"
                   >
                     <!-- Subsection Icon + Label + Duration -->
-                    <div class="flex items-center gap-1">
+                    <div class="flex items-center gap-1 py-0.5">
                       <span class="text-xs flex-shrink-0">{{ subsection.icon }}</span>
-                      <span class="truncate flex-1">{{ subsection.label }}</span>
+                      <span class="truncate flex-1 text-2xs">{{ subsection.label }}</span>
                       @if (subsection.duration) {
-                        <span class="text-gray-500 flex-shrink-0">{{ subsection.duration }}ms</span>
+                        <span class="text-gray-500 flex-shrink-0 text-2xs">{{ subsection.duration }}ms</span>
                       }
                     </div>
 
                     <!-- Implementation detail (smaller text) -->
-                    <div class="text-2xs text-gray-500 truncate ml-4">
-                      {{ subsection.implementation }}
-                    </div>
+                    @if (subsection.implementation) {
+                      <div class="text-2xs text-gray-500 truncate ml-4 py-0.5">
+                        {{ subsection.implementation }}
+                      </div>
+                    }
                   </div>
                 }
               </div>

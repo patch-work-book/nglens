@@ -1,9 +1,9 @@
-import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, computed, inject, signal, effect, ChangeDetectionStrategy } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
+import { RecommendationEngineService } from '../../services/recommendation-engine.service';
 import { displayName } from '../../utils/display-name';
 import {
-  buildRecommendationActions,
   confidenceClass,
   difficultyClass,
   gainClass,
@@ -31,6 +31,7 @@ interface ComponentGroup {
 })
 export class RecommendationsComponent {
   readonly state = inject(PanelState);
+  readonly recommendationEngine = inject(RecommendationEngineService);
   readonly displayName = displayName;
   readonly confidenceClass = confidenceClass;
   readonly difficultyClass = difficultyClass;
@@ -39,21 +40,28 @@ export class RecommendationsComponent {
   readonly activeFilter = signal<'all' | ActionKind>('all');
   readonly expandedComponents = signal<Set<string>>(new Set());
 
-  readonly actions = computed(() => buildRecommendationActions({
-    trackByIssues: this.state.trackByIssues(),
-    onPushRecommendations: this.state.onPushRecommendations(),
-    hotspots: this.state.componentHotspots(),
-    zonePollutionSources: this.state.zonePollutionSources(),
-    leakEvents: this.state.leakEvents(),
-    componentStats: this.state.componentStats(),
-  }));
+  constructor() {
+    // Use effect() to handle side effects (setInput) when inputs change
+    effect(() => {
+      this.recommendationEngine.setInput({
+        trackByIssues: this.state.trackByIssues(),
+        onPushRecommendations: this.state.onPushRecommendations(),
+        hotspots: this.state.componentHotspots(),
+        zonePollutionSources: this.state.zonePollutionSources(),
+        leakEvents: this.state.leakEvents(),
+        componentStats: this.state.componentStats(),
+      });
+    });
+  }
+
+  readonly actions = computed(() => this.recommendationEngine.recommendations());
 
   readonly highConfidenceCount = computed(() =>
-    this.actions().filter(a => a.confidence === 'High').length
+    this.recommendationEngine.highConfidenceCount()
   );
 
   readonly quickWinCount = computed(() =>
-    this.actions().filter(a => a.difficulty === 'Easy' && a.expectedGain !== 'Small').length
+    this.recommendationEngine.quickWinCount()
   );
 
   readonly kindCounts = computed(() => {

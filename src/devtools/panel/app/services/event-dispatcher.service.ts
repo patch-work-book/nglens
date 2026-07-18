@@ -12,9 +12,9 @@ import type { ZonePollutionEvent } from '../../../../types/zone-pollution-events
 export class EventDispatcherService {
   private readonly state = inject(PanelState);
   private readonly injector = inject(Injector);
-  private readonly executionIntelligence = inject(ExecutionIntelligenceService);
 
   private _portService: DevtoolsPortService | null = null;
+  private _executionIntelligence: ExecutionIntelligenceService | null = null;
 
   private get portService(): DevtoolsPortService | null {
     if (!this._portService) {
@@ -25,6 +25,13 @@ export class EventDispatcherService {
       }
     }
     return this._portService;
+  }
+
+  private get executionIntelligence(): ExecutionIntelligenceService {
+    if (!this._executionIntelligence) {
+      this._executionIntelligence = this.injector.get(ExecutionIntelligenceService);
+    }
+    return this._executionIntelligence;
   }
 
   dispatch(message: PortMessage): void {

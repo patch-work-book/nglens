@@ -1,14 +1,14 @@
-import { Component, inject, computed, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, computed, signal, effect, ChangeDetectionStrategy } from '@angular/core';
 import { NgClass, NgStyle } from '@angular/common';
 import { Router } from '@angular/router';
 import { PanelState } from '../../state/panel.state';
+import { ExecutionIntelligenceService } from '../../services/execution-intelligence.service';
+import { RecommendationEngineService } from '../../services/recommendation-engine.service';
 import { displayName, formatRenderRate } from '../../utils/display-name';
 import {
-  buildRecommendationActions,
   confidenceClass,
   difficultyClass,
   gainClass,
-  topQuickWins,
   type RecommendationAction,
 } from '../../utils/recommendation-actions';
 import type { ComponentHotspot, SnapshotComparison, Issue } from '../../../../../types/panel';
@@ -43,6 +43,8 @@ type EvidenceTab = 'hotspots' | 'environment' | 'compare';
 export class OverviewComponent {
   private readonly router = inject(Router);
   readonly state = inject(PanelState);
+  readonly executionIntelligence = inject(ExecutionIntelligenceService);
+  readonly recommendationEngine = inject(RecommendationEngineService);
   readonly displayName = displayName;
   readonly confidenceClass = confidenceClass;
   readonly difficultyClass = difficultyClass;
@@ -98,15 +100,23 @@ export class OverviewComponent {
   });
 
   // ── Core computed data ──
-  readonly actions = computed(() => buildRecommendationActions({
-    trackByIssues: this.state.trackByIssues(),
-    onPushRecommendations: this.state.onPushRecommendations(),
-    hotspots: this.state.componentHotspots(),
-    zonePollutionSources: this.state.zonePollutionSources(),
-    leakEvents: this.state.leakEvents(),
-  }));
+  constructor() {
+    // Use effect() to handle side effects (setInput) when inputs change
+    effect(() => {
+      this.recommendationEngine.setInput({
+        trackByIssues: this.state.trackByIssues(),
+        onPushRecommendations: this.state.onPushRecommendations(),
+        hotspots: this.state.componentHotspots(),
+        zonePollutionSources: this.state.zonePollutionSources(),
+        leakEvents: this.state.leakEvents(),
+        componentStats: this.state.componentStats(),
+      });
+    });
+  }
 
-  readonly quickWins = computed(() => topQuickWins(this.actions(), 3));
+  readonly actions = computed(() => this.recommendationEngine.recommendations());
+
+  readonly quickWins = computed(() => this.recommendationEngine.topQuickWins(3));
   readonly topAction = computed(() => this.quickWins()[0] ?? this.actions()[0] ?? null);
   readonly topHotspots = computed(() => this.state.componentHotspots().slice(0, 5));
 

@@ -76,21 +76,22 @@ export class CausalityChapterBuilderService {
     // Get affected components from renders
     const affectedComponents = chain.renders.map(r => r.title);
 
-    // Build subsections from chain steps
-    const subsections = chain.steps?.map((step, idx) => ({
+    // Build subsections from chain steps, grouping duplicate consecutive renders
+    const groupedSteps = this.groupConsecutiveDuplicateRenders(chain.steps || []);
+    const subsections = groupedSteps.map((group, idx) => ({
       id: `subsection-${chain.id}-${idx}`,
-      type: this.mapStepTypeToSubsectionType(step.type),
-      label: step.title,
-      icon: this.getStepIcon(step.type),
-      summary: step.summary,
-      implementation: step.title,
-      duration: step.duration,
-      changes: this.extractChangesFromChain([step]),
-      causedBy: idx === 0 ? intentName : chain.steps?.[idx - 1]?.title || intentName,
-      triggers: idx < (chain.steps?.length || 1) - 1 ? [chain.steps?.[idx + 1]?.title || ''] : [],
-      consumers: step.impact.directConsumers || [],
-      observations: step.stepInsights?.map(i => i.description) || [],
-    })) || [];
+      type: this.mapStepTypeToSubsectionType(group.type),
+      label: group.count > 1 ? `${group.title} (${group.count}x)` : group.title,
+      icon: this.getStepIcon(group.type),
+      summary: group.summary,
+      implementation: group.count > 1 ? `${group.title} rendered ${group.count} times` : group.title,
+      duration: group.duration,
+      changes: this.extractChangesFromChain([group.steps[0]]),
+      causedBy: idx === 0 ? intentName : groupedSteps[idx - 1].title || intentName,
+      triggers: idx < groupedSteps.length - 1 ? [groupedSteps[idx + 1]?.title || ''] : [],
+      consumers: group.steps[0].impact?.directConsumers || [],
+      observations: group.steps.flatMap((s: any) => s.stepInsights?.map((i: any) => i.description) || []),
+    }));
 
     // Build chapter
     const chapter: Chapter = {
@@ -370,5 +371,54 @@ export class CausalityChapterBuilderService {
         observations: [],
       };
     });
+  }
+
+  /**
+   * Group consecutive duplicate renders to avoid repetition.
+   * Example: [Render A, Render A, Render B, Render A] → [Render A (2x), Render B, Render A]
+   */
+  private groupConsecutiveDuplicateRenders(
+    steps: any[]
+  ): Array<{ title: string; type: string; count: number; duration: number; steps: any[]; summary: string }> {
+    if (steps.length === 0) return [];
+
+    const groups: Array<{ title: string; type: string; count: number; duration: number; steps: any[]; summary: string }> = [];
+    let currentGroup = {
+      title: steps[0].title,
+      type: steps[0].type,
+      count: 1,
+      duration: steps[0].duration,
+      steps: [steps[0]],
+      summary: steps[0].summary,
+    };
+
+    for (let i = 1; i < steps.length; i++) {
+      const step = steps[i];
+      // Check if it's a render and same component
+      if (
+        (currentGroup.type === 'ui-update' || step.type === 'ui-update') &&
+        currentGroup.title === step.title
+      ) {
+        // Group consecutive duplicates
+        currentGroup.count += 1;
+        currentGroup.duration += step.duration;
+        currentGroup.steps.push(step);
+      } else {
+        // Different step, save current group and start new one
+        groups.push(currentGroup);
+        currentGroup = {
+          title: step.title,
+          type: step.type,
+          count: 1,
+          duration: step.duration,
+          steps: [step],
+          summary: step.summary,
+        };
+      }
+    }
+
+    // Add last group
+    groups.push(currentGroup);
+    return groups;
   }
 }

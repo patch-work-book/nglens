@@ -105,8 +105,12 @@ export class ExecutionExplorerComponent {
   // Auto-select first narrative
   readonly selectedNarrative = computed(() => {
     const narratives = this.narrativeMap();
-    if (narratives.size === 0) return null;
-    return narratives.values().next().value || null;
+    if (narratives.size === 0) {
+      return null;
+    }
+    
+    const first = narratives.values().next().value || null;
+    return first;
   });
 
   private extractTrigger(story: ExecutionStory | { steps?: any[] }): string {

@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
+import { ExecutionIntelligenceService } from '../../services/execution-intelligence.service';
 import { displayName } from '../../utils/display-name';
 import type { LeakEvent } from '../../../../../types/leak-events';
 
@@ -37,6 +38,7 @@ interface DestroyedComponent {
 })
 export class MemoryComponent {
   readonly state = inject(PanelState);
+  readonly executionIntelligence = inject(ExecutionIntelligenceService);
   readonly viewMode = signal<ViewMode>('destroyed');
 
   // ── Live View: components currently active with their resource counts ──

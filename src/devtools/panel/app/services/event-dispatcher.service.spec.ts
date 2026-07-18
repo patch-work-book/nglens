@@ -37,10 +37,17 @@ const mockDevtoolsPortService = {
   connect: vi.fn(),
 };
 
+// Mock ExecutionIntelligenceService
+const mockExecutionIntelligenceService = {
+  addRenderEvents: vi.fn(),
+  addFlowEvents: vi.fn(),
+  clear: vi.fn(),
+};
+
 // We mock the inject() calls by directly constructing the service
 // and patching its dependencies
 function createTestService(): { service: EventDispatcherService; state: PanelState } {
-  const state = new PanelState();
+  const state = new PanelState(mockExecutionIntelligenceService as any);
 
   // Create the service instance manually (bypassing Angular DI)
   const service = Object.create(EventDispatcherService.prototype) as EventDispatcherService;
@@ -48,6 +55,13 @@ function createTestService(): { service: EventDispatcherService; state: PanelSta
   // Inject the state directly via the private field
   Object.defineProperty(service, 'state', {
     value: state,
+    writable: true,
+    configurable: true,
+  });
+
+  // Inject the execution intelligence service
+  Object.defineProperty(service, '_executionIntelligence', {
+    value: mockExecutionIntelligenceService,
     writable: true,
     configurable: true,
   });

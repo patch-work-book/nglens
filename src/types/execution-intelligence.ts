@@ -76,6 +76,9 @@ export interface RuntimeEvent {
   causedByEventId?: string;      // Parent event that triggered this
   causedByBoundary?: SessionBoundary; // Logical boundary that initiated everything
 
+  // Correlation: events with the same correlationId belong to one logical operation
+  correlationId?: string;
+
   // Frame/context
   frameId?: number;
   route?: string;
