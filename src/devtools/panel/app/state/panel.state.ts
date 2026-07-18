@@ -1,4 +1,4 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, inject } from '@angular/core';
 import type { RenderEvent, RenderCause, FlowEvent } from '../../../../types/render-events';
 import type { LeakEvent } from '../../../../types/leak-events';
 import type { TrackByIssue, OnPushScore } from '../../../../types/recommendation-events';
@@ -11,9 +11,12 @@ import type {
   PerformanceSnapshot,
   SnapshotComparison,
 } from '../../../../types/panel';
+import { ExecutionIntelligenceService } from '../services/execution-intelligence.service';
 
 @Injectable({ providedIn: 'root' })
 export class PanelState {
+  private executionIntelligence = inject(ExecutionIntelligenceService);
+
   // Connection
   readonly connectionState = signal<'connected' | 'disconnected' | 'reconnecting'>('disconnected');
 
@@ -269,6 +272,7 @@ export class PanelState {
     this.rawZonePollutionSources.set([]);
     this.selectedIssue.set(null);
     this.selectedComponent.set(null);
+    this.executionIntelligence.clear();
   }
 
   registerFrame(frameId: number, url: string, isTop: boolean): void {

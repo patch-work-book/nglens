@@ -324,38 +324,51 @@ export class CausalityChapterBuilderService {
    * Fallback: create chapters from individual steps if chain detection fails.
    */
   private createFallbackChapters(story: ExecutionStory): Chapter[] {
-    return story.steps.slice(0, 10).map((step, idx) => ({
-      id: `fallback-chapter-${idx}`,
-      domain: {
-        id: 'general',
-        name: 'General',
-        icon: '📌',
-        componentNames: [step.title],
-        serviceNames: [],
-        apiEndpoints: [],
-        confidence: 0.5,
-      },
-      sequenceNumber: idx + 1,
-      summary: step.summary,
-      duration: step.duration,
-      startTime: step.startTime,
-      endTime: step.endTime,
-      stepIds: [step.id],
-      metrics: {
-        apiCalls: { count: 0, endpoints: [], totalDuration: 0, failures: 0 },
-        storeUpdates: { count: 0, storeNames: [], propertiesChanged: 0 },
-        signalEmissions: { count: 0, signalNames: [] },
-        componentRenders: { count: 0, componentNames: [], totalDuration: 0, slowRenders: 0 },
-        payloadSize: 0,
-        payloadGrowth: 0,
-      },
-      causedBy: null,
-      triggers: [],
-      trigger: 'Fallback',
-      changes: [],
-      affectedComponents: [],
-      subsections: [],
-      observations: [],
-    }));
+    return story.steps.slice(0, 10).map((step, idx) => {
+      // Extract a meaningful name from the step title
+      const cleanTitle = step.title
+        .replace(/^_/, '')
+        .replace(/Component$/, '')
+        .replace(/Service$/, '')
+        .replace(/\s+Rendered$/, '')
+        .trim();
+
+      const name = cleanTitle.length > 0 ? cleanTitle : `Step ${idx + 1}`;
+      const icon = this.getStepIcon(step.type);
+
+      return {
+        id: `fallback-chapter-${idx}`,
+        domain: {
+          id: name.toLowerCase().replace(/\s+/g, '-'),
+          name,
+          icon,
+          componentNames: [step.title],
+          serviceNames: [],
+          apiEndpoints: [],
+          confidence: 0.5,
+        },
+        sequenceNumber: idx + 1,
+        summary: step.summary,
+        duration: step.duration,
+        startTime: step.startTime,
+        endTime: step.endTime,
+        stepIds: [step.id],
+        metrics: {
+          apiCalls: { count: 0, endpoints: [], totalDuration: 0, failures: 0 },
+          storeUpdates: { count: 0, storeNames: [], propertiesChanged: 0 },
+          signalEmissions: { count: 0, signalNames: [] },
+          componentRenders: { count: 0, componentNames: [], totalDuration: 0, slowRenders: 0 },
+          payloadSize: 0,
+          payloadGrowth: 0,
+        },
+        causedBy: null,
+        triggers: [],
+        trigger: 'Fallback',
+        changes: [],
+        affectedComponents: [],
+        subsections: [],
+        observations: [],
+      };
+    });
   }
 }

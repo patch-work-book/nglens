@@ -7,16 +7,21 @@
  * [GET /api/revenue, updateRevenue, revenueSignal, RevenueChart] 
  *   → "Load Revenue"
  * 
+ * [_Toast Rendered, _Toast Rendered, _Toast Rendered]
+ *   → "Process Toast"
+ * 
  * [validateInput, searchAPI, searchStore, searchTable]
  *   → "Customer Search"
  * 
- * [userAPIresponse, userStore, headerComponent]
- *   → "Update User Context"
+ * [SidebarNavGroup, SidebarNav, DefaultLayout Rendered]
+ *   → "Update Sidebar"
  * 
  * Algorithm:
- * 1. Extract domain/entity from step titles
- * 2. Classify operation (Load, Update, Delete, Validate, etc.)
- * 3. Combine into human-readable name
+ * 1. Collect all words from step titles (split camelCase)
+ * 2. Remove framework noise (Rendered, Component, Service, etc.)
+ * 3. Find most frequent meaningful word = entity
+ * 4. Classify operation from trigger type + keywords
+ * 5. Combine: "Load Revenue", "Process Toast", "Update Sidebar"
  */
 
 import { Injectable } from '@angular/core';
@@ -33,21 +38,46 @@ interface IntentAnalysis {
   providedIn: 'root',
 })
 export class IntentNameGeneratorService {
+  // Noise words that don't contribute to entity identification
+  private readonly NOISE_WORDS = new Set([
+    'component', 'rendered', 'service', 'store', 'signal',
+    'updated', 'api', 'request', 'response', 'data',
+    'get', 'post', 'put', 'delete', 'http', 'dispatch',
+    'emit', 'module', 'handler', 'manager', 'factory',
+    'provider', 'directive', 'pipe', 'guard', 'interceptor',
+    'resolver', 'validator', 'adapter', 'wrapper', 'container',
+    'controller', 'effect', 'reducer', 'action', 'selector',
+    'state', 'update', 'set', 'next', 'subscribe',
+    'observable', 'subject', 'behavior', 'replay',
+    'on', 'ng', 'init', 'destroy', 'changes', 'check',
+    'do', 'after', 'view', 'content', 'default',
+    'app', 'root', 'main', 'core', 'shared', 'common',
+    'base', 'abstract', 'generic', 'general',
+  ]);
+
+  // Framework-specific prefixes to strip
+  private readonly FRAMEWORK_PREFIXES = [
+    /^_/,              // Angular internal prefix (_Toast → Toast)
+    /^ng/i,            // Angular lifecycle (ngOnInit → OnInit)
+    /^cdk/i,           // Angular CDK
+    /^mat/i,           // Angular Material
+  ];
+
   /**
    * Generate a human-readable name for a causality chain.
    */
   generateIntentName(chain: CausalityChain): { name: string; confidence: number } {
-    // Analyze the chain to extract intent
     const intent = this.analyzeChainIntent(chain);
 
-    // Build the name
-    let name = `${intent.operation} ${intent.entity}`;
+    let name = `${intent.operation} ${intent.entity}`.trim();
 
-    // Trim and clean
-    name = name.trim();
+    // If entity is empty, try harder
+    if (!intent.entity || intent.entity.length === 0) {
+      name = this.generateFallbackName(chain);
+    }
 
     return {
-      name: name.length > 0 ? name : 'Execution Step',
+      name: name.length > 0 ? name : 'Execution',
       confidence: intent.confidence,
     };
   }
@@ -56,140 +86,136 @@ export class IntentNameGeneratorService {
    * Analyze a chain to extract operation and entity.
    */
   private analyzeChainIntent(chain: CausalityChain): IntentAnalysis {
-    // Extract entity (domain/resource) from all steps
     const entity = this.extractEntity(chain);
-
-    // Classify operation type
     const operation = this.classifyOperation(chain);
 
-    // Calculate confidence
     const confidence = Math.min(
       0.9,
       (entity.length > 0 ? 0.5 : 0) + (operation.length > 0 ? 0.4 : 0)
     );
 
-    return {
-      operation,
-      entity,
-      confidence,
-    };
+    return { operation, entity, confidence };
   }
 
   /**
    * Extract the main entity/domain from a chain.
-   * Examples: "Revenue", "Orders", "User", "Dashboard"
+   * 
+   * Strategy:
+   * 1. Collect ALL words from step titles (camelCase split)
+   * 2. Strip framework prefixes (_Toast → Toast)
+   * 3. Remove noise words
+   * 4. Frequency analysis — most common word wins
+   * 5. Fallback to trigger's most meaningful word
    */
   private extractEntity(chain: CausalityChain): string {
-    // Collect all meaningful words from titles
-    const words = this.extractKeywordsFromChain(chain);
+    // Collect words from all sources
+    const allWords: string[] = [];
 
-    // Remove common noise words
-    const noiseWords = new Set([
-      'component',
-      'rendered',
-      'service',
-      'store',
-      'signal',
-      'updated',
-      'api',
-      'request',
-      'response',
-      'data',
-      'get',
-      'post',
-      'put',
-      'delete',
-      'http',
-      'dispatch',
-      'emit',
-    ]);
-
-    let candidates = words.filter(w => !noiseWords.has(w.toLowerCase()));
-
-    // Pick the most common word (likely the entity)
-    if (candidates.length === 0) {
-      // Fallback: try to extract from API endpoint
-      const entity = this.extractEntityFromApi(chain.trigger);
-      return entity;
-    }
-
-    // Frequency analysis: which word appears most?
-    const wordFreq = new Map<string, number>();
-    candidates.forEach(w => {
-      wordFreq.set(w, (wordFreq.get(w) || 0) + 1);
+    // From step titles
+    chain.steps?.forEach(step => {
+      const words = this.extractMeaningfulWords(step.title);
+      allWords.push(...words);
     });
 
+    // From trigger title
+    const triggerWords = this.extractMeaningfulWords(chain.trigger.title);
+    allWords.push(...triggerWords);
+
+    // From render component names
+    chain.renders.forEach(render => {
+      const words = this.extractMeaningfulWords(render.title);
+      allWords.push(...words);
+    });
+
+    // From state updates
+    chain.stateUpdates.forEach(su => {
+      const words = this.extractMeaningfulWords(su.title);
+      allWords.push(...words);
+    });
+
+    // Filter noise
+    const meaningful = allWords.filter(w => 
+      w.length > 2 && !this.NOISE_WORDS.has(w.toLowerCase())
+    );
+
+    if (meaningful.length === 0) {
+      // Last resort: try API endpoint extraction
+      return this.extractEntityFromApi(chain.trigger.title);
+    }
+
+    // Frequency analysis
+    const freq = new Map<string, number>();
+    meaningful.forEach(w => {
+      const normalized = w.toLowerCase();
+      freq.set(normalized, (freq.get(normalized) || 0) + 1);
+    });
+
+    // Find most frequent word
     let topWord = '';
     let maxFreq = 0;
-    wordFreq.forEach((freq, word) => {
-      if (freq > maxFreq) {
-        maxFreq = freq;
+    freq.forEach((count, word) => {
+      if (count > maxFreq) {
+        maxFreq = count;
         topWord = word;
       }
     });
 
-    return topWord.charAt(0).toUpperCase() + topWord.slice(1);
+    // Capitalize
+    if (topWord.length > 0) {
+      return topWord.charAt(0).toUpperCase() + topWord.slice(1);
+    }
+
+    return '';
   }
 
   /**
-   * Extract keywords from chain titles by splitting on camelCase and common separators.
+   * Extract meaningful words from a title string.
+   * Handles: camelCase, PascalCase, underscores, slashes, prefixes
+   * 
+   * "_SidebarNavGroupComponent" → ["Sidebar", "Nav", "Group"]
+   * "GET /api/revenue" → ["revenue"]
+   * "_Toast Rendered" → ["Toast"]
    */
-  private extractKeywordsFromChain(chain: CausalityChain): string[] {
-    const keywords: string[] = [];
+  private extractMeaningfulWords(title: string): string[] {
+    if (!title) return [];
 
-    chain.steps?.forEach(step => {
-      const words = this.splitCamelCase(step.title);
-      keywords.push(...words);
-    });
+    // Strip framework prefixes
+    let cleaned = title;
+    for (const prefix of this.FRAMEWORK_PREFIXES) {
+      cleaned = cleaned.replace(prefix, '');
+    }
 
-    return keywords;
-  }
-
-  /**
-   * Split camelCase and underscored strings into words.
-   * "RevenueChart" → ["Revenue", "Chart"]
-   * "GET /api/revenue" → ["GET", "api", "revenue"]
-   */
-  private splitCamelCase(str: string): string[] {
-    // Remove leading underscore
-    str = str.replace(/^_/, '');
-
-    // Split on camelCase
-    let words = str
-      .replace(/([a-z])([A-Z])/g, '$1 $2') // camelCase
-      .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2') // PascalCase
-      .replace(/[\s\-_/\.]+/g, ' ') // common separators
-      .toLowerCase()
+    // Split on camelCase, PascalCase, common separators
+    const words = cleaned
+      .replace(/([a-z])([A-Z])/g, '$1 $2')     // camelCase split
+      .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2') // consecutive caps
+      .replace(/[\s\-_/\.\,\:\;]+/g, ' ')       // separators
       .split(/\s+/)
-      .filter(w => w.length > 0);
+      .map(w => w.trim())
+      .filter(w => w.length > 2);               // skip tiny words
 
-    return words;
+    // Filter noise
+    return words.filter(w => !this.NOISE_WORDS.has(w.toLowerCase()));
   }
 
   /**
-   * Extract entity from API endpoint.
+   * Extract entity from API endpoint in title.
    * "GET /api/revenue" → "Revenue"
-   * "POST /api/users/search" → "Users"
+   * "POST /v1/users/search" → "Users"
    */
-  private extractEntityFromApi(step: ExecutionStep): string {
-    const title = step.title.toLowerCase();
+  private extractEntityFromApi(title: string): string {
+    if (!title) return '';
 
-    // Try to extract from common API patterns
     const patterns = [
-      /\/api\/([a-z]+)/i,        // /api/revenue
-      /\/v\d+\/([a-z]+)/i,       // /v1/revenue
-      /get\s+([a-z]+)/i,         // GET revenue
-      /post\s+([a-z]+)/i,        // POST revenue
+      /\/api\/([a-z]+)/i,
+      /\/v\d+\/([a-z]+)/i,
+      /(?:GET|POST|PUT|DELETE|PATCH)\s+\/?\w*\/([a-z]+)/i,
     ];
 
     for (const pattern of patterns) {
       const match = title.match(pattern);
-      if (match && match[1]) {
+      if (match && match[1] && match[1].length > 2) {
         const entity = match[1];
-        // Singularize common plurals
-        if (entity.endsWith('s')) {
-          return entity.slice(0, -1).charAt(0).toUpperCase() + entity.slice(1, -1).slice(1);
-        }
         return entity.charAt(0).toUpperCase() + entity.slice(1);
       }
     }
@@ -198,57 +224,81 @@ export class IntentNameGeneratorService {
   }
 
   /**
-   * Classify the operation type from chain structure.
-   * Load: API + Store + Renders
-   * Update: Store dispatch + Signals + Renders
-   * Search: API with "search" keyword
-   * Validate: Validation step
-   * Initialize: Setup/bootstrap operations
+   * Generate a fallback name when entity extraction fails entirely.
+   * Uses the trigger type and the first meaningful word from any step.
+   */
+  private generateFallbackName(chain: CausalityChain): string {
+    // Try to get ANY word from render titles (most likely to have component names)
+    for (const render of chain.renders) {
+      const words = this.extractMeaningfulWords(render.title);
+      if (words.length > 0) {
+        const entity = words[0].charAt(0).toUpperCase() + words[0].slice(1);
+        return `Render ${entity}`;
+      }
+    }
+
+    // Try trigger title
+    const triggerWords = this.extractMeaningfulWords(chain.trigger.title);
+    if (triggerWords.length > 0) {
+      const entity = triggerWords[0].charAt(0).toUpperCase() + triggerWords[0].slice(1);
+      const operation = this.classifyOperation(chain);
+      return `${operation} ${entity}`;
+    }
+
+    // Try state updates
+    for (const su of chain.stateUpdates) {
+      const words = this.extractMeaningfulWords(su.title);
+      if (words.length > 0) {
+        const entity = words[0].charAt(0).toUpperCase() + words[0].slice(1);
+        return `Update ${entity}`;
+      }
+    }
+
+    // Absolute fallback based on chain structure
+    if (chain.renders.length > 0 && chain.stateUpdates.length === 0) {
+      return 'UI Update';
+    }
+    if (chain.trigger.type === 'data-fetch') {
+      return 'Data Fetch';
+    }
+    if (chain.trigger.type === 'user-interaction') {
+      return 'User Action';
+    }
+
+    return 'Execution';
+  }
+
+  /**
+   * Classify the operation type from chain structure and keywords.
    */
   private classifyOperation(chain: CausalityChain): string {
-    const titleLower = chain.trigger.title.toLowerCase();
-    const allTitles = chain.steps?.map(s => s.title.toLowerCase()).join(' ') || '';
+    const allTitles = (chain.steps?.map(s => s.title) || []).join(' ').toLowerCase();
+    const triggerTitle = chain.trigger.title.toLowerCase();
 
-    // Check for specific keywords
-    if (
-      allTitles.includes('search') ||
-      titleLower.includes('search') ||
-      allTitles.includes('filter')
-    ) {
+    // Keyword-based classification
+    if (allTitles.includes('search') || triggerTitle.includes('search') || allTitles.includes('filter')) {
       return 'Search';
     }
-
-    if (
-      allTitles.includes('validate') ||
-      titleLower.includes('validate') ||
-      allTitles.includes('check')
-    ) {
+    if (allTitles.includes('validate') || triggerTitle.includes('validate') || allTitles.includes('check')) {
       return 'Validate';
     }
-
-    if (
-      allTitles.includes('delete') ||
-      titleLower.includes('delete') ||
-      allTitles.includes('remove')
-    ) {
+    if (allTitles.includes('delete') || triggerTitle.includes('delete') || allTitles.includes('remove')) {
       return 'Delete';
     }
-
-    if (
-      allTitles.includes('create') ||
-      titleLower.includes('create') ||
-      allTitles.includes('new')
-    ) {
+    if (allTitles.includes('create') || triggerTitle.includes('create') || allTitles.includes('new') || allTitles.includes('add')) {
       return 'Create';
     }
-
-    if (
-      allTitles.includes('init') ||
-      titleLower.includes('init') ||
-      allTitles.includes('bootstrap') ||
-      allTitles.includes('load')
-    ) {
+    if (allTitles.includes('save') || triggerTitle.includes('save') || allTitles.includes('submit')) {
+      return 'Save';
+    }
+    if (allTitles.includes('init') || triggerTitle.includes('init') || allTitles.includes('bootstrap') || allTitles.includes('load')) {
       return 'Load';
+    }
+    if (allTitles.includes('navigate') || triggerTitle.includes('route') || allTitles.includes('route')) {
+      return 'Navigate';
+    }
+    if (allTitles.includes('toggle') || triggerTitle.includes('toggle') || allTitles.includes('open') || allTitles.includes('close')) {
+      return 'Toggle';
     }
 
     // Pattern-based classification
@@ -256,82 +306,44 @@ export class IntentNameGeneratorService {
     const hasStateUpdate = chain.stateUpdates.length > 0;
     const hasRender = chain.renders.length > 0;
 
-    // API + Store + Render = Load
-    if (hasApiCall && hasStateUpdate && hasRender) {
-      return 'Load';
-    }
-
-    // Just Store + Render = Update
-    if (!hasApiCall && hasStateUpdate && hasRender) {
-      return 'Update';
-    }
-
-    // Just API = Fetch
-    if (hasApiCall && !hasStateUpdate) {
-      return 'Fetch';
-    }
+    if (hasApiCall && hasStateUpdate && hasRender) return 'Load';
+    if (hasApiCall && !hasStateUpdate) return 'Fetch';
+    if (!hasApiCall && hasStateUpdate && hasRender) return 'Update';
+    if (!hasApiCall && !hasStateUpdate && hasRender) return 'Render';
 
     // Default based on trigger type
     switch (chain.trigger.type) {
-      case 'data-fetch':
-        return 'Load';
-      case 'state-update':
-        return 'Update';
-      case 'computation':
-        return 'Compute';
-      case 'user-interaction':
-        return 'Handle';
-      case 'validation':
-        return 'Validate';
-      default:
-        return 'Process';
+      case 'data-fetch': return 'Load';
+      case 'state-update': return 'Update';
+      case 'computation': return 'Compute';
+      case 'user-interaction': return 'Handle';
+      case 'validation': return 'Validate';
+      default: return 'Process';
     }
   }
 
   /**
    * Generate a detailed narrative for a chain.
-   * Example: "Load Revenue from API and update dashboard store"
    */
   generateDetailedNarrative(chain: CausalityChain): string {
     const { name } = this.generateIntentName(chain);
-
     const parts: string[] = [name];
 
-    // Add source if API
     if (chain.trigger.type === 'data-fetch') {
-      const apiSource = this.extractApiSource(chain.trigger.title);
+      const apiSource = this.extractEntityFromApi(chain.trigger.title);
       if (apiSource) {
-        parts.push(`from ${apiSource}`);
+        parts.push(`from ${apiSource} API`);
       }
     }
 
-    // Add stores affected
     if (chain.stateUpdates.length > 0) {
-      const stores = chain.stateUpdates
-        .map(s => this.extractEntity(chain))
-        .filter((v, i, a) => a.indexOf(v) === i); // unique
-      if (stores.length > 0) {
-        parts.push(`and store ${stores.join(', ')}`);
-      }
+      parts.push('and update state');
     }
 
-    // Add components affected
     if (chain.renders.length > 0) {
-      parts.push(`to update UI`);
+      parts.push(`to refresh ${chain.renders.length} component${chain.renders.length > 1 ? 's' : ''}`);
     }
 
     return parts.join(' ');
-  }
-
-  /**
-   * Extract human-readable API source from title.
-   * "GET /api/revenue" → "Revenue API"
-   */
-  private extractApiSource(title: string): string {
-    const match = title.match(/\/api\/(\w+)/i);
-    if (match && match[1]) {
-      return `${match[1]} API`;
-    }
-    return '';
   }
 }

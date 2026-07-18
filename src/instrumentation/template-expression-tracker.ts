@@ -59,8 +59,14 @@ export class TemplateExpressionTracker {
           const descriptor = Object.getOwnPropertyDescriptor(component, propName);
           const value = component[propName];
 
-          // Track method calls
+          // Track method calls (but NOT signals — signals are functions with .set/.update)
           if (typeof value === 'function' && !propName.startsWith('_')) {
+            // Skip Angular signals — they are callable functions with .set/.update/.asReadonly
+            if (typeof value.set === 'function' ||
+                typeof value.update === 'function' ||
+                typeof value.asReadonly === 'function') {
+              continue;
+            }
             this.instrumentMethod(component, componentName, propName);
           }
           // Track getters
@@ -107,6 +113,23 @@ export class TemplateExpressionTracker {
         : component[methodName];
 
       if (!original || original.__ngLensInstrumented) return;
+
+      // Skip Angular signals - they are functions with .set/.update/.asReadonly
+      // Wrapping them breaks signal reactivity (e.g., this.open.set is not a function)
+      if (typeof original === 'function' && (
+        typeof original.set === 'function' ||
+        typeof original.update === 'function' ||
+        typeof original.asReadonly === 'function'
+      )) {
+        return;
+      }
+
+      // Skip Angular lifecycle hooks and internal methods
+      if (methodName === 'constructor' ||
+          methodName.startsWith('ng') ||
+          methodName.startsWith('ɵ')) {
+        return;
+      }
 
       const tracker = this;
       const trackedKey = `${componentName}#${methodName}`;
