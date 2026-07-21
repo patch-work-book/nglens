@@ -116,31 +116,34 @@
                                 <div class="flex items-center gap-2">
                                   <!-- Source Flow Card -->
                                   <div class="flex flex-col items-center gap-1">
-                                    <div [ngClass]="'px-2 py-1.5 rounded border text-center relative ' + flowTypeColor(flowType)">
-                                      <div class="text-[9px] font-medium">{{ flow.label }}</div>
-                                      @if (flow.sourceComponent) {
-                                        <div class="text-[8px] text-blue-300 cursor-pointer hover:underline"
-                                             (click)="navigateToComponent(flow.sourceComponent)">
-                                          {{ displayName(flow.sourceComponent) }}
+                                    <div [ngClass]="'px-2 py-1.5 rounded border text-center ' + flowTypeColor(flowType)">
+                                      <div class="flex items-start justify-between gap-2">
+                                        <div class="flex-1 min-w-0">
+                                          <div class="text-[9px] font-medium">{{ flow.label }}</div>
+                                          @if (flow.sourceComponent) {
+                                            <div class="text-[8px] text-blue-300 cursor-pointer hover:underline"
+                                                 (click)="navigateToComponent(flow.sourceComponent)">
+                                              {{ displayName(flow.sourceComponent) }}
+                                            </div>
+                                          } @else if (flow.ownerClass) {
+                                            <div class="text-[8px] text-blue-300 cursor-pointer hover:underline"
+                                                 (click)="navigateToComponent(flow.ownerClass)">
+                                              {{ displayName(flow.ownerClass) }}
+                                            </div>
+                                          }
+                                          @if (flow.value || flow.detail) {
+                                            <div class="text-[7px] text-yellow-300/80 font-mono truncate max-w-24">{{ flow.value || flow.detail }}</div>
+                                          }
                                         </div>
-                                      } @else if (flow.ownerClass) {
-                                        <div class="text-[8px] text-blue-300 cursor-pointer hover:underline"
-                                             (click)="navigateToComponent(flow.ownerClass)">
-                                          {{ displayName(flow.ownerClass) }}
+                                        <!-- Tooltip icon - positioned to the right, not overlapping -->
+                                        <div class="cursor-pointer hover:opacity-100 opacity-70 transition-opacity flex-shrink-0 ml-1"
+                                             [appTooltip]="getFlowTooltip(flow)"
+                                             tooltipMaxWidth="400px">
+                                          <span class="text-[8px] leading-none">📋</span>
                                         </div>
-                                      }
-                                      @if (flow.value || flow.detail) {
-                                        <div class="text-[7px] text-yellow-300/80 font-mono truncate max-w-24">{{ flow.value || flow.detail }}</div>
-                                      }
-                                      <!-- Tooltip icon - always visible, click to toggle -->
-                                      <div class="absolute top-1 right-1 cursor-pointer hover:opacity-100 opacity-70 transition-opacity flex-shrink-0"
-                                           [appTooltip]="getFlowTooltip(flow)"
-                                           tooltipMaxWidth="400px"
-                                           title="Click to view full value">
-                                        <span class="text-[8px] leading-none">📋</span>
                                       </div>
                                       @if (flowType === 'websocket' && flow.connectionStatus) {
-                                        <div class="text-[7px]"
+                                        <div class="text-[7px] mt-1"
                                              [ngClass]="flow.connectionStatus === 'connected' ? 'text-green-400' : flow.connectionStatus === 'connecting' ? 'text-amber-400' : 'text-red-400'">
                                           {{ flow.connectionStatus }}
                                         </div>

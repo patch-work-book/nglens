@@ -22,7 +22,13 @@ export class TooltipDirective implements OnInit, OnDestroy {
     if (!TooltipDirective.tooltipContainer) {
       TooltipDirective.tooltipContainer = document.createElement('div');
       TooltipDirective.tooltipContainer.id = 'app-tooltips-container';
+      TooltipDirective.tooltipContainer.style.cssText = 'pointer-events: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999;';
       document.body.appendChild(TooltipDirective.tooltipContainer);
+    }
+
+    // Remove any title attribute that would show browser default tooltip
+    if (this.el.nativeElement.hasAttribute('title')) {
+      this.el.nativeElement.removeAttribute('title');
     }
 
     // Create tooltip element
@@ -32,20 +38,22 @@ export class TooltipDirective implements OnInit, OnDestroy {
       z-index: 10000;
       background: #1f2937;
       color: #f3f4f6;
-      padding: 6px 8px;
+      padding: 8px 10px;
       border-radius: 4px;
       font-size: 10px;
       max-width: ${this.tooltipMaxWidth};
       white-space: pre-wrap;
       word-break: break-word;
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-      border: 1px solid #374151;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 0, 0, 0.8);
+      border: 1px solid #4b5563;
       max-height: 250px;
       overflow-y: auto;
-      line-height: 1.3;
+      line-height: 1.4;
       font-family: monospace;
       letter-spacing: -0.5px;
       display: none;
+      pointer-events: auto;
+      cursor: default;
     `;
     this.tooltipElement.textContent = this.appTooltip;
     TooltipDirective.tooltipContainer!.appendChild(this.tooltipElement);
@@ -115,16 +123,32 @@ export class TooltipDirective implements OnInit, OnDestroy {
     if (!this.tooltipElement) return;
 
     const rect = this.el.nativeElement.getBoundingClientRect();
-    let left = rect.right + 8;
-    let top = rect.top + rect.height / 2 - 30;
+    const tooltipWidth = 400; // Match tooltipMaxWidth default
+    const tooltipHeight = Math.min(250, this.tooltipElement.scrollHeight);
+    const viewportPadding = 10;
 
-    // Keep within viewport
-    if (left + 400 > window.innerWidth) {
-      left = rect.left - 408;
+    // Default: try to position to the right with vertical centering
+    let left = rect.right + 12;
+    let top = rect.top + rect.height / 2 - tooltipHeight / 2;
+
+    // If too far right, position to the left
+    if (left + tooltipWidth > window.innerWidth - viewportPadding) {
+      left = rect.left - tooltipWidth - 12;
     }
-    if (top < 0) top = 10;
-    if (top + 250 > window.innerHeight) {
-      top = window.innerHeight - 260;
+
+    // If still off-screen, center horizontally
+    if (left < viewportPadding) {
+      left = viewportPadding;
+    }
+
+    // Adjust vertical position if too high
+    if (top < viewportPadding) {
+      top = viewportPadding;
+    }
+
+    // Adjust vertical position if too low
+    if (top + tooltipHeight > window.innerHeight - viewportPadding) {
+      top = window.innerHeight - tooltipHeight - viewportPadding;
     }
 
     this.tooltipElement.style.left = `${left}px`;
