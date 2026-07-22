@@ -1,0 +1,99 @@
+<div class="report">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-top">
+      <span class="header-title">Execution Timeline</span>
+      <div class="header-actions">
+        <!-- Dynamic Filter Dropdown — only shows types present in the data -->
+        @if (availableFilters().length > 0) {
+          <select class="filter-dropdown" [value]="activeFilter()" (change)="onFilterChange($event)">
+            <option value="all">All Types</option>
+            @for (opt of availableFilters(); track opt.key) {
+              <option [value]="opt.key">{{ opt.label }}</option>
+            }
+          </select>
+        }
+      </div>
+      <span class="header-total">{{ duration() }}ms</span>
+    </div>
+    <div class="header-meta">
+      {{ trigger() }} · {{ totalSteps() }} events · {{ uniqueComponents() }} components
+    </div>
+  </div>
+
+  <!-- Overview Bar -->
+  <div class="overview">
+    <div class="overview-bar">
+      @for (item of filteredWaterfall(); track item.id) {
+        <div class="overview-tick" 
+             [class]="'type-' + item.type"
+             [style.left.%]="item.startPct" 
+             [style.width.%]="item.widthPct">
+        </div>
+      }
+    </div>
+    <div class="overview-labels">
+      <span>0ms</span>
+      <span>{{ formatTime(Math.round(duration() / 2)) }}</span>
+      <span>{{ formatTime(duration()) }}</span>
+    </div>
+  </div>
+
+  <!-- Unified Waterfall -->
+  @if (filteredWaterfall().length > 0) {
+    <div class="section">
+      <div class="waterfall-header">
+        <span class="wf-label">Event</span>
+        <div class="wf-timeline-header">
+          <span>0ms</span>
+          <span>{{ formatTime(Math.round(duration() / 2)) }}</span>
+          <span>{{ formatTime(duration()) }}</span>
+        </div>
+        <span class="wf-dur-label">Time</span>
+      </div>
+      <div class="waterfall">
+        @for (item of filteredWaterfall(); let idx = $index; track item.id) {
+          <!-- Gap indicator if there's a gap from previous item -->
+          @if (idx > 0) {
+            @let prevItem = filteredWaterfall()[idx - 1];
+            @let gapStart = prevItem.startPct + prevItem.widthPct;
+            @let gapWidth = item.startPct - gapStart;
+            @if (gapWidth > 0.5) {
+              <div class="wf-row wf-gap-indicator" [attr.data-gap-id]="item.id + '-gap'">
+                <span class="wf-name gap-label">⏳ Gap</span>
+                <div class="wf-bar-track">
+                  <div class="wf-gap" [style.left.%]="gapStart" [style.width.%]="gapWidth" 
+                       [title]="'Idle for ' + formatTime((item.startPct - gapStart) * (duration() / 100)) + ' (waiting for data, state updates, or re-renders)'">
+                  </div>
+                </div>
+                <span class="wf-dur">{{ formatTime((item.startPct - gapStart) * (duration() / 100)) }}</span>
+              </div>
+            }
+          }
+
+          <!-- Actual render bar -->
+          <div class="wf-row" [class]="'type-' + item.type" [class.is-slow]="item.isSlow">
+            <span class="wf-name" [title]="item.name">{{ item.name }}</span>
+            <div class="wf-bar-track">
+              <div class="wf-bar" [style.left.%]="item.startPct" [style.width.%]="item.widthPct">
+                <!-- Render time label inside the bar -->
+                <span class="wf-bar-time" [title]="'Rendered at ' + formatTime(item.endTime)">{{ formatTime(item.endTime) }}</span>
+              </div>
+            </div>
+            <span class="wf-dur">{{ item.duration > 0 ? item.duration + 'ms' : '' }}</span>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Bottleneck -->
+  @if (bottleneck()) {
+    <div class="bottleneck">
+      <span class="bottleneck-icon">⚠</span>
+      <span class="bottleneck-text">{{ bottleneck() }}</span>
+    </div>
+  }
+
+</div>

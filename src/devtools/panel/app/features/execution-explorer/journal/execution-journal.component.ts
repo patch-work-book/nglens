@@ -19,7 +19,7 @@
 
 import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import type { Chapter, Subsection } from '../../../../../types/execution-narrative';
+import type { Chapter, Subsection } from '@nglens/types/execution-narrative';
 
 @Component({
   selector: 'app-execution-journal',

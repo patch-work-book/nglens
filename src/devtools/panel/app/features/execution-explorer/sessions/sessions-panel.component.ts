@@ -13,8 +13,8 @@
 
 import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import type { ExecutionSession } from '../../../../../types/execution-intelligence';
-import type { ExecutionNarrative } from '../../../../../types/execution-narrative';
+import type { ExecutionSession } from '@nglens/types/execution-intelligence';
+import type { ExecutionNarrative } from '@nglens/types/execution-narrative';
 
 @Component({
   selector: 'app-sessions-panel',

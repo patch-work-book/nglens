@@ -13,9 +13,9 @@
 
 import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import type { Chapter, Subsection } from '../../../../../types/execution-narrative';
-import type { CausalityChain } from '../../services/causality-chain-detector.service';
-import { CausalityNarrativeService } from '../../services/causality-narrative.service';
+import type { Chapter, Subsection } from '@nglens/types/execution-narrative';
+import type { CausalityChain } from '../../../../services/causality-chain-detector.service';
+import { CausalityNarrativeService } from '../../../../services/causality-narrative.service';
 
 @Component({
   selector: 'app-inspector-panel',
@@ -176,7 +176,7 @@ export class InspectorPanelComponent {
 
     // Find the slowest step
     let slowest = { name: '', duration: 0, index: 0 };
-    this.causalityTimeline.forEach((entry, idx) => {
+    this.causalityTimeline.forEach((entry: any, idx: number) => {
       const duration = entry.duration || 0;
       if (duration > slowest.duration) {
         slowest = { name: entry.event, duration, index: idx };

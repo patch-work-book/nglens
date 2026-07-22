@@ -11,6 +11,7 @@
     "build:extension": "vite build",
     "dev:panel": "ng build --watch --configuration development",
     "dev:extension": "vite build --watch",
+    "dev:watch-reload": "node scripts/chrome-reload.js",
     "test": "vitest --run"
   },
   "dependencies": {

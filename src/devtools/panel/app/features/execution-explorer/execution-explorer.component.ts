@@ -20,7 +20,7 @@ import { ExecutionIntelligenceService } from '../../services/execution-intellige
 import { CausalityChainDetectorService } from '../../services/causality-chain-detector.service';
 import { CausalityChapterBuilderService } from '../../services/causality-chapter-builder.service';
 import { ExecutionNarrativeGeneratorService } from '../../services/execution-narrative-generator.service';
-import { ExecutionReportComponent } from './execution-report.component';
+import { ExecutionReportComponent } from './report/execution-report.component';
 
 @Component({
   selector: 'app-execution-explorer',

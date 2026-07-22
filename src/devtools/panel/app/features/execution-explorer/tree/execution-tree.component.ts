@@ -24,8 +24,8 @@ import { Component, inject, Input, signal, ChangeDetectionStrategy } from '@angu
 import { CommonModule } from '@angular/common';
 import type { ExecutionNarrative } from '@nglens/types/execution-narrative';
 import type { TreeNode } from '@nglens/types/execution-tree';
-import { TreeNodeBuilderService } from '../../services/tree-node-builder.service';
-import { ExecutionTreeNodeComponent } from './execution-tree-node.component';
+import { TreeNodeBuilderService } from '../../../services/tree-node-builder.service';
+import { ExecutionTreeNodeComponent } from './node/execution-tree-node.component';
 
 @Component({
   selector: 'app-execution-tree',
