@@ -7,7 +7,7 @@
  * Handles page loads with 40+ APIs gracefully by grouping.
  */
 
-import { Component, Input, signal, computed, ChangeDetectionStrategy, effect } from '@angular/core';
+import { Component, Input, signal, computed, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import type { ExecutionNarrative } from '@nglens/types/execution-narrative';
 
@@ -61,6 +61,8 @@ export class ExecutionReportComponent {
   }
 
   readonly activeFilter = signal<string>('all');
+  readonly hoverLinePct = signal<number | null>(null);
+  readonly hoverTimeLabel = signal<string>('');
 
   readonly availableFilters = computed((): FilterOption[] => {
     const items = this.waterfall();
@@ -78,6 +80,28 @@ export class ExecutionReportComponent {
   onFilterChange(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
     this.activeFilter.set(value);
+  }
+
+  onBarTrackHover(event: MouseEvent): void {
+    const barTrack = event.currentTarget as HTMLElement;
+    const waterfall = barTrack.closest('.waterfall') as HTMLElement;
+    if (!waterfall) return;
+    
+    const waterfallRect = waterfall.getBoundingClientRect();
+    const x = event.clientX - waterfallRect.left;
+    const pct = Math.max(0, Math.min(100, (x / waterfallRect.width) * 100));
+    this.hoverLinePct.set(pct);
+    
+    // Calculate time at this position based on the bar-track portion only
+    const barTrackRect = barTrack.getBoundingClientRect();
+    const xInBar = event.clientX - barTrackRect.left;
+    const pctInBar = Math.max(0, Math.min(100, (xInBar / barTrackRect.width) * 100));
+    const timeAtPosition = (pctInBar / 100) * this.duration();
+    this.hoverTimeLabel.set(this.formatTime(Math.round(timeAtPosition)));
+  }
+
+  onWaterfallMouseLeave(): void {
+    this.hoverLinePct.set(null);
   }
 
   readonly trigger = computed(() => this.narrativeData()?.trigger || 'No interaction');
@@ -99,19 +123,9 @@ export class ExecutionReportComponent {
     const total = n.duration || 1;
     const storyStart = n.originalStory?.startTime || 0;
 
-    // Debug: Log first few steps to understand the structure
-    if (steps.length > 0) {
-      console.log('📊 First 3 steps:', steps.slice(0, 3).map((s: any) => ({
-        title: s.title,
-        type: s.type,
-        duration: s.duration,
-        hasComponents: !!s.impact?.components?.names?.length
-      })));
-    }
+    const items: any[] = [];
 
-    const cachedWaterfall: any[] = [];
-
-    // Track last counted timestamp per component name to coalesce rapid renders (matching Render Inspector's 50ms window)
+    // Track last counted timestamp per component name to coalesce rapid renders
     const lastCountedTs = new Map<string, number>();
     const SAME_CYCLE_MS = 50;
 
@@ -128,7 +142,6 @@ export class ExecutionReportComponent {
       } else if (type === 'store-mutation' || title.includes('Store')) {
         category = 'store';
       } else if (type === 'state-update' || type === 'signal-write' || title.includes('Signal') || title.includes('signal')) {
-        // If the step has impacted components, treat it as a render (component re-rendered due to state change)
         if (step.impact?.components?.names?.length > 0) {
           category = 'render';
         } else {
@@ -138,17 +151,11 @@ export class ExecutionReportComponent {
         category = 'render';
       }
 
-      // Debug API detection
-      if (category !== 'api' && (title.includes('GET ') || title.includes('POST ') || title.includes('Loaded') || title.includes('http') || type.includes('fetch') || type.includes('api'))) {
-        console.log('⚠️ Step looks like API but categorized as', category, ':', { title, type });
-      }
-
       // Build display names - for steps with multiple impacted components, create one entry per component
       const componentNames: string[] = [];
       if (category === 'api') {
         componentNames.push(step.summary || step.title || 'API');
       } else if (step.impact?.components?.names?.length > 0) {
-        // Each component gets its own waterfall row
         step.impact.components.names.forEach((name: string) => {
           componentNames.push(name.replace(/^_/, '').replace(' Rendered', '').replace(' rendered', ''));
         });
@@ -161,10 +168,10 @@ export class ExecutionReportComponent {
         const displayName = rawName.replace(/^_/, '').replace(' Rendered', '').replace(' rendered', '');
 
         const startPct = total > 0 ? Math.max(0, ((itemStart - storyStart) / total) * 100) : 0;
-        const widthPct = itemDur > 0 && total > 0 ? Math.max(1, (itemDur / total) * 100) : 2;
+        const widthPct = itemDur > 0 && total > 0 ? Math.max(0.5, (itemDur / total) * 100) : 0.5;
 
-        // Group with last item if same name AND within 50ms coalescing window (matching Render Inspector deduplication)
-        const last = cachedWaterfall[cachedWaterfall.length - 1];
+        // Group with last item if same name AND within 50ms coalescing window
+        const last = items[items.length - 1];
         const cacheKey = `${displayName}-${category}`;
         const lastTs = lastCountedTs.get(cacheKey);
         const isDistinctRender = lastTs == null || (itemStart - lastTs) >= SAME_CYCLE_MS;
@@ -172,34 +179,31 @@ export class ExecutionReportComponent {
         if (last && last.baseName === displayName && last.type === category && isDistinctRender) {
           last.groupCount++;
           last.name = `${displayName} (${last.groupCount}x)`;
-          const endPct = startPct + widthPct;
-          last.widthPct = Math.max(last.widthPct, endPct - last.startPct);
-          const newEndTime = Math.round((itemStart + itemDur - storyStart));
-          if (newEndTime > last.endTime) {
-            last.endTime = newEndTime;
-          }
+          last.duration = last.duration + itemDur;
+          // Extend bar to cover the new end time
+          const newEndPct = startPct + widthPct;
+          last.widthPct = newEndPct - last.startPct;
+          last.endTime = Math.round(itemStart + itemDur - storyStart);
           lastCountedTs.set(cacheKey, itemStart);
         } else if (last && last.baseName === displayName && last.type === category && !isDistinctRender) {
-          // Same render cycle (within 50ms), extend the bar width but don't increment count
-          const endPct = startPct + widthPct;
-          last.widthPct = Math.max(last.widthPct, endPct - last.startPct);
+          // Same render cycle (within 50ms), take max duration
           last.duration = Math.max(last.duration, itemDur);
-          const newEndTime = Math.round((itemStart + itemDur - storyStart));
-          if (newEndTime > last.endTime) {
-            last.endTime = newEndTime;
+          const newEndPct = startPct + widthPct;
+          if (newEndPct > last.startPct + last.widthPct) {
+            last.widthPct = newEndPct - last.startPct;
           }
+          last.endTime = Math.max(last.endTime, Math.round(itemStart + itemDur - storyStart));
         } else {
-          const relativeEndTime = Math.round((itemStart + itemDur - storyStart));
-          cachedWaterfall.push({
+          items.push({
             id: `wf-${this.globalIdCounter++}`,
             name: displayName,
             baseName: displayName,
             type: category,
-            startPct,
-            widthPct,
             duration: itemDur,
             startTime: Math.round(itemStart - storyStart),
-            endTime: relativeEndTime,
+            endTime: Math.round(itemStart + itemDur - storyStart),
+            startPct,
+            widthPct,
             isSlow: itemDur > 300 || (category === 'render' && itemDur > 16),
             groupCount: 1,
           });
@@ -208,7 +212,7 @@ export class ExecutionReportComponent {
       });
     });
 
-    return cachedWaterfall;
+    return items;
   });
 
   readonly bottleneck = computed((): string | null => {

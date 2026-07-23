@@ -48,6 +48,7 @@ export class EventNormalizerService {
       id,
       type,
       timestamp: flowEvent.timestamp,
+      duration: flowEvent.duration,
       sourceComponent: flowEvent.sourceComponent,
       ownerClass: flowEvent.ownerClass,
       propertyName: flowEvent.propertyName,

@@ -70,6 +70,8 @@ export interface FlowEvent {
   triggeredByInteractionTs?: number;
   /** For HTTP: the response body (stringified for display, typically first 500 chars) */
   responseBody?: string;
+  /** For HTTP: request duration in ms (time from request sent to response received) */
+  duration?: number;
 }
 
 /** A batch of flow events dispatched from the page script. */

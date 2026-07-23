@@ -257,6 +257,7 @@ export class FlowTracker {
       let shortUrl = '';
       let initiator: string | null = null;
       let interactionTs: number | undefined;
+      const requestStartTime = Date.now();
 
       try {
         method = init?.method ?? 'GET';
@@ -311,6 +312,7 @@ export class FlowTracker {
                 ownerClass: initiator ?? undefined,
                 triggeredByInteractionTs: interactionTs,
                 responseBody: responseBodyStr,
+                duration: Date.now() - requestStartTime,
               });
             }
           }
@@ -351,6 +353,7 @@ export class FlowTracker {
 
     XHR.send = function(this: any, ...args: any[]) {
       const xhr = this;
+      const xhrStartTime = Date.now();
       try {
         xhr.addEventListener('load', () => {
           try {
@@ -378,6 +381,7 @@ export class FlowTracker {
                   detail: `${xhr.__nglens_method} ${shortUrl} (${xhr.status})`,
                   triggeredByInteractionTs: tracker.getActiveInteractionTimestamp(),
                   responseBody: responseBodyStr,
+                  duration: Date.now() - xhrStartTime,
                 });
               }
             }

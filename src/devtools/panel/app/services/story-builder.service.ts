@@ -256,12 +256,17 @@ export class StoryBuilderService {
       // Extract the resource being fetched from the HTTP URL
       const resource = this.extractResourceName(httpEvent.detail || httpEvent.label);
 
+      // If the HTTP event has a duration (request time), the actual start is earlier
+      const apiStartTime = httpEvent.duration 
+        ? httpEvent.timestamp - httpEvent.duration 
+        : cluster[0].timestamp;
+
       return {
         events: cluster,
         stepType: 'data-fetch',
         title: `${resource} Loaded`,
         summary: `${httpEvent.label}`,
-        startTime: cluster[0].timestamp,
+        startTime: apiStartTime,
         endTime: cluster[cluster.length - 1].timestamp,
       };
     }
