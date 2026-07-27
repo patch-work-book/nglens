@@ -35,6 +35,7 @@
   border-bottom: 1px solid rgb(55 65 81 / 0.4);
   background: #111827;
   position: sticky; top: 0; z-index: 10;
+  flex-shrink: 0;
 }
 .wf-label {
   width: 180px; flex-shrink: 0; font-size: 9px; color: #9ca3af;
@@ -54,6 +55,10 @@
   flex: 1; overflow-y: auto; position: relative;
 }
 
+.waterfall-content {
+  position: relative; min-height: 100%;
+}
+
 /* Vertical hover line */
 .hover-line {
   position: absolute; top: 0; bottom: 0; width: 1px;
@@ -61,11 +66,12 @@
   z-index: 5; pointer-events: none;
 }
 .hover-line-label {
-  position: absolute; top: 4px; left: 4px;
+  position: sticky; top: 4px;
   font-size: 9px; color: #93c5fd; font-weight: 700;
   font-family: 'JetBrains Mono', monospace;
   background: rgb(17 24 39 / 0.9); padding: 1px 4px;
   border-radius: 2px; white-space: nowrap;
+  margin-left: 4px;
 }
 
 .wf-row {

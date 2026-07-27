@@ -24,7 +24,7 @@
   <!-- Waterfall Timeline -->
   @if (filteredWaterfall().length > 0) {
     <div class="section">
-      <!-- Sticky timeline axis header -->
+      <!-- Sticky timeline axis header - OUTSIDE scrollable container -->
       <div class="waterfall-header">
         <span class="wf-label">COMPONENT</span>
         <div class="wf-timeline-axis">
@@ -38,25 +38,27 @@
       </div>
 
       <div class="waterfall" (mouseleave)="onWaterfallMouseLeave()">
-        <!-- Vertical hover indicator line -->
-        @if (hoverLinePct() !== null) {
-          <div class="hover-line" [style.left.%]="hoverLinePct()">
-            <span class="hover-line-label">{{ hoverTimeLabel() }}</span>
-          </div>
-        }
-
-        @for (item of filteredWaterfall(); track item.id) {
-          <div class="wf-row" [class]="'type-' + item.type" [class.is-slow]="item.isSlow"
-               [title]="item.name + ' — Started: ' + formatTime(item.startTime) + ' | Ended: ' + formatTime(item.endTime) + ' | Duration: ' + formatTime(item.duration)">
-            <span class="wf-name" [title]="item.name">{{ item.name }}</span>
-            <div class="wf-bar-track" (mousemove)="onBarTrackHover($event)" (mouseleave)="onWaterfallMouseLeave()">
-              <!-- Timeline bar positioned by start time and sized by duration -->
-              <div class="wf-bar" [style.left.%]="item.startPct" [style.width.%]="item.widthPct">
-              </div>
+        <div class="waterfall-content">
+          <!-- Vertical hover indicator line -->
+          @if (hoverLinePct() !== null) {
+            <div class="hover-line" [style.left.%]="hoverLinePct()">
+              <span class="hover-line-label">{{ hoverTimeLabel() }}</span>
             </div>
-            <span class="wf-dur">{{ item.duration > 0 ? formatTime(item.duration) : '<1ms' }}</span>
-          </div>
-        }
+          }
+
+          @for (item of filteredWaterfall(); track item.id) {
+            <div class="wf-row" [class]="'type-' + item.type" [class.is-slow]="item.isSlow"
+                 [title]="item.name + ' — Started: ' + formatTime(item.startTime) + ' | Ended: ' + formatTime(item.endTime) + ' | Duration: ' + formatTime(item.duration)">
+              <span class="wf-name" [title]="item.name">{{ item.name }}</span>
+              <div class="wf-bar-track" (mousemove)="onBarTrackHover($event)" (mouseleave)="onWaterfallMouseLeave()">
+                <!-- Timeline bar positioned by start time and sized by duration -->
+                <div class="wf-bar" [style.left.%]="item.startPct" [style.width.%]="item.widthPct">
+                </div>
+              </div>
+              <span class="wf-dur">{{ item.duration > 0 ? formatTime(item.duration) : '<1ms' }}</span>
+            </div>
+          }
+        </div>
       </div>
     </div>
   }
