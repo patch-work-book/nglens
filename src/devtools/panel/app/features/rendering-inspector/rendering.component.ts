@@ -1,11 +1,11 @@
 import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
-import { NgClass } from '@angular/common';
+import { NgClass, TitleCasePipe } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
 import { displayName } from '../../utils/display-name';
 import { CommandService } from '../../services/command.service';
 import { TooltipDirective } from '../../shared/tooltip.directive';
 import type { InteractionProfile } from '../../../../../types/panel';
-import type { RenderCause, RenderEvent, FlowEvent } from '../../../../../types/render-events';
+import type { RenderCause, RenderEvent, FlowEvent, RenderReason } from '../../../../../types/render-events';
 
 /** A single entry in the unified timeline (either a flow event or a render event). */
 interface TimelineEntry {
@@ -62,6 +62,20 @@ interface FlowEntry {
   selectorName?: string;
 }
 
+/** A causal chain: trigger → effects → impacted components */
+interface CausalChain {
+  id: string;
+  /** The initiating event (API call, or first store dispatch) */
+  trigger: { icon: string; label: string; type: string; value?: string };
+  /** State changes caused by the trigger (store dispatches, signal writes) */
+  effects: { icon: string; label: string; type: string; value?: string }[];
+  /** Components that re-rendered as a result */
+  impactedComponents: string[];
+  /** Is this a duplicate chain (same trigger appeared multiple times)? */
+  isDuplicate: boolean;
+  duplicateCount: number;
+}
+
 /** A node in the render cascade tree. */
 interface CascadeNode {
   componentName: string;
@@ -70,24 +84,57 @@ interface CascadeNode {
   cause: RenderCause;
   depth: number;
   children: CascadeNode[];
+  /** Grouped render reasons for this component */
+  reasons?: RenderReason[];
 }
 
 @Component({
   selector: 'app-rendering',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass, TooltipDirective],
+  imports: [NgClass, TooltipDirective, TitleCasePipe],
   templateUrl: './rendering.component.html',
   styleUrl: './rendering.component.scss',
 })
 export class RenderingComponent {
   readonly state = inject(PanelState);
   readonly displayName = displayName;
+  readonly Math = Math;
   private readonly commandService = inject(CommandService);
+
+  constructor() {
+    // Debounced card builder: only rebuild cards after 600ms of no new events
+    // This prevents flickering during route changes where events arrive in waves
+    setInterval(() => {
+      const currentCount = this.state.renderEvents().length + this.state.flowEvents().length;
+      if (currentCount !== this.lastEventCount) {
+        this.lastEventCount = currentCount;
+        clearTimeout(this.cardRebuildTimer);
+        this.cardRebuildTimer = setTimeout(() => {
+          this.stableActionReplays.set(this.actionReplays());
+        }, 600);
+      }
+    }, 300);
+  }
   readonly expandedActions = signal(new Set<string>());
+  readonly collapsedActions = signal(new Set<string>());
   readonly expandedFlows = signal(new Set<string>());
   readonly expandedDataFlow = signal(new Set<string>());
   readonly expandedFlowTypes = signal(new Set<string>(['subject-emit', 'http-response', 'store-dispatch', 'store-select', 'facade-method', 'signal-write', 'websocket']));
+  readonly showFullTree = signal(false);
+  /** Track which component is expanded to show render reasons */
+  readonly expandedComponentReasons = signal<string | null>(null);
+  /** Track which action is selected in the timeline view */
+  readonly selectedActionId = signal<string | null>(null);
+
+  // Card stability: cache previous cards to prevent flickering
+  private cachedCards: ActionReplay[] = [];
+  private lastCardCount = 0;
+  private cardRebuildTimer: any = null;
+  private lastEventCount = 0;
+
+  // Replace computed with signal that we control updates to
+  readonly stableActionReplays = signal<ActionReplay[]>([]);
 
   // ── Action Replays ────────────────────────────────────────────────────────
 
@@ -222,10 +269,24 @@ export class RenderingComponent {
   // ── Actions ───────────────────────────────────────────────────────────────
 
   toggleAction(id: string): void {
-    const next = new Set(this.expandedActions());
+    const next = new Set(this.collapsedActions());
     if (next.has(id)) { next.delete(id); } else { next.add(id); }
-    this.expandedActions.set(next);
+    this.collapsedActions.set(next);
   }
+
+  selectAction(id: string | null): void {
+    this.selectedActionId.set(this.selectedActionId() === id ? null : id);
+  }
+
+  getPerformanceScore(duration: number): number {
+    return Math.max(0, Math.min(100, 100 - duration / 5));
+  }
+
+  getSelectedAction = computed(() => {
+    const selected = this.selectedActionId();
+    if (!selected) return null;
+    return this.stableActionReplays().find(a => a.id === selected) ?? null;
+  });
 
   toggleFlowDetails(entryId: string): void {
     const next = new Set(this.expandedFlows());
@@ -346,6 +407,60 @@ export class RenderingComponent {
     return new Date(ts).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 
+  /** Get render reasons for a specific component from its render events */
+  getRenderReasonsForComponent(componentName: string): RenderReason[] {
+    const allEvents = this.state.renderEvents();
+    const componentEvents = allEvents.filter(e => e.componentName === componentName);
+    
+    if (componentEvents.length === 0) return [];
+
+    // Merge all reasons from this component's render events
+    const reasonsMap = new Map<string, RenderReason>();
+    
+    for (const event of componentEvents) {
+      if (!event.reasons) continue;
+      
+      for (const reason of event.reasons) {
+        const key = `${reason.type}:${reason.source}`;
+        const existing = reasonsMap.get(key);
+        
+        if (existing) {
+          existing.count += reason.count;
+          // Keep the most recent value
+          if (reason.after !== undefined) existing.after = reason.after;
+        } else {
+          reasonsMap.set(key, { ...reason });
+        }
+      }
+    }
+    
+    return Array.from(reasonsMap.values()).sort((a, b) => b.count - a.count);
+  }
+
+  /** Get reason type icon and color */
+  getReasonIcon(type: string): { icon: string; class: string } {
+    const icons: Record<string, { icon: string; class: string }> = {
+      'signal': { icon: '⚡', class: 'reason-signal' },
+      'input': { icon: '📥', class: 'reason-input' },
+      'parent': { icon: '👨‍👧', class: 'reason-parent' },
+      'zone': { icon: '⏱️', class: 'reason-zone' },
+      'api': { icon: '🌐', class: 'reason-api' },
+      'route': { icon: '🛣️', class: 'reason-route' },
+    };
+    return icons[type] || { icon: '❓', class: 'reason-default' };
+  }
+
+  /** Toggle component render reasons expansion */
+  toggleComponentReasons(componentName: string): void {
+    const current = this.expandedComponentReasons();
+    this.expandedComponentReasons.set(current === componentName ? null : componentName);
+  }
+
+  /** Check if a component's render reasons are expanded */
+  isComponentReasonsExpanded(componentName: string): boolean {
+    return this.expandedComponentReasons() === componentName;
+  }
+
   formatCauseSource(cause: RenderCause): string {
     const src = cause.source ?? cause.type;
     if (cause.type === 'parent') {
@@ -386,11 +501,242 @@ export class RenderingComponent {
     return result;
   }
 
-  /** Severity of a component's render count — drives highlighting. */
+  /** Reducer to sum render counts from flattened tree */
+  sumRenders = (total: number, node: CascadeNode): number => total + node.count;
+
+  /** Severity of a component's render — based on IMPACT (count × duration), not just count. */
   renderSeverity(node: CascadeNode): 'high' | 'medium' | 'none' {
-    if (node.count >= 6) return 'high';
-    if (node.count >= 3) return 'medium';
+    const impact = node.count * node.totalDuration;
+    if (impact >= 500 || node.count >= 6) return 'high';
+    if (impact >= 100 || node.count >= 3) return 'medium';
     return 'none';
+  }
+
+  /** Impact score label: Very High / High / Medium / Low */
+  impactLabel(node: CascadeNode): string {
+    const impact = node.count * node.totalDuration;
+    if (impact >= 1000) return 'Very High';
+    if (impact >= 500) return 'High';
+    if (impact >= 100) return 'Medium';
+    return 'Low';
+  }
+
+  /** Impact bar width (0-100%) for visual display */
+  impactPct(node: CascadeNode, action: ActionReplay): number {
+    const totalMs = action.duration || 1;
+    return Math.min(100, Math.round((node.totalDuration / totalMs) * 100));
+  }
+
+  /** Specific render reason — WHY this component rendered */
+  renderReason(node: CascadeNode): string {
+    const cause = node.cause.type;
+    const src = node.cause.source ?? '';
+
+    if (cause === 'signal') {
+      if (src.includes('.')) return `Signal: ${src.split('.').pop()?.replace('()', '')}`;
+      return 'Signal changed';
+    }
+    if (cause === 'input') return 'Input reference changed';
+    if (cause === 'parent') return 'Parent re-rendered';
+    if (cause === 'manual-cd') {
+      if (src.includes('markForCheck')) return 'markForCheck()';
+      if (src.includes('detectChanges')) return 'detectChanges()';
+      return 'Manual change detection';
+    }
+    // Zone-based triggers
+    if (src.includes('addEventListener:click')) return 'Click event';
+    if (src.includes('addEventListener:input')) return 'Input event';
+    if (src.includes('addEventListener:scroll')) return 'Scroll event';
+    if (src.includes('addEventListener:keydown') || src.includes('addEventListener:keyup')) return 'Keyboard event';
+    if (src.includes('addEventListener')) return `DOM event: ${src.replace('addEventListener:', '')}`;
+    if (src.includes('setTimeout')) return 'Timer (setTimeout)';
+    if (src.includes('setInterval')) return 'Interval (setInterval)';
+    if (src.includes('requestAnimationFrame')) return 'Animation frame';
+    if (src.includes('fetch') || src.includes('XMLHttpRequest')) return 'API response';
+    if (src.includes('Promise')) return 'Async (Promise)';
+    if (src.includes('MutationObserver')) return 'DOM mutation';
+    if (src.includes('WebSocket')) return 'WebSocket message';
+    if (src === 'unknown' || !src) return 'Zone.js trigger';
+    return src;
+  }
+
+  /** Specific fix recommendation based on render reason */
+  renderFix(node: CascadeNode): string {
+    if (node.count <= 1) return '';
+    const cause = node.cause.type;
+    const src = node.cause.source ?? '';
+
+    if (cause === 'parent') {
+      return 'Add OnPush + check if @Input() references actually change.';
+    }
+    if (cause === 'signal') {
+      return 'Use computed() to derive values instead of triggering multiple .set() calls.';
+    }
+    if (cause === 'input') {
+      return 'Parent is creating new object references on each CD. Memoize or use immutable patterns.';
+    }
+    if (src.includes('setInterval') || src.includes('setTimeout')) {
+      return 'Run timer outside Angular zone: ngZone.runOutsideAngular(() => ...).';
+    }
+    if (src.includes('fetch') || src.includes('XMLHttpRequest') || src.includes('Promise')) {
+      return 'Batch async operations with forkJoin() or update state once after all complete.';
+    }
+    if (src.includes('addEventListener:scroll')) {
+      return 'Debounce scroll handler or use Intersection Observer instead.';
+    }
+    if (src.includes('addEventListener:input')) {
+      return 'Add debounceTime() to input events or use updateOn: blur.';
+    }
+    if (src.includes('requestAnimationFrame')) {
+      return 'Move animation outside Angular zone, manually trigger CD on state change.';
+    }
+    if (cause === 'manual-cd') {
+      return 'Review why manual CD is needed — likely can replace with signals/OnPush.';
+    }
+    return 'Consider OnPush + signals for fine-grained reactivity.';
+  }
+
+  /** Get the hottest component in an action (highest impact) */
+  getHotspot(action: ActionReplay): { name: string; count: number; duration: number; pct: number } | null {
+    const nodes = this.flattenTree(action.tree);
+    if (nodes.length === 0) return null;
+    let hottest: CascadeNode | null = null;
+    let maxImpact = 0;
+    for (const n of nodes) {
+      const impact = n.count * n.totalDuration;
+      if (impact > maxImpact) { maxImpact = impact; hottest = n; }
+    }
+    if (!hottest || hottest.count <= 1) return null;
+    const totalDur = action.duration || 1;
+    return {
+      name: this.displayName(hottest.componentName),
+      count: hottest.count,
+      duration: Math.round(hottest.totalDuration),
+      pct: Math.round((hottest.totalDuration / totalDur) * 100),
+    };
+  }
+
+  /** Count total descendant renders for a node */
+  descendantRenderCount(node: CascadeNode): number {
+    let total = 0;
+    const walk = (children: CascadeNode[]): void => {
+      for (const child of children) {
+        total += child.count;
+        walk(child.children);
+      }
+    };
+    walk(node.children);
+    return total;
+  }
+
+  toggleFullTree(): void {
+    this.showFullTree.set(!this.showFullTree());
+  }
+
+  /** Build the full component tree scoped to this action's affected subtree.
+   *  Shows the re-rendered components + their siblings/children for context.
+   */
+  buildFullTree(action: ActionReplay): CascadeNode[] {
+    // Get all components ever seen (from all render events in session)
+    const allEvents = this.state.renderEvents();
+    const childrenMap = new Map<string, Set<string>>(); // parent → children
+
+    // Build parent→children relationships from ALL session events
+    for (const event of allEvents) {
+      if (event.componentName.length <= 2) continue;
+      if (event.parentComponent && event.parentComponent !== event.componentName) {
+        if (!childrenMap.has(event.parentComponent)) {
+          childrenMap.set(event.parentComponent, new Set());
+        }
+        childrenMap.get(event.parentComponent)!.add(event.componentName);
+      }
+    }
+
+    // Determine which components re-rendered in THIS action
+    const actionComponents = new Map<string, { count: number; duration: number; cause: any }>();
+    const actionEvents = this.getActionEvents(action);
+    for (const event of actionEvents) {
+      if (event.componentName.length <= 2) continue;
+      const existing = actionComponents.get(event.componentName);
+      if (existing) {
+        existing.count++;
+        existing.duration += event.duration;
+      } else {
+        actionComponents.set(event.componentName, {
+          count: 1,
+          duration: event.duration,
+          cause: event.causes[0] ?? { type: 'zone', source: 'unknown' },
+        });
+      }
+    }
+
+    if (actionComponents.size === 0) return [];
+
+    // Find the roots: re-rendered components whose parent did NOT re-render
+    const actionParentMap = new Map<string, string | null>();
+    for (const event of actionEvents) {
+      if (event.componentName.length <= 2) continue;
+      if (event.parentComponent && !actionParentMap.has(event.componentName)) {
+        actionParentMap.set(event.componentName, event.parentComponent);
+      }
+    }
+
+    const affectedRoots = new Set<string>();
+    for (const name of actionComponents.keys()) {
+      const parent = actionParentMap.get(name);
+      if (!parent || !actionComponents.has(parent)) {
+        affectedRoots.add(name);
+      }
+    }
+
+    // Build tree ONLY for affected roots and their direct children (from session data)
+    const buildNode = (name: string, depth: number, maxDepth: number): CascadeNode => {
+      const actionData = actionComponents.get(name);
+      const node: CascadeNode = {
+        componentName: name,
+        count: actionData?.count ?? 0,
+        totalDuration: actionData?.duration ?? 0,
+        cause: actionData?.cause ?? { type: 'zone', source: 'unknown' },
+        depth,
+        children: [],
+      };
+      // Only expand children up to maxDepth to avoid showing entire app
+      if (depth < maxDepth) {
+        const children = childrenMap.get(name);
+        if (children) {
+          for (const childName of children) {
+            // Only include child if it re-rendered OR is a direct child of something that did
+            const childRerendered = actionComponents.has(childName);
+            const parentRerendered = actionComponents.has(name);
+            if (childRerendered || parentRerendered) {
+              node.children.push(buildNode(childName, depth + 1, maxDepth));
+            }
+          }
+          // Sort: rendered first, then alphabetical
+          node.children.sort((a, b) => {
+            if (a.count > 0 && b.count === 0) return -1;
+            if (a.count === 0 && b.count > 0) return 1;
+            return a.componentName.localeCompare(b.componentName);
+          });
+        }
+      }
+      return node;
+    };
+
+    const roots: CascadeNode[] = [];
+    for (const rootName of affectedRoots) {
+      roots.push(buildNode(rootName, 0, 5));
+    }
+
+    return roots;
+  }
+
+  /** Get render events that belong to a specific action's time window */
+  private getActionEvents(action: ActionReplay): RenderEvent[] {
+    const allEvents = this.state.renderEvents();
+    const start = action.timestamp;
+    const end = action.timestamp + (action.duration || 500);
+    return allEvents.filter(e => e.timestamp >= start - 50 && e.timestamp <= end + 50);
   }
 
   /** Row styling based on severity — hot components stand out. */
@@ -401,26 +747,10 @@ export class RenderingComponent {
     return 'hover:bg-gray-800/40 border-l-2 border-transparent';
   }
 
-  /** Actionable hint explaining why a component is flagged and what to do. */
+  /** Actionable hint — now delegates to renderFix for specific recommendations */
   renderHint(node: CascadeNode): string {
-    const sev = this.renderSeverity(node);
-    if (sev === 'none') return '';
-    const cause = node.cause.type;
-    const src = node.cause.source ?? '';
-
-    if (cause === 'parent') {
-      return `Re-rendered ${node.count}× by its parent. Add OnPush so it only updates when its own @Input() refs change.`;
-    }
-    if (src.includes('setInterval') || src.includes('setTimeout')) {
-      return `Re-rendered ${node.count}× by timers. Run the timer outside Angular (ngZone.runOutsideAngular) and update state via signals.`;
-    }
-    if (src.includes('fetch') || src.includes('XMLHttpRequest') || src.includes('Promise')) {
-      return `Re-rendered ${node.count}× by async/API responses. Batch responses (forkJoin) or update state once instead of per-response.`;
-    }
-    if (src.includes('requestAnimationFrame')) {
-      return `Re-rendered ${node.count}× by animation frames. Move the animation loop outside Angular's zone.`;
-    }
-    return `Re-rendered ${node.count}× in this action. Consider OnPush + signals to reduce unnecessary cycles.`;
+    if (this.renderSeverity(node) === 'none') return '';
+    return `${this.renderReason(node)} (${node.count}×). ${this.renderFix(node)}`;
   }
 
   /** Count of hot components in an action — shown in the section header. */
@@ -453,6 +783,191 @@ export class RenderingComponent {
       if (!f.ownerClass) return true;
       return !treeComponents.has(this.displayName(f.ownerClass));
     });
+  }
+
+  /** Build causal chains from flow entries — groups related events into cause→effect sequences */
+  buildCausalChains(action: ActionReplay): CausalChain[] {
+    const flows = action.flowEntries;
+    if (flows.length === 0) return [];
+
+    const treeComponents = new Set(this.flattenTree(action.tree).map(n => this.displayName(n.componentName)));
+    const chains: CausalChain[] = [];
+    const used = new Set<string>();
+
+    // Sort flows by timestamp
+    const sorted = [...flows].sort((a, b) => a.timestamp - b.timestamp);
+
+    // Phase 1: Build chains starting from HTTP responses (API → Store → Components)
+    const httpFlows = sorted.filter(f => f.type === 'http-response');
+    for (const http of httpFlows) {
+      used.add(http.id);
+      const chain: CausalChain = {
+        id: `chain-${chains.length}`,
+        trigger: { icon: '🌐', label: this.shortenUrl(http.label), type: 'http', value: http.responseBody },
+        effects: [],
+        impactedComponents: [],
+        isDuplicate: false,
+        duplicateCount: 1,
+      };
+
+      // Find store dispatches/signal writes within 2000ms after this HTTP response
+      const CHAIN_WINDOW = 2000;
+      for (const flow of sorted) {
+        if (used.has(flow.id)) continue;
+        if (flow.timestamp < http.timestamp) continue;
+        if (flow.timestamp - http.timestamp > CHAIN_WINDOW) break;
+        if (flow.type === 'subject-emit' || flow.type === 'store-dispatch' || flow.type === 'signal-write') {
+          used.add(flow.id);
+          chain.effects.push({
+            icon: flow.icon,
+            label: flow.label.replace('Store: ', ''),
+            type: flow.type,
+            value: flow.value,
+          });
+          // Collect subscribers as impacted components
+          if (flow.subscribers) {
+            for (const sub of flow.subscribers) {
+              const name = this.displayName(sub);
+              if (treeComponents.has(name) && !chain.impactedComponents.includes(name)) {
+                chain.impactedComponents.push(name);
+              }
+            }
+          }
+        }
+      }
+
+      // If no effects found but we have tree components, just note the API completed
+      // (common when store dispatches are recorded before the http-response event)
+      chains.push(chain);
+    }
+
+    // Phase 2: Group remaining store dispatches without an HTTP trigger
+    const remainingStoreFlows = sorted.filter(f =>
+      !used.has(f.id) && (f.type === 'subject-emit' || f.type === 'store-dispatch' || f.type === 'signal-write')
+    );
+
+    // Group consecutive store dispatches within 200ms as a single chain
+    let currentGroup: FlowEntry[] = [];
+    for (const flow of remainingStoreFlows) {
+      if (currentGroup.length === 0 || flow.timestamp - currentGroup[currentGroup.length - 1].timestamp < 200) {
+        currentGroup.push(flow);
+      } else {
+        if (currentGroup.length > 0) {
+          chains.push(this.buildStoreChain(currentGroup, treeComponents, chains.length));
+        }
+        currentGroup = [flow];
+      }
+    }
+    if (currentGroup.length > 0) {
+      chains.push(this.buildStoreChain(currentGroup, treeComponents, chains.length));
+    }
+
+    // Phase 3: Detect duplicates (same trigger label appearing multiple times)
+    const triggerCounts = new Map<string, number>();
+    for (const chain of chains) {
+      const key = chain.trigger.label;
+      triggerCounts.set(key, (triggerCounts.get(key) ?? 0) + 1);
+    }
+    // Merge duplicates
+    const merged: CausalChain[] = [];
+    const seen = new Set<string>();
+    for (const chain of chains) {
+      const key = chain.trigger.label;
+      const count = triggerCounts.get(key) ?? 1;
+      if (count > 1) {
+        if (seen.has(key)) continue;
+        seen.add(key);
+        // Find all chains with same trigger and merge effects
+        const duplicates = chains.filter(c => c.trigger.label === key);
+        const mergedChain: CausalChain = {
+          ...duplicates[0],
+          isDuplicate: true,
+          duplicateCount: count,
+          effects: [],
+          impactedComponents: [],
+        };
+        const effectLabels = new Set<string>();
+        for (const dup of duplicates) {
+          for (const eff of dup.effects) {
+            if (!effectLabels.has(eff.label)) {
+              effectLabels.add(eff.label);
+              mergedChain.effects.push(eff);
+            }
+          }
+          for (const comp of dup.impactedComponents) {
+            if (!mergedChain.impactedComponents.includes(comp)) {
+              mergedChain.impactedComponents.push(comp);
+            }
+          }
+        }
+        merged.push(mergedChain);
+      } else {
+        merged.push(chain);
+      }
+    }
+
+    return merged;
+  }
+
+  private buildStoreChain(flows: FlowEntry[], treeComponents: Set<string>, index: number): CausalChain {
+    const first = flows[0];
+    const chain: CausalChain = {
+      id: `chain-store-${index}`,
+      trigger: { icon: first.icon, label: first.label.replace('Store: ', ''), type: first.type, value: first.value },
+      effects: [],
+      impactedComponents: [],
+      isDuplicate: false,
+      duplicateCount: 1,
+    };
+    // Only add remaining flows as effects if they have different labels
+    for (let i = 1; i < flows.length; i++) {
+      const effectLabel = flows[i].label.replace('Store: ', '');
+      if (effectLabel !== chain.trigger.label) {
+        chain.effects.push({
+          icon: flows[i].icon,
+          label: effectLabel,
+          type: flows[i].type,
+          value: flows[i].value,
+        });
+      }
+    }
+    // Collect impacted components from subscribers
+    for (const flow of flows) {
+      if (flow.subscribers) {
+        for (const sub of flow.subscribers) {
+          const name = this.displayName(sub);
+          if (treeComponents.has(name) && !chain.impactedComponents.includes(name)) {
+            chain.impactedComponents.push(name);
+          }
+        }
+      }
+    }
+    return chain;
+  }
+
+  /** Shorten a URL for display */
+  private shortenUrl(label: string): string {
+    // Extract method + path + status: "GET /api/client/114523/details → 200"
+    const match = label.match(/^(GET|POST|PUT|DELETE|PATCH)\s+(.+?)(\s*→\s*\d+)?$/);
+    if (!match) return label.length > 60 ? label.slice(0, 60) + '…' : label;
+    const method = match[1];
+    let path = match[2];
+    const status = match[3] ?? '';
+    // Remove query params for display
+    const qIdx = path.indexOf('?');
+    if (qIdx > 0) path = path.slice(0, qIdx);
+    // Shorten long numeric IDs in path
+    path = path.replace(/\/\d{5,}/g, '/…');
+    // Keep the last meaningful segment visible
+    if (path.length > 50) {
+      const parts = path.split('/').filter(Boolean);
+      if (parts.length > 3) {
+        path = '/' + parts[0] + '/…/' + parts[parts.length - 1];
+      } else {
+        path = path.slice(0, 50) + '…';
+      }
+    }
+    return `${method} ${path}${status}`;
   }
 
   // ── Private: build action replays ─────────────────────────────────────────
@@ -504,6 +1019,7 @@ export class RenderingComponent {
 
     // ── Merge rapid input events on the same element (within 500ms) ──
     // ── Also merge async cascades that follow a user interaction (API responses) ──
+    const allFlow = this.state.flowEvents();
     const merged: RenderEvent[][] = [];
     for (let i = 0; i < rawGroups.length; i++) {
       const group = rawGroups[i];
@@ -519,19 +1035,24 @@ export class RenderingComponent {
         group[0].timestamp - prev[prev.length - 1].timestamp < 500;
 
       // Merge non-interactive groups that follow a user interaction within 2s
-      // (these are typically API response renders triggered by the click)
+      // (covers route changes where APIs respond and trigger re-renders)
+      const timeSincePrev = prev ? group[0].timestamp - prev[prev.length - 1].timestamp : Infinity;
       const isAsyncCascade =
-        prev && prevInteraction && !groupInteraction &&
-        group[0].timestamp - prev[prev.length - 1].timestamp < 2000;
+        prev && prevInteraction && !groupInteraction && timeSincePrev < 2000;
 
-      if (isSameInputElement || isAsyncCascade) {
+      // Also merge if a route-change happened in the previous group's window
+      const prevStart = prev?.[0]?.timestamp ?? 0;
+      const hasRouteChange = prev && allFlow.some(f => 
+        f.type === 'route-change' && f.timestamp >= prevStart - 200 && f.timestamp <= group[0].timestamp
+      );
+      const isRouteCascade = prev && !groupInteraction && hasRouteChange && timeSincePrev < 3000;
+
+      if (isSameInputElement || isAsyncCascade || isRouteCascade) {
         prev.push(...group);
       } else {
         merged.push(group);
       }
     }
-
-    const allFlow = this.state.flowEvents();
 
     // ── Limit to last 20 cards (pagination) ──
     const visible = merged.slice(-20);
@@ -559,7 +1080,7 @@ export class RenderingComponent {
         : this.detectTrigger(group);
 
       return {
-        id: `group-${i}`,
+        id: `group-${startTs}`,
         trigger,
         triggerIcon: this.detectIcon(group),
         targetSelector: interaction?.interactionTarget ?? null,
@@ -977,6 +1498,21 @@ export class RenderingComponent {
   }
 
   private detectTrigger(events: RenderEvent[]): string {
+    // Check flow events for route-change first (highest priority for navigation)
+    const allFlow = this.state.flowEvents();
+    const startTs = events[0]?.timestamp ?? 0;
+    const endTs = events[events.length - 1]?.timestamp ?? startTs;
+    const routeFlow = allFlow.find(f => 
+      f.type === 'route-change' && 
+      f.timestamp >= startTs - 500 && f.timestamp <= endTs + 500
+    );
+    if (routeFlow) {
+      const detail = routeFlow.detail ?? routeFlow.label ?? '';
+      // Show the route path if available
+      if (detail.includes('→')) return `navigation ${detail}`;
+      return 'navigation';
+    }
+
     // Use interaction data if available
     const interaction = events.find(e => e.interactionComponent);
     if (interaction?.causes[0]?.source) {

@@ -3,6 +3,7 @@ import { RouterOutlet, Router } from '@angular/router';
 import { ToolbarComponent } from './layout/toolbar/toolbar.component';
 import { WhyPanelComponent } from './layout/why-panel/why-panel.component';
 import { DevtoolsPortService } from './services/devtools-port.service';
+import { ThemeService } from './services/theme.service';
 import { PanelState } from './state/panel.state';
 import { displayName } from './utils/display-name';
 
@@ -17,6 +18,7 @@ export class AppComponent {
   private readonly portService = inject(DevtoolsPortService);
   private readonly state = inject(PanelState);
   private readonly router = inject(Router);
+  readonly themeService = inject(ThemeService);
 
   readonly selectedComponent = this.state.selectedComponent;
   readonly whyPanelExpanded = signal(false);

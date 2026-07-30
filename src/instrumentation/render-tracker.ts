@@ -2,7 +2,7 @@
 // Deep instrumentation: captures user interactions, builds parent→child cascade,
 // filters Angular internals, and properly attributes causes.
 
-import type { RenderEvent, RenderCause, EventBatch } from '../types/render-events';
+import type { RenderEvent, RenderCause, EventBatch, RenderReason, FlowEvent } from '../types/render-events';
 
 const PAGE_TO_CONTENT_EVENT = '__ng_perf_to_content';
 
@@ -16,6 +16,8 @@ const MAX_PENDING_PER_FRAME = 50;
 const MIN_PROCESS_INTERVAL_MS = 32;
 /** Max events kept in buffer before oldest are dropped. */
 const MAX_EVENT_BUFFER = 500;
+/** Time window to look back for related flow events (500ms covers most cascades) */
+const FLOW_CORRELATION_WINDOW_MS = 500;
 
 /** Third-party library component prefixes — collapsed into group entries. */
 const THIRD_PARTY_PREFIXES = [
@@ -91,6 +93,10 @@ export class RenderTracker {
   // Initial discovery timeouts
   private initialDiscoveryTimeouts: ReturnType<typeof setTimeout>[] = [];
 
+  // Recent flow events for correlation with render reasons
+  private recentFlowEvents: FlowEvent[] = [];
+  private flowEventsCapacity = 200; // Keep last 200 flow events for correlation
+
   private constructor() {}
 
   static getInstance(): RenderTracker {
@@ -149,9 +155,10 @@ export class RenderTracker {
     if (!proto || proto.__nglens_cd_hooked__) return;
 
     proto.__nglens_cd_hooked__ = true;
-    const originalDoCheck = proto.ngDoCheck;
     const tracker = this;
 
+    // Hook ngDoCheck — fires on every CD cycle
+    const originalDoCheck = proto.ngDoCheck;
     proto.ngDoCheck = function (this: any, ...args: any[]) {
       if (tracker.isRunning) {
         tracker.incrementCdCount(name);
@@ -431,6 +438,14 @@ export class RenderTracker {
               for (let ci = 0; ci < childLimit; ci++) {
                 this.tryDiscoverElement(children[ci]);
               }
+              // If this is near a router-outlet, schedule a re-discovery
+              // (Angular may not have the component context ready yet)
+              // Angular inserts route components as NEXT SIBLING of router-outlet
+              if (node.tagName === 'ROUTER-OUTLET' || node.closest('router-outlet') || 
+                  node.previousElementSibling?.tagName === 'ROUTER-OUTLET' ||
+                  node.parentElement?.querySelector('router-outlet')) {
+                this.scheduleRouteDiscovery();
+              }
             }
           }
         }
@@ -466,6 +481,17 @@ export class RenderTracker {
     this.mutationObserver.observe(document.body, {
       childList: true, subtree: true, attributes: true, characterData: true,
     });
+  }
+
+  private routeDiscoveryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Re-discover components after a route change with slight delay for Angular to bootstrap */
+  private scheduleRouteDiscovery(): void {
+    if (this.routeDiscoveryTimer) clearTimeout(this.routeDiscoveryTimer);
+    this.routeDiscoveryTimer = setTimeout(() => {
+      this.discoverComponents();
+      this.routeDiscoveryTimer = null;
+    }, 100);
   }
 
   // ═══ Mutation Processing — builds parent→child hierarchy ════════════════════
@@ -576,6 +602,8 @@ export class RenderTracker {
         hasHighFrequencyZonePollution: hasHiFreqZonePollution ? true : undefined,
         highFrequencyEvents: hiFreqEvents.length > 0 ? hiFreqEvents : undefined,
       };
+      // Compute render reasons from causes + flow events
+      event.reasons = this.computeRenderReasons(event);
       this.eventBuffer.push(event);
     }
 
@@ -673,8 +701,67 @@ export class RenderTracker {
   private _loggedUnresolved = false;
 
   private findOwnerComponent(element: Element): string | null {
-    const entry = this.findOwnerEntry(element);
+    const entry = this.findInteractionOwner(element);
     return entry?.name ?? null;
+  }
+
+  /**
+   * Find the component that "owns" a user interaction.
+   * Unlike findOwnerEntry (which finds the nearest component for render tracking),
+   * this prioritizes components that are meaningful interaction targets:
+   * - Components with routerLink, (click), or navigation-related bindings
+   * - Skips leaf/visual components (icons, maps, spinners) in favor of their parent
+   */
+  private findInteractionOwner(element: Element): { element: Element; name: string } | null {
+    const ng = (globalThis as any).ng;
+    const hasDevApi = !!ng?.getComponent;
+    let current: Element | null = element;
+    let firstFound: { element: Element; name: string } | null = null;
+    let depth = 0;
+
+    // Visual/leaf component patterns that are unlikely to be the interaction owner
+    const LEAF_PATTERNS = /^(mat|ngx|cdk|icon|svg|img|badge|spinner|loader|tooltip|overlay|map|box|progress|avatar|chip)/i;
+
+    while (current && depth < 20) {
+      try {
+        let name: string | undefined;
+        
+        // Check our cache first
+        name = this.componentElements.get(current);
+        
+        // On-demand discovery
+        if (!name && hasDevApi && !this.componentElements.has(current)) {
+          const component = ng.getComponent(current);
+          if (component) {
+            const cName = this.resolveComponentName(component, current);
+            if (cName && !isInternalName(cName)) {
+              this.componentElements.set(current, cName);
+              this.hookComponentChangeDetection(component, cName);
+              name = cName;
+            }
+          }
+        }
+
+        if (name && !isInternalName(name)) {
+          // First component found (closest to click target)
+          if (!firstFound) {
+            firstFound = { element: current, name };
+          }
+
+          // If this component looks like a meaningful container (not a leaf), use it
+          const cleanName = name.replace(/^_+/, '').replace(/Component$/, '').toLowerCase();
+          if (!LEAF_PATTERNS.test(cleanName)) {
+            return { element: current, name };
+          }
+        }
+      } catch { /* skip */ }
+
+      current = current.parentElement;
+      depth++;
+    }
+
+    // If we only found leaf components, return the first one found
+    return firstFound;
   }
 
   private isRootElement(element: Element): boolean {
@@ -735,6 +822,95 @@ export class RenderTracker {
     if (type === 'microTask' || src.includes('Promise')) return 'Promise.then';
     if (src.includes('requestAnimationFrame')) return 'requestAnimationFrame';
     return src || null;
+  }
+
+  // ═══ Flow Event Correlation (for Render Reasons) ═════════════════════════
+
+  /** Called by orchestrator to inject flow events for correlation with renders */
+  injectFlowEvent(event: FlowEvent): void {
+    if (!this.isRunning) return;
+    this.recentFlowEvents.push(event);
+    // Keep only the last N flow events
+    if (this.recentFlowEvents.length > this.flowEventsCapacity) {
+      this.recentFlowEvents.shift();
+    }
+  }
+
+  /** Compute render reasons from causes and recent flow events */
+  private computeRenderReasons(event: RenderEvent): RenderReason[] {
+    const reasons: Map<string, RenderReason> = new Map();
+
+    if (!event.causes || event.causes.length === 0) {
+      return [];
+    }
+
+    // Group causes by type
+    for (const cause of event.causes) {
+      const key = `${cause.type}:${cause.source || 'unknown'}`;
+      let reason = reasons.get(key);
+
+      if (!reason) {
+        reason = {
+          type: cause.type as any,
+          source: cause.source || 'unknown',
+          count: 0,
+          colorClass: this.getReasonColorClass(cause.type),
+        };
+        reasons.set(key, reason);
+      }
+      reason.count++;
+    }
+
+    // Look for related flow events within the time window to add details
+    const timeWindow = event.timestamp - FLOW_CORRELATION_WINDOW_MS;
+    const relatedFlows = this.recentFlowEvents.filter(
+      f => f.timestamp >= timeWindow && f.timestamp <= event.timestamp
+    );
+
+    // Enhance reasons with flow event details
+    for (const reason of reasons.values()) {
+      if (reason.type === 'signal') {
+        // Find signal writes that match
+        const signalWrites = relatedFlows.filter(
+          f => f.type === 'signal-write' && f.propertyName === reason.source
+        );
+        if (signalWrites.length > 0) {
+          const latest = signalWrites[signalWrites.length - 1];
+          // Try to extract before/after if available
+          if (latest.detail) {
+            reason.after = latest.detail;
+          }
+        }
+      } else if (reason.type === 'input') {
+        // Find input changes
+        const inputChanges = relatedFlows.filter(
+          f => f.type === 'signal-write' && f.propertyName === reason.source && f.label?.includes('(input)')
+        );
+        if (inputChanges.length > 0) {
+          const latest = inputChanges[inputChanges.length - 1];
+          if (latest.detail) {
+            reason.after = latest.detail;
+          }
+        }
+      } else if (reason.type === 'parent') {
+        // Parent render is already descriptive
+      } else if (reason.type === 'zone') {
+        // Zone task type is in source
+      }
+    }
+
+    return Array.from(reasons.values());
+  }
+
+  private getReasonColorClass(causeType: string): string {
+    switch (causeType) {
+      case 'signal': return 'signal-color';
+      case 'input': return 'input-color';
+      case 'parent': return 'parent-color';
+      case 'zone': return 'zone-color';
+      case 'manual-cd': return 'manual-color';
+      default: return 'default-color';
+    }
   }
 
   // ═══ Batching ══════════════════════════════════════════════════════════════

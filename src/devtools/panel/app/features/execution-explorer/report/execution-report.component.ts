@@ -44,14 +44,13 @@ export class ExecutionReportComponent {
       } else {
         this.debounceTimer = setTimeout(() => {
           this.narrativeData.set(value);
-        }, 200);
+        }, 100);
       }
     }
   }
 
   readonly narrativeData = signal<ExecutionNarrative | null>(null);
   private debounceTimer: any;
-  private globalIdCounter = 0; // Unique ID counter to prevent duplicates
 
   formatTime(ms: number): string {
     if (ms >= 1000) {
@@ -124,6 +123,7 @@ export class ExecutionReportComponent {
     const storyStart = n.originalStory?.startTime || 0;
 
     const items: any[] = [];
+    let idCounter = 0;
 
     // Track last counted timestamp per component name to coalesce rapid renders
     const lastCountedTs = new Map<string, number>();
@@ -195,7 +195,7 @@ export class ExecutionReportComponent {
           last.endTime = Math.max(last.endTime, Math.round(itemStart + itemDur - storyStart));
         } else {
           items.push({
-            id: `wf-${this.globalIdCounter++}`,
+            id: `wf-${idCounter++}`,
             name: displayName,
             baseName: displayName,
             type: category,

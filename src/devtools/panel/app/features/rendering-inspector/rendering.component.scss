@@ -2,3 +2,188 @@
   display: block;
   height: 100%;
 }
+
+// ═══ Horizontal Timeline Layout Styling ═══
+
+// Timeline container with horizontal scroll
+.timeline-container {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem;
+  min-width: min-content;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 50%, transparent) color-mix(in srgb, var(--bg-secondary) 30%, transparent);
+  scrollbar-width: thin;
+}
+
+// Timeline action card
+.timeline-card {
+  flex-shrink: 0;
+  width: 20rem;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid;
+  cursor: pointer;
+  user-select: none;
+  transition: all 150ms ease-in-out;
+  
+  &:hover {
+    transform: translateY(-2px);
+  }
+  
+  border-color: var(--border-primary);
+  background-color: color-mix(in srgb, var(--bg-secondary) 40%, transparent);
+  
+  &:hover {
+    border-color: var(--border-secondary);
+    background-color: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+  }
+  
+  // Selected state
+  &.selected {
+    border-color: var(--color-api);
+    background-color: color-mix(in srgb, var(--color-api) 10%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-api) 30%, transparent);
+  }
+}
+
+// Details panel below timeline
+.details-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1rem;
+  gap: 0.75rem;
+  scroll-behavior: smooth;
+}
+
+// Empty state when no action selected
+.empty-state {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  opacity: 0.5;
+}
+
+// Custom scrollbar
+::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--bg-secondary) 30%, transparent);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 50%, transparent);
+  border-radius: 2px;
+  
+  &:hover {
+    background: color-mix(in srgb, var(--text-muted) 80%, transparent);
+  }
+}
+
+// ═══ Render Reason Styling ═══
+
+.reason-signal { color: var(--color-signal); }
+.reason-input  { color: var(--color-api); }
+.reason-parent { color: var(--color-render); }
+.reason-zone   { color: var(--color-store); }
+.reason-api    { color: var(--color-api); }
+.reason-route  { color: var(--color-render); }
+.reason-default { color: var(--text-muted); }
+
+// Compact reason badge styling
+.reason-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid;
+  
+  &.signal {
+    background-color: color-mix(in srgb, var(--color-signal) 10%, transparent);
+    border-color: color-mix(in srgb, var(--color-signal) 30%, transparent);
+    color: var(--color-signal);
+  }
+  
+  &.input {
+    background-color: color-mix(in srgb, var(--color-api) 10%, transparent);
+    border-color: color-mix(in srgb, var(--color-api) 30%, transparent);
+    color: var(--color-api);
+  }
+  
+  &.parent {
+    background-color: color-mix(in srgb, var(--color-render) 10%, transparent);
+    border-color: color-mix(in srgb, var(--color-render) 30%, transparent);
+    color: var(--color-render);
+  }
+  
+  &.zone {
+    background-color: color-mix(in srgb, var(--color-store) 10%, transparent);
+    border-color: color-mix(in srgb, var(--color-store) 30%, transparent);
+    color: var(--color-store);
+  }
+  
+  &.api {
+    background-color: color-mix(in srgb, var(--color-api) 10%, transparent);
+    border-color: color-mix(in srgb, var(--color-api) 30%, transparent);
+    color: var(--color-api);
+  }
+  
+  &.route {
+    background-color: color-mix(in srgb, var(--color-render) 10%, transparent);
+    border-color: color-mix(in srgb, var(--color-render) 30%, transparent);
+    color: var(--color-render);
+  }
+}
+
+// Reason count badges
+.reason-count-high {
+  background-color: color-mix(in srgb, var(--color-critical) 20%, transparent);
+  color: var(--color-critical);
+  font-weight: bold;
+}
+
+.reason-count-medium {
+  background-color: color-mix(in srgb, var(--color-warning) 20%, transparent);
+  color: var(--color-warning);
+  font-weight: bold;
+}
+
+.reason-count-low {
+  background-color: color-mix(in srgb, var(--color-success) 20%, transparent);
+  color: var(--color-success);
+  font-weight: bold;
+}
+
+// Reason expansion panel animation
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.reason-panel-enter {
+  animation: slideDown 0.15s ease-out;
+}
+
+// Horizontal scroll snap for reason cards
+.reason-cards-container {
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  
+  > div {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+}

@@ -103,22 +103,28 @@ export class EventDispatcherService {
 
     if (shouldResumeTracking) {
       this.state.isTracking.set(true);
-      this.portService?.send({
-        type: 'START_TRACKING',
-        payload: null,
-        timestamp: Date.now(),
-      });
+      // Use setTimeout to ensure connection is re-established after clearAll
+      setTimeout(() => {
+        this.portService?.send({
+          type: 'START_TRACKING',
+          payload: null,
+          timestamp: Date.now(),
+        });
+      }, 50);
     } else {
       // Check if auto-start scan is enabled on navigation load
       try {
         chrome.storage.local.get('auto_start_scan', (result) => {
           if (result && result['auto_start_scan'] === true) {
             this.state.isTracking.set(true);
-            this.portService?.send({
-              type: 'START_TRACKING',
-              payload: null,
-              timestamp: Date.now(),
-            });
+            // Delay START_TRACKING to ensure port is ready
+            setTimeout(() => {
+              this.portService?.send({
+                type: 'START_TRACKING',
+                payload: null,
+                timestamp: Date.now(),
+              });
+            }, 100);
           }
         });
       } catch { /* ignore */ }

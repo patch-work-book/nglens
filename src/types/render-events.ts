@@ -5,6 +5,8 @@ export interface RenderEvent {
   timestamp: number;
   duration: number;
   causes: RenderCause[];
+  /** Grouped reasons why this component rendered (derived from causes) */
+  reasons?: RenderReason[];
   /** The component that owns the element the user interacted with (click/input/keydown target) */
   interactionComponent?: string;
   /** CSS-like selector of the element the user interacted with */
@@ -27,6 +29,22 @@ export interface RenderEvent {
 export interface RenderCause {
   type: 'signal' | 'input' | 'zone' | 'parent' | 'manual-cd';
   source?: string;
+}
+
+/** Grouped reasons why a component re-rendered (for UI aggregation) */
+export interface RenderReason {
+  /** Type of trigger: signal write, input change, parent render, zone event, API response, route change */
+  type: 'signal' | 'input' | 'parent' | 'zone' | 'api' | 'route';
+  /** The specific source (signal name, input name, parent name, API endpoint, route, etc.) */
+  source: string;
+  /** Before value (if tracked) */
+  before?: string | number | boolean;
+  /** After value (if tracked) */
+  after?: string | number | boolean;
+  /** How many render events had this reason */
+  count: number;
+  /** Color hint for UI (e.g., 'signal-color', 'input-color', etc.) */
+  colorClass?: string;
 }
 
 // ── State/Flow Events (RxJS, Signals, Routes, HTTP) ──────────────────────────

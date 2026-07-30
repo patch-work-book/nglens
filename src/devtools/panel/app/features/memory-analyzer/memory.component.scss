@@ -6,8 +6,8 @@
 code {
   font-family: 'Monaco', 'Menlo', monospace;
   font-size: 10px;
-  color: #bfdbfe;
-  background: rgb(17 24 39 / 0.75);
+  color: var(--color-info);
+  background: color-mix(in srgb, var(--bg-primary) 75%, transparent);
   border-radius: 3px;
   padding: 1px 4px;
 }

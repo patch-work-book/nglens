@@ -1,23 +1,23 @@
 /* ── TIER 1: Status Banner ── */
 .status-banner {
-  border-bottom: 1px solid rgb(55 65 81 / 0.6);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-primary) 60%, transparent);
   flex-shrink: 0;
 }
 .status-banner.banner-red {
-  background: linear-gradient(135deg, rgb(127 29 29 / 0.25), rgb(17 24 39 / 0.95));
-  border-left: 4px solid #ef4444;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-critical) 20%, transparent), var(--bg-primary));
+  border-left: 4px solid var(--color-critical);
 }
 .status-banner.banner-amber {
-  background: linear-gradient(135deg, rgb(120 53 15 / 0.2), rgb(17 24 39 / 0.95));
-  border-left: 4px solid #f59e0b;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-warning) 15%, transparent), var(--bg-primary));
+  border-left: 4px solid var(--color-warning);
 }
 .status-banner.banner-green {
-  background: linear-gradient(135deg, rgb(6 78 59 / 0.15), rgb(17 24 39 / 0.95));
-  border-left: 4px solid #10b981;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-success) 12%, transparent), var(--bg-primary));
+  border-left: 4px solid var(--color-success);
 }
 .status-banner.banner-neutral {
-  background: rgb(17 24 39 / 0.85);
-  border-left: 4px solid #6b7280;
+  background: var(--bg-primary);
+  border-left: 4px solid var(--text-muted);
 }
 
 .banner-metric {
@@ -26,13 +26,13 @@
 .banner-metric strong {
   display: block;
   font-size: 15px;
-  color: #f3f4f6;
+  color: var(--text-primary);
   line-height: 1.2;
 }
 .banner-metric span {
   display: block;
   font-size: 9px;
-  color: #9ca3af;
+  color: var(--text-muted);
   text-transform: uppercase;
   font-weight: 600;
   margin-top: 1px;
@@ -40,10 +40,10 @@
 
 /* ── CTA Buttons ── */
 .cta-button {
-  border: 1px solid rgb(75 85 99 / 0.75);
+  border: 1px solid color-mix(in srgb, var(--border-primary) 75%, transparent);
   border-radius: 4px;
-  color: #d1d5db;
-  background: rgb(31 41 55 / 0.65);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 65%, transparent);
   font-size: 11px;
   font-weight: 700;
   padding: 6px 10px;
@@ -51,32 +51,32 @@
   cursor: pointer;
 }
 .cta-button:hover:not(:disabled) {
-  background: rgb(55 65 81 / 0.85);
-  border-color: rgb(96 165 250 / 0.55);
-  color: #f3f4f6;
+  background: color-mix(in srgb, var(--bg-tertiary) 85%, transparent);
+  border-color: color-mix(in srgb, var(--color-api) 55%, transparent);
+  color: var(--text-primary);
 }
 .cta-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 .cta-button.primary {
-  background: rgb(59 130 246 / 0.2);
-  border-color: rgb(59 130 246 / 0.5);
-  color: #93c5fd;
+  background: color-mix(in srgb, var(--color-api) 20%, transparent);
+  border-color: color-mix(in srgb, var(--color-api) 50%, transparent);
+  color: var(--color-info);
 }
 .cta-button.primary:hover:not(:disabled) {
-  background: rgb(59 130 246 / 0.35);
-  border-color: rgb(96 165 250 / 0.7);
+  background: color-mix(in srgb, var(--color-api) 35%, transparent);
+  border-color: color-mix(in srgb, var(--color-api) 70%, transparent);
 }
 .cta-button.muted {
-  color: #9ca3af;
-  background: rgb(17 24 39 / 0.45);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-primary) 45%, transparent);
 }
 
 /* ── TIER 2: Hint Cards (collapsible) ── */
 .hint-card {
-  background: rgb(17 24 39 / 0.5);
-  border: 1px solid rgb(55 65 81 / 0.5);
+  background: color-mix(in srgb, var(--bg-primary) 50%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-primary) 50%, transparent);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -93,7 +93,7 @@
   text-align: left;
 }
 .hint-header:hover {
-  background: rgb(31 41 55 / 0.6);
+  background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
 }
 .hint-icon {
   font-size: 9px;
@@ -103,7 +103,7 @@
 .hint-label {
   font-size: 10px;
   font-weight: 700;
-  color: #9ca3af;
+  color: var(--text-muted);
   text-transform: uppercase;
   flex-shrink: 0;
   min-width: 60px;
@@ -116,9 +116,9 @@
 .hint-go {
   font-size: 10px;
   font-weight: 700;
-  color: #93c5fd;
-  background: rgb(59 130 246 / 0.15);
-  border: 1px solid rgb(59 130 246 / 0.3);
+  color: var(--color-info);
+  background: color-mix(in srgb, var(--color-api) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-api) 30%, transparent);
   border-radius: 3px;
   padding: 2px 8px;
   flex-shrink: 0;
@@ -126,11 +126,11 @@
   transition: background 100ms;
 }
 .hint-go:hover {
-  background: rgb(59 130 246 / 0.3);
+  background: color-mix(in srgb, var(--color-api) 30%, transparent);
 }
 .hint-body {
   padding: 8px 12px 12px 32px;
-  border-top: 1px solid rgb(55 65 81 / 0.4);
+  border-top: 1px solid color-mix(in srgb, var(--border-primary) 40%, transparent);
 }
 
 /* ── TIER 3: Evidence Tabs ── */
@@ -138,7 +138,7 @@
   padding: 8px 14px;
   font-size: 11px;
   font-weight: 600;
-  color: #9ca3af;
+  color: var(--text-muted);
   border-bottom: 2px solid transparent;
   background: transparent;
   transition: color 120ms, border-color 120ms;
@@ -146,11 +146,11 @@
   cursor: pointer;
 }
 .tab-button:hover {
-  color: #d1d5db;
+  color: var(--text-secondary);
 }
 .tab-button.tab-active {
-  color: #93c5fd;
-  border-bottom-color: #3b82f6;
+  color: var(--color-info);
+  border-bottom-color: var(--color-api);
 }
 .tab-badge {
   display: inline-flex;
@@ -161,42 +161,41 @@
   margin-left: 4px;
   padding: 0 4px;
   border-radius: 8px;
-  background: rgb(55 65 81 / 0.7);
+  background: color-mix(in srgb, var(--bg-tertiary) 70%, transparent);
   font-size: 9px;
   font-weight: 700;
-  color: #d1d5db;
+  color: var(--text-secondary);
 }
 
 /* ── Shared ── */
 .metric-cell {
-  background: rgb(31 41 55 / 0.45);
-  border: 1px solid rgb(55 65 81 / 0.55);
+  background: color-mix(in srgb, var(--bg-secondary) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-primary) 55%, transparent);
   border-radius: 4px;
   padding: 8px;
 }
 .metric-cell span {
   display: block;
-  color: #9ca3af;
+  color: var(--text-muted);
   font-size: 10px;
   text-transform: uppercase;
   font-weight: 600;
 }
 .metric-cell strong {
   display: block;
-  color: #f3f4f6;
+  color: var(--text-primary);
   font-size: 14px;
   margin-top: 2px;
 
-  // Allow Tailwind text-color utilities to override the default color.
-  &.text-red-400    { color: rgb(248 113 113); }
-  &.text-amber-400  { color: rgb(251 191 36);  }
-  &.text-green-400  { color: rgb(74 222 128);  }
-  &.text-gray-400   { color: rgb(156 163 175); }
+  &.text-red-400    { color: var(--color-critical); }
+  &.text-amber-400  { color: var(--color-warning);  }
+  &.text-green-400  { color: var(--color-success);  }
+  &.text-gray-400   { color: var(--text-muted); }
   &.font-bold       { font-weight: 700; }
 }
 .metric-cell small {
   display: block;
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-size: 10px;
   margin-top: 2px;
 }
@@ -208,24 +207,24 @@
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  border: 1px solid rgb(75 85 99 / 0.7);
-  background: rgb(31 41 55 / 0.55);
+  border: 1px solid color-mix(in srgb, var(--border-primary) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 55%, transparent);
   font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
 }
 
 .evidence-chip {
-  border: 1px solid rgb(75 85 99 / 0.55);
+  border: 1px solid color-mix(in srgb, var(--border-primary) 55%, transparent);
   border-radius: 4px;
   padding: 2px 6px;
-  color: #d1d5db;
-  background: rgb(17 24 39 / 0.45);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-primary) 45%, transparent);
   font-size: 11px;
 }
 
 .badge {
-  border: 1px solid rgb(75 85 99 / 0.55);
+  border: 1px solid color-mix(in srgb, var(--border-primary) 55%, transparent);
   border-radius: 4px;
   padding: 2px 6px;
   font-size: 10px;
@@ -239,7 +238,7 @@
   justify-content: center;
   min-width: 56px;
   border-radius: 4px;
-  border: 1px solid rgb(75 85 99 / 0.6);
+  border: 1px solid color-mix(in srgb, var(--border-primary) 60%, transparent);
   padding: 2px 6px;
   font-size: 11px;
   font-weight: 800;

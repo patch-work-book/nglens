@@ -27,8 +27,29 @@ import { ExecutionReportComponent } from './report/execution-report.component';
   standalone: true,
   imports: [CommonModule, ExecutionReportComponent],
   template: `
-    <div class="h-full">
-      <app-execution-report [narrative]="selectedNarrative()" />
+    <div class="h-full flex flex-col">
+      <!-- Horizontal Timeline (1 Line - Ultra Compact) -->
+      @if (stableNarratives().length > 1) {
+        <div class="flex-shrink-0 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-800/50 border-b border-gray-700 py-2 px-2">
+          <div class="flex gap-2 min-w-min">
+            @for (narrative of stableNarratives(); track narrative.id) {
+              <button class="flex-shrink-0 px-2 py-1 rounded border text-[9px] whitespace-nowrap transition-all cursor-pointer select-none"
+                      [ngClass]="selectedNarrativeId() === narrative.id 
+                        ? 'border-blue-500 bg-blue-500/20 text-blue-200' 
+                        : 'border-gray-600 bg-gray-800/50 text-gray-300 hover:border-gray-500 hover:bg-gray-800/70'"
+                      (click)="selectNarrative(narrative.id)"
+                      [title]="narrative.trigger + ' · ' + narrative.duration.toFixed(0) + 'ms'">
+                {{ narrative.trigger }} {{ narrative.duration.toFixed(0) }}ms
+              </button>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- Details Panel -->
+      <div class="flex-1 overflow-auto">
+        <app-execution-report [narrative]="selectedNarrative()" />
+      </div>
     </div>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -39,9 +60,30 @@ export class ExecutionExplorerComponent {
   private chapterBuilder = inject(CausalityChapterBuilderService);
   private narrativeGenerator = inject(ExecutionNarrativeGeneratorService);
 
-  // Build narratives from all stories
-  readonly narrativeMap = computed(() => {
-    const stories = this.executionIntelligence.executionStories();
+  // Build narratives from all stories (debounced via effect)
+  readonly narrativeMap = signal(new Map<string, ExecutionNarrative>());
+  readonly selectedNarrativeId = signal<string | null>(null);
+  private buildTimer: any;
+
+  constructor() {
+    // Use effect to debounce narrative rebuilds
+    const stories = this.executionIntelligence.executionStories;
+    
+    // Watch for story changes with manual debounce
+    let lastLength = 0;
+    setInterval(() => {
+      const currentStories = stories();
+      if (currentStories.length !== lastLength) {
+        lastLength = currentStories.length;
+        clearTimeout(this.buildTimer);
+        this.buildTimer = setTimeout(() => {
+          this.rebuildNarratives(currentStories);
+        }, 150);
+      }
+    }, 200);
+  }
+
+  private rebuildNarratives(stories: ExecutionStory[]): void {
     const narratives = new Map<string, ExecutionNarrative>();
 
     stories.forEach(story => {
@@ -96,22 +138,34 @@ export class ExecutionExplorerComponent {
         originalStory: story,
       };
 
-      narratives.set(story.sessionId, narrative);
+      narratives.set(story.id, narrative);
     });
 
-    return narratives;
+    this.narrativeMap.set(narratives);
+  }
+
+  readonly stableNarratives = computed(() => {
+    return Array.from(this.narrativeMap().values());
   });
 
-  // Auto-select first narrative
   readonly selectedNarrative = computed(() => {
     const narratives = this.narrativeMap();
-    if (narratives.size === 0) {
-      return null;
+    const id = this.selectedNarrativeId();
+    
+    // If a specific narrative is selected, return it
+    if (id && narratives.has(id)) {
+      return narratives.get(id) || null;
     }
     
+    // Otherwise return the first one
     const first = narratives.values().next().value || null;
     return first;
   });
+
+  selectNarrative(id: string): void {
+    const current = this.selectedNarrativeId();
+    this.selectedNarrativeId.set(current === id ? null : id);
+  }
 
   private extractTrigger(story: ExecutionStory | { steps?: any[] }): string {
     if (!('steps' in story) || !story.steps || story.steps.length === 0) {

@@ -123,22 +123,31 @@ export class TooltipDirective implements OnInit, OnDestroy {
     if (!this.tooltipElement) return;
 
     const rect = this.el.nativeElement.getBoundingClientRect();
-    const tooltipWidth = 400; // Match tooltipMaxWidth default
+    const maxWidth = parseInt(this.tooltipMaxWidth) || 400;
+    // Measure actual tooltip dimensions
+    const tooltipRect = this.tooltipElement.getBoundingClientRect();
+    const tooltipWidth = Math.min(maxWidth, tooltipRect.width || maxWidth);
     const tooltipHeight = Math.min(250, this.tooltipElement.scrollHeight);
-    const viewportPadding = 10;
+    const viewportPadding = 8;
 
-    // Default: try to position to the right with vertical centering
-    let left = rect.right + 12;
-    let top = rect.top + rect.height / 2 - tooltipHeight / 2;
+    let left: number;
+    let top: number;
 
-    // If too far right, position to the left
-    if (left + tooltipWidth > window.innerWidth - viewportPadding) {
-      left = rect.left - tooltipWidth - 12;
+    // Try positioning to the right of the element
+    if (rect.right + 12 + tooltipWidth < window.innerWidth - viewportPadding) {
+      left = rect.right + 8;
+      top = rect.top;
     }
-
-    // If still off-screen, center horizontally
-    if (left < viewportPadding) {
-      left = viewportPadding;
+    // Try positioning to the left of the element
+    else if (rect.left - tooltipWidth - 12 > viewportPadding) {
+      left = rect.left - tooltipWidth - 8;
+      top = rect.top;
+    }
+    // Position below the element, aligned to its right edge
+    else {
+      left = Math.min(rect.right - tooltipWidth, window.innerWidth - tooltipWidth - viewportPadding);
+      left = Math.max(viewportPadding, left);
+      top = rect.bottom + 8;
     }
 
     // Adjust vertical position if too high

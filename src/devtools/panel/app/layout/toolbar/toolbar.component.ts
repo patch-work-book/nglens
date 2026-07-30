@@ -2,6 +2,7 @@ import { Component, computed, inject, ChangeDetectionStrategy, signal, effect } 
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { PanelState } from '../../state/panel.state';
 import { CommandService } from '../../services/command.service';
+import { ThemeService } from '../../services/theme.service';
 
 @Component({
   selector: 'app-toolbar',
@@ -15,6 +16,7 @@ export class ToolbarComponent {
   private readonly state = inject(PanelState);
   private readonly commandService = inject(CommandService);
   readonly router = inject(Router);
+  readonly themeService = inject(ThemeService);
   readonly activeRoute = signal<string>('overview');
 
   constructor() {

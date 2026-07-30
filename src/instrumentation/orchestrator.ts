@@ -376,4 +376,25 @@ function handleCommand(event: Event): void {
 export function initOrchestrator(): void {
   globalThis.addEventListener(CONTENT_TO_PAGE_EVENT, handleCommand);
   (globalThis as any).__nglens_orchestrator_on_route_changed = handleRouteChanged;
+
+  // Set up flow event forwarding: when flowTracker emits events, inject them into renderTracker
+  setupFlowEventForwarding();
+}
+
+/**
+ * Sets up event listener for flow events so they can be correlated with render reasons.
+ * FlowTracker emits FlowEventBatch events on the page script side.
+ */
+function setupFlowEventForwarding(): void {
+  const flowBatchEventName = '__ng_flow_events';
+  
+  globalThis.addEventListener(flowBatchEventName, ((event: any) => {
+    const batch = event.detail?.payload;
+    if (!batch?.events || !Array.isArray(batch.events)) return;
+    
+    // Inject each flow event into the render tracker for correlation
+    for (const flowEvent of batch.events) {
+      renderTracker.injectFlowEvent(flowEvent);
+    }
+  }) as EventListener);
 }
