@@ -181,6 +181,65 @@ export class OverviewComponent {
     return match ? parseInt(match[1], 10) : 15;
   });
 
+  // ── Health Score (0-100) ──
+  readonly healthScore = computed(() => {
+    if (!this.hasActivity()) return null;
+
+    let score = 100;
+
+    // Render hotspot penalty (max 30 points)
+    const topScore = this.topHotspots()[0]?.score ?? 0;
+    score -= Math.min(30, (topScore / 100) * 30);
+
+    // Render count penalty (max 20 points) - more renders = worse
+    const renderCount = this.state.renderEvents().length;
+    score -= Math.min(20, (renderCount / 500) * 20);
+
+    // Average duration penalty (max 20 points) - slower = worse
+    const avgDuration = parseFloat(this.averageRenderDuration());
+    score -= Math.min(20, (avgDuration / 50) * 20);
+
+    // Memory risk penalty (max 15 points)
+    const memoryRisks = this.memoryRiskCount();
+    score -= Math.min(15, (memoryRisks / 10) * 15);
+
+    // Zone pollution penalty (max 15 points)
+    const zoneSources = this.activeZoneSources().length;
+    score -= Math.min(15, (zoneSources / 5) * 15);
+
+    return Math.max(0, Math.min(100, Math.round(score)));
+  });
+
+  readonly healthScoreLabel = computed(() => {
+    const score = this.healthScore();
+    if (score === null) return 'No Data';
+    if (score >= 85) return 'Excellent';
+    if (score >= 70) return 'Good';
+    if (score >= 50) return 'Fair';
+    if (score >= 30) return 'Poor';
+    return 'Critical';
+  });
+
+  readonly healthScoreClass = computed(() => {
+    const score = this.healthScore();
+    if (score === null) return 'text-gray-400';
+    if (score >= 85) return 'text-green-400';
+    if (score >= 70) return 'text-lime-400';
+    if (score >= 50) return 'text-yellow-400';
+    if (score >= 30) return 'text-amber-400';
+    return 'text-red-400';
+  });
+
+  readonly healthScoreBarClass = computed(() => {
+    const score = this.healthScore();
+    if (score === null) return 'bg-gray-600';
+    if (score >= 85) return 'bg-green-500';
+    if (score >= 70) return 'bg-lime-500';
+    if (score >= 50) return 'bg-yellow-500';
+    if (score >= 30) return 'bg-amber-500';
+    return 'bg-red-500';
+  });
+
   // ── Health Summary (Tier 1) ──
   readonly healthSummary = computed<HealthSummary>(() => {
     if (!this.hasActivity()) {

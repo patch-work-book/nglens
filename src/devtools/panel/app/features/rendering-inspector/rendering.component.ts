@@ -92,7 +92,7 @@ interface CascadeNode {
   selector: 'app-rendering',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass, TooltipDirective, TitleCasePipe],
+  imports: [NgClass],
   templateUrl: './rendering.component.html',
   styleUrl: './rendering.component.scss',
 })
@@ -111,7 +111,16 @@ export class RenderingComponent {
         this.lastEventCount = currentCount;
         clearTimeout(this.cardRebuildTimer);
         this.cardRebuildTimer = setTimeout(() => {
-          this.stableActionReplays.set(this.actionReplays());
+          const newReplays = this.actionReplays();
+          const prevReplayCount = this.stableActionReplays().length;
+          this.stableActionReplays.set(newReplays);
+          
+          // Auto-select the latest action ONLY on first load (when no action was previously selected)
+          // After that, user selection is preserved even as new actions arrive
+          if (newReplays.length > 0 && prevReplayCount === 0 && this.selectedActionId() === null) {
+            const latestActionId = newReplays[newReplays.length - 1].id;
+            this.selectedActionId.set(latestActionId);
+          }
         }, 600);
       }
     }, 300);
@@ -132,6 +141,7 @@ export class RenderingComponent {
   private lastCardCount = 0;
   private cardRebuildTimer: any = null;
   private lastEventCount = 0;
+  private hasAutoSelectedOnce = false;
 
   // Replace computed with signal that we control updates to
   readonly stableActionReplays = signal<ActionReplay[]>([]);

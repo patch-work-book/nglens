@@ -215,6 +215,93 @@ export class ExecutionReportComponent {
     return items;
   });
 
+  readonly detectedIssues = computed(() => {
+    const n = this.narrativeData();
+    if (!n) return [];
+
+    const issues: Array<{ type: string; title: string; suggestion: string; severity: 'info' | 'warning' | 'error' }> = [];
+
+    const steps = n.originalStory?.steps || [];
+
+    // Check for duplicate APIs
+    const apiCallMap = new Map<string, number>();
+    
+    steps.forEach((step: any) => {
+      if (step.type === 'data-fetch' || step.title?.includes('GET ') || step.title?.includes('POST ')) {
+        const url = step.title || 'API Call';
+        apiCallMap.set(url, (apiCallMap.get(url) || 0) + 1);
+      }
+    });
+
+    apiCallMap.forEach((count, url) => {
+      if (count > 1) {
+        const displayUrl = url.substring(0, 40) + (url.length > 40 ? '...' : '');
+        issues.push({
+          type: 'duplicate-api',
+          title: `Duplicate API: ${displayUrl} called ${count}x`,
+          suggestion: 'Consider caching or deduplicating API calls',
+          severity: 'warning',
+        });
+      }
+    });
+
+    // Check for excessive renders
+    const componentRenderMap = new Map<string, number>();
+    steps.forEach((step: any) => {
+      if (step.type === 'ui-update' || step.title?.includes('Rendered')) {
+        const name = step.title?.replace(' Rendered', '')?.replace(' rendered', '') || 'Unknown';
+        componentRenderMap.set(name, (componentRenderMap.get(name) || 0) + 1);
+      }
+    });
+
+    componentRenderMap.forEach((count, name) => {
+      if (count > 5) {
+        issues.push({
+          type: 'excessive-renders',
+          title: `${name} rendered ${count}x`,
+          suggestion: 'Consider OnPush detection or memoization',
+          severity: 'warning',
+        });
+      }
+    });
+
+    // Check for slow operations
+    let hasSlowOp = false;
+    steps.forEach((step: any) => {
+      if ((step.duration || 0) > 300 && !hasSlowOp) {
+        issues.push({
+          type: 'slow-operation',
+          title: `Slow operation: ${step.title} (${step.duration}ms)`,
+          suggestion: 'Break into smaller chunks or defer non-critical work',
+          severity: 'warning',
+        });
+        hasSlowOp = true;
+      }
+    });
+
+    return issues;
+  });
+
+
+
+  // ── Bottleneck detection ──
+  readonly bottleneckItem = computed(() => {
+    const items = this.waterfall();
+    if (items.length === 0) return null;
+    
+    // Find slowest item
+    const slowest = items.reduce((a, b) => 
+      a.duration > b.duration ? a : b
+    );
+    
+    // Check if it's significant (> 100ms or > 20% of total)
+    if (slowest.duration > 100 || (slowest.duration / this.duration()) > 0.2) {
+      return slowest;
+    }
+    
+    return null;
+  });
+
   readonly bottleneck = computed((): string | null => {
     const n = this.narrativeData();
     if (!n) return null;

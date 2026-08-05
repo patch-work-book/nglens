@@ -57,3 +57,10 @@ Desktop.ini
 docs
 *.md
 /presentation
+*.txt
+
+# dev.to article tracking
+.devto-article-id
+
+# Text files
+*.txt

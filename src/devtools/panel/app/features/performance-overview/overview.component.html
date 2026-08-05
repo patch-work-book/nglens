@@ -20,6 +20,12 @@
 
       <!-- Key numbers -->
       <div class="flex gap-3 text-center flex-shrink-0">
+        @if (healthScore() !== null) {
+          <div class="banner-metric">
+            <strong [ngClass]="healthScoreClass()">{{ healthScore() }}</strong>
+            <span>Health</span>
+          </div>
+        }
         <div class="banner-metric">
           <strong [ngClass]="scoreClass(highestHotspotScore())">{{ highestHotspotScore() }}</strong>
           <span>Risk</span>
@@ -61,6 +67,22 @@
         </p>
       </div>
     } @else {
+
+      <!-- Health Score Card -->
+      @if (healthScore() !== null) {
+        <div class="health-score-card">
+          <div class="health-score-content">
+            <div class="health-score-circle">
+              <div class="health-score-number" [ngClass]="healthScoreClass()">{{ healthScore() }}</div>
+              <div class="health-score-label">{{ healthScoreLabel() }}</div>
+            </div>
+            <div class="health-score-bar">
+              <div class="health-score-fill" [ngClass]="healthScoreBarClass()" [style.width.%]="healthScore()"></div>
+            </div>
+          </div>
+        </div>
+      }
+
 
       <!-- HINT: Top Issue -->
       @if (topHotspots()[0]; as hotspot) {

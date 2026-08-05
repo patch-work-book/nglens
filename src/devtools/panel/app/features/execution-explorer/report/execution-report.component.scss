@@ -8,11 +8,11 @@
 /* Header */
 .header { padding: 10px 16px; border-bottom: 1px solid color-mix(in srgb, var(--bg-tertiary) 60%, transparent); }
 .header-top { display: flex; justify-content: space-between; align-items: center; }
-.header-title { font-size: 12px; font-weight: 700; color: var(--text-primary); }
+.header-title { font-size: 12px; font-weight: 400; color: var(--text-primary); }
 .header-actions { display: flex; align-items: center; gap: 8px; }
 .header-total {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 12px; font-weight: 700; color: var(--text-primary);
+  font-size: 12px; font-weight: 400; color: var(--text-primary);
 }
 .header-meta { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
 
@@ -21,7 +21,7 @@
   font-size: 10px; padding: 3px 8px; border-radius: 4px;
   background: color-mix(in srgb, var(--bg-secondary) 65%, transparent); color: var(--text-secondary);
   border: 1px solid color-mix(in srgb, var(--bg-muted) 55%, transparent); cursor: pointer;
-  outline: none; font-weight: 600;
+  outline: none; font-weight: 400;
   &:hover { border-color: color-mix(in srgb, var(--bg-muted) 70%, transparent); color: var(--text-primary); }
   &:focus { border-color: color-mix(in srgb, var(--color-api) 50%, transparent); }
 }
@@ -38,8 +38,8 @@
   flex-shrink: 0;
 }
 .wf-label {
-  width: 180px; flex-shrink: 0; font-size: 9px; color: var(--text-muted);
-  font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+  width: 280px; flex-shrink: 0; font-size: 9px; color: var(--text-muted);
+  font-weight: 400; text-transform: uppercase; letter-spacing: 0.3px;
 }
 .wf-timeline-axis {
   flex: 1; display: flex; justify-content: space-between;
@@ -48,7 +48,7 @@
 }
 .wf-dur-label {
   width: 60px; flex-shrink: 0; text-align: right; font-size: 9px;
-  color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+  color: var(--text-muted); font-weight: 400; text-transform: uppercase; letter-spacing: 0.3px;
 }
 
 .waterfall {
@@ -67,7 +67,7 @@
 }
 .hover-line-label {
   position: sticky; top: 4px;
-  font-size: 9px; color: var(--color-info); font-weight: 700;
+  font-size: 9px; color: var(--color-info); font-weight: 400;
   font-family: 'JetBrains Mono', monospace;
   background: color-mix(in srgb, var(--bg-primary) 90%, transparent); padding: 1px 4px;
   border-radius: 2px; white-space: nowrap;
@@ -83,14 +83,14 @@
 }
 
 .wf-name {
-  width: 180px; flex-shrink: 0; font-size: 11px; color: var(--text-secondary);
+  width: 280px; flex-shrink: 0; font-size: 11px; color: var(--text-secondary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  font-weight: 500;
-  .type-api & { color: var(--color-api); font-weight: 600; }
-  .type-render & { color: var(--color-render); font-weight: 600; }
-  .type-store & { color: var(--color-store); font-weight: 600; }
-  .type-signal & { color: var(--color-signal); font-weight: 600; }
-  .is-slow & { color: var(--color-critical); font-weight: 700; }
+  font-weight: 400;
+  .type-api & { color: var(--color-api); font-weight: 400; }
+  .type-render & { color: var(--color-render); font-weight: 400; }
+  .type-store & { color: var(--color-store); font-weight: 400; }
+  .type-signal & { color: var(--color-signal); font-weight: 400; }
+  .is-slow & { color: var(--color-critical); font-weight: 400; }
 }
 
 .wf-bar-track {
@@ -135,7 +135,7 @@
 
 .wf-bar-time {
   position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%);
-  font-size: 9px; color: var(--text-secondary); font-weight: 600;
+  font-size: 9px; color: var(--text-secondary); font-weight: 400;
   font-family: 'JetBrains Mono', monospace; white-space: nowrap;
   max-width: 50px; overflow: hidden; text-overflow: ellipsis;
 }
@@ -143,7 +143,7 @@
 .wf-dur {
   width: 60px; flex-shrink: 0; text-align: right;
   font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-muted);
-  .is-slow & { color: var(--color-critical); font-weight: 700; }
+  .is-slow & { color: var(--color-critical); font-weight: 400; }
 }
 
 /* Bottleneck */
@@ -155,3 +155,26 @@
 }
 .bottleneck-icon { font-size: 12px; }
 .bottleneck-text { font-size: 10px; color: var(--color-warning); }
+
+/* Bottleneck Highlighting */
+.wf-row {
+  &.is-bottleneck {
+    background: color-mix(in srgb, var(--color-critical) 10%, transparent) !important;
+    border-left: 3px solid var(--color-critical);
+  }
+}
+
+.bottleneck-tag {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 8px;
+  font-weight: 400;
+  color: var(--color-critical);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+

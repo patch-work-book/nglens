@@ -11,8 +11,9 @@
  *   → ExecutionNarrative (data model)
  *     → ExecutionReportComponent (UI)
  */
-import { Component, inject, signal, computed, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, signal, computed, effect, ChangeDetectionStrategy, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { ExecutionStory } from '@nglens/types/execution-intelligence';
 import type { ExecutionNarrative } from '@nglens/types/execution-narrative';
 import type { CausalityChain } from '../../services/causality-chain-detector.service';
@@ -59,28 +60,32 @@ export class ExecutionExplorerComponent {
   private chainDetector = inject(CausalityChainDetectorService);
   private chapterBuilder = inject(CausalityChapterBuilderService);
   private narrativeGenerator = inject(ExecutionNarrativeGeneratorService);
+  private destroyRef = inject(DestroyRef);
 
   // Build narratives from all stories (debounced via effect)
   readonly narrativeMap = signal(new Map<string, ExecutionNarrative>());
   readonly selectedNarrativeId = signal<string | null>(null);
+  private lastStoriesLength = 0;
   private buildTimer: any;
 
   constructor() {
-    // Use effect to debounce narrative rebuilds
-    const stories = this.executionIntelligence.executionStories;
-    
-    // Watch for story changes with manual debounce
-    let lastLength = 0;
-    setInterval(() => {
-      const currentStories = stories();
-      if (currentStories.length !== lastLength) {
-        lastLength = currentStories.length;
+    // ✅ OPTIMIZED: Use Angular effect to reactively watch stories instead of polling
+    // This eliminates the 200ms setInterval and responds immediately to changes
+    effect(
+      () => {
+        const stories = this.executionIntelligence.executionStories();
+        
+        // Rebuild whenever stories change (not just count)
+        // This ensures live updates when events arrive within same interaction
         clearTimeout(this.buildTimer);
+        
+        // Debounce the rebuild by 100ms to batch rapid event arrivals
         this.buildTimer = setTimeout(() => {
-          this.rebuildNarratives(currentStories);
-        }, 150);
-      }
-    }, 200);
+          this.rebuildNarratives(stories);
+        }, 100);
+      },
+      { allowSignalWrites: true }
+    );
   }
 
   private rebuildNarratives(stories: ExecutionStory[]): void {
