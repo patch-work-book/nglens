@@ -19,6 +19,26 @@ import type { LeakEvent } from '../src/types/leak-events';
 import type { TrackByIssue, OnPushScore, OnPushFactor } from '../src/types/recommendation-events';
 import type { PortMessage } from '../src/types/port-messages';
 
+// Mock ExecutionIntelligenceService for tests
+const mockExecutionIntelligenceService = {
+  addRenderEvents: () => {},
+  addFlowEvents: () => {},
+  addEvents: () => {},
+  clear: () => {},
+  executionStories: { asReadonly: () => [] },
+  executionSessions: { asReadonly: () => [] },
+  executionGraphs: { asReadonly: () => new Map() },
+  sessionCount: { asReadonly: () => 0 },
+  totalEvents: { asReadonly: () => 0 },
+  getStoriesForSession: () => [],
+  getStory: () => undefined,
+  getStep: () => undefined,
+  expandStep: () => [],
+  getInsights: () => [],
+  getGraph: () => undefined,
+  getGraphEngine: () => ({} as any),
+};
+
 // --- Arbitraries ---
 
 const renderCauseTypeArb = fc.constantFrom<RenderCause['type']>(
@@ -83,18 +103,19 @@ const onPushScoreArb: fc.Arbitrary<OnPushScore> = fc.record({
 // This mirrors the switch cases in event-dispatcher.service.ts for non-trigger messages.
 
 function dispatchToState(state: PanelState, message: PortMessage): void {
+  const frameId = message.frameId ?? 0;
   switch (message.type) {
     case 'EVENT_BATCH':
-      state.renderEvents.update(current => [...current, ...(message.payload as { events: RenderEvent[] }).events]);
+      state.addRenderEvents((message.payload as { events: RenderEvent[] }).events, frameId);
       break;
     case 'LEAK_EVENT':
-      state.leakEvents.update(current => [...current, message.payload as LeakEvent]);
+      state.addLeakEvent(message.payload as LeakEvent, frameId);
       break;
     case 'TRACKBY_ISSUE':
-      state.trackByIssues.update(current => [...current, message.payload as TrackByIssue]);
+      state.addTrackByIssue(message.payload as TrackByIssue, frameId);
       break;
     case 'ONPUSH_RESULT':
-      state.onPushRecommendations.update(current => [...current, message.payload as OnPushScore]);
+      state.addOnPushResult(message.payload as OnPushScore, frameId);
       break;
     case 'DEGRADED_MODE':
       state.degradedMode.set(true);
@@ -116,7 +137,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
         fc.property(
           fc.array(renderEventArb, { minLength: 1, maxLength: 20 }),
           (events: RenderEvent[]) => {
-            const state = new PanelState();
+            const state = new PanelState(mockExecutionIntelligenceService as any);
 
             const message: PortMessage = {
               type: 'EVENT_BATCH',
@@ -128,7 +149,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
             const result = state.renderEvents();
             expect(result).toHaveLength(events.length);
-            expect(result).toEqual(events);
+            expect(result).toEqual(events.map(e => ({ ...e, frameId: 0 })));
           }
         ),
         { numRuns: 100 }
@@ -141,7 +162,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
           fc.array(renderEventArb, { minLength: 1, maxLength: 10 }),
           fc.array(renderEventArb, { minLength: 1, maxLength: 10 }),
           (batch1: RenderEvent[], batch2: RenderEvent[]) => {
-            const state = new PanelState();
+            const state = new PanelState(mockExecutionIntelligenceService as any);
 
             dispatchToState(state, {
               type: 'EVENT_BATCH',
@@ -157,7 +178,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
             const result = state.renderEvents();
             expect(result).toHaveLength(batch1.length + batch2.length);
-            expect(result).toEqual([...batch1, ...batch2]);
+            expect(result).toEqual([...batch1, ...batch2].map(e => ({ ...e, frameId: 0 })));
           }
         ),
         { numRuns: 100 }
@@ -174,7 +195,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
     it('appends leak event to leakEvents', () => {
       fc.assert(
         fc.property(leakEventArb, (leakEvent: LeakEvent) => {
-          const state = new PanelState();
+          const state = new PanelState(mockExecutionIntelligenceService as any);
 
           const message: PortMessage = {
             type: 'LEAK_EVENT',
@@ -186,7 +207,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
           const result = state.leakEvents();
           expect(result).toHaveLength(1);
-          expect(result[0]).toEqual(leakEvent);
+          expect(result[0]).toEqual({ ...leakEvent, frameId: 0 });
         }),
         { numRuns: 100 }
       );
@@ -197,7 +218,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
         fc.property(
           fc.array(leakEventArb, { minLength: 2, maxLength: 10 }),
           (leakEvents: LeakEvent[]) => {
-            const state = new PanelState();
+            const state = new PanelState(mockExecutionIntelligenceService as any);
 
             for (const leakEvent of leakEvents) {
               dispatchToState(state, {
@@ -209,7 +230,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
             const result = state.leakEvents();
             expect(result).toHaveLength(leakEvents.length);
-            expect(result).toEqual(leakEvents);
+            expect(result).toEqual(leakEvents.map(e => ({ ...e, frameId: 0 })));
           }
         ),
         { numRuns: 100 }
@@ -226,7 +247,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
     it('appends trackBy issue to trackByIssues', () => {
       fc.assert(
         fc.property(trackByIssueArb, (trackByIssue: TrackByIssue) => {
-          const state = new PanelState();
+          const state = new PanelState(mockExecutionIntelligenceService as any);
 
           const message: PortMessage = {
             type: 'TRACKBY_ISSUE',
@@ -238,7 +259,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
           const result = state.trackByIssues();
           expect(result).toHaveLength(1);
-          expect(result[0]).toEqual(trackByIssue);
+          expect(result[0]).toEqual({ ...trackByIssue, frameId: 0 });
         }),
         { numRuns: 100 }
       );
@@ -249,7 +270,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
         fc.property(
           fc.array(trackByIssueArb, { minLength: 2, maxLength: 10 }),
           (issues: TrackByIssue[]) => {
-            const state = new PanelState();
+            const state = new PanelState(mockExecutionIntelligenceService as any);
 
             for (const issue of issues) {
               dispatchToState(state, {
@@ -261,7 +282,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
             const result = state.trackByIssues();
             expect(result).toHaveLength(issues.length);
-            expect(result).toEqual(issues);
+            expect(result).toEqual(issues.map(e => ({ ...e, frameId: 0 })));
           }
         ),
         { numRuns: 100 }
@@ -278,7 +299,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
     it('appends onPush score to onPushRecommendations', () => {
       fc.assert(
         fc.property(onPushScoreArb, (onPushScore: OnPushScore) => {
-          const state = new PanelState();
+          const state = new PanelState(mockExecutionIntelligenceService as any);
 
           const message: PortMessage = {
             type: 'ONPUSH_RESULT',
@@ -290,7 +311,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
 
           const result = state.onPushRecommendations();
           expect(result).toHaveLength(1);
-          expect(result[0]).toEqual(onPushScore);
+          expect(result[0]).toEqual({ ...onPushScore, frameId: 0 });
         }),
         { numRuns: 100 }
       );
@@ -301,7 +322,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
         fc.property(
           fc.array(onPushScoreArb, { minLength: 2, maxLength: 10 }),
           (scores: OnPushScore[]) => {
-            const state = new PanelState();
+            const state = new PanelState(mockExecutionIntelligenceService as any);
 
             for (const score of scores) {
               dispatchToState(state, {
@@ -311,9 +332,20 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
               });
             }
 
+            // Deduplicate scores in test because the state service deduplicates by component and route (under frame 0)
+            const uniqueScores: OnPushScore[] = [];
+            for (const s of scores) {
+              const dupIndex = uniqueScores.findIndex(prev => prev.component === s.component && prev.route === s.route);
+              if (dupIndex !== -1) {
+                uniqueScores[dupIndex] = s;
+              } else {
+                uniqueScores.push(s);
+              }
+            }
+
             const result = state.onPushRecommendations();
-            expect(result).toHaveLength(scores.length);
-            expect(result).toEqual(scores);
+            expect(result).toHaveLength(uniqueScores.length);
+            expect(result).toEqual(uniqueScores.map(e => ({ ...e, frameId: 0 })));
           }
         ),
         { numRuns: 100 }
@@ -330,7 +362,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
     it('sets degradedMode to true', () => {
       fc.assert(
         fc.property(fc.nat(), (timestamp: number) => {
-          const state = new PanelState();
+          const state = new PanelState(mockExecutionIntelligenceService as any);
 
           expect(state.degradedMode()).toBe(false);
 
@@ -353,7 +385,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
         fc.property(
           fc.array(fc.nat(), { minLength: 2, maxLength: 5 }),
           (timestamps: number[]) => {
-            const state = new PanelState();
+            const state = new PanelState(mockExecutionIntelligenceService as any);
 
             for (const ts of timestamps) {
               dispatchToState(state, {
@@ -382,7 +414,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
         fc.property(
           fc.array(renderEventArb, { minLength: 1, maxLength: 5 }),
           (events: RenderEvent[]) => {
-            const state = new PanelState();
+            const state = new PanelState(mockExecutionIntelligenceService as any);
 
             const initialConnectionState = state.connectionState();
             const initialIsTracking = state.isTracking();
@@ -404,7 +436,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
     it('LEAK_EVENT does not change connectionState or isTracking', () => {
       fc.assert(
         fc.property(leakEventArb, (leakEvent: LeakEvent) => {
-          const state = new PanelState();
+          const state = new PanelState(mockExecutionIntelligenceService as any);
 
           const initialConnectionState = state.connectionState();
           const initialIsTracking = state.isTracking();
@@ -425,7 +457,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
     it('TRACKBY_ISSUE does not change connectionState or isTracking', () => {
       fc.assert(
         fc.property(trackByIssueArb, (issue: TrackByIssue) => {
-          const state = new PanelState();
+          const state = new PanelState(mockExecutionIntelligenceService as any);
 
           const initialConnectionState = state.connectionState();
           const initialIsTracking = state.isTracking();
@@ -446,7 +478,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
     it('ONPUSH_RESULT does not change connectionState or isTracking', () => {
       fc.assert(
         fc.property(onPushScoreArb, (score: OnPushScore) => {
-          const state = new PanelState();
+          const state = new PanelState(mockExecutionIntelligenceService as any);
 
           const initialConnectionState = state.connectionState();
           const initialIsTracking = state.isTracking();
@@ -467,7 +499,7 @@ describe('Property 2: Preservation - Non-Trigger Message Handling Unchanged', ()
     it('DEGRADED_MODE does not change connectionState or isTracking', () => {
       fc.assert(
         fc.property(fc.nat(), (timestamp: number) => {
-          const state = new PanelState();
+          const state = new PanelState(mockExecutionIntelligenceService as any);
 
           const initialConnectionState = state.connectionState();
           const initialIsTracking = state.isTracking();

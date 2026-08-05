@@ -29,6 +29,23 @@ export class DevtoolsPortService {
     this.state.connectionState.set('connected');
     this.reconnectAttempts = 0;
 
+    // Direct auto start check on connect/load
+    try {
+      chrome.storage.local.get('auto_start_scan', (result) => {
+        if (result && result['auto_start_scan'] === true) {
+          this.state.isTracking.set(true);
+          // Use short delay to ensure message queue is ready
+          setTimeout(() => {
+            this.send({
+              type: 'START_TRACKING',
+              payload: null,
+              timestamp: Date.now(),
+            });
+          }, 50);
+        }
+      });
+    } catch { /* ignore outside extension context */ }
+
     this.port.onMessage.addListener((msg: PortMessage) => {
       this.dispatcher.dispatch(msg);
     });
@@ -49,10 +66,28 @@ export class DevtoolsPortService {
 
   send(message: PortMessage): void {
     try {
-      this.port?.postMessage(message);
-    } catch {
-      // Port may be disconnected or context invalidated — ignore silently
+      if (!this.port) {
+        console.warn('[ngLens] Port not connected, attempting reconnect before sending:', message.type);
+        // Try to reconnect if port is null
+        this.connect();
+        // Schedule retry after a brief delay - longer for critical messages
+        const delay = message.type === 'START_TRACKING' ? 300 : 100;
+        setTimeout(() => {
+          if (this.port) {
+            this.port.postMessage(message);
+          } else {
+            console.warn('[ngLens] Port still not available after reconnect attempt, queuing message');
+          }
+        }, delay);
+        return;
+      }
+      this.port.postMessage(message);
+    } catch (err) {
+      // Port may be disconnected or context invalidated
+      console.warn('[ngLens] Failed to send message:', err);
       this.state.connectionState.set('disconnected');
+      // Retry connection
+      this.scheduleReconnect();
     }
   }
 

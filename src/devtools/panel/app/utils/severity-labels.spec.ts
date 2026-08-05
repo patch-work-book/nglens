@@ -6,7 +6,7 @@ function makeStats(overrides: Partial<ComponentStats> = {}): ComponentStats {
   return {
     componentName: 'TestComponent',
     renderCount: 10,
-    rendersPerMinute: 50,
+    renderFrequency: 1.5,
     averageDuration: 5,
     totalDuration: 50,
     causesBreakdown: { signal: 0, input: 0, zone: 0, parent: 0, 'manual-cd': 0 },
@@ -18,37 +18,37 @@ function makeStats(overrides: Partial<ComponentStats> = {}): ComponentStats {
 
 describe('getSeverityLabels', () => {
   it('returns empty array when no thresholds are met', () => {
-    const stats = makeStats({ rendersPerMinute: 50 });
+    const stats = makeStats({ renderFrequency: 1.5 });
     expect(getSeverityLabels(stats)).toEqual([]);
   });
 
-  it('returns HOT when rendersPerMinute is between 61 and 100', () => {
-    const stats = makeStats({ rendersPerMinute: 75 });
+  it('returns HOT when renderFrequency is between 2.0 and 5.0', () => {
+    const stats = makeStats({ renderFrequency: 3.5 });
     expect(getSeverityLabels(stats)).toEqual(['HOT']);
   });
 
-  it('returns HOT at boundary (61 renders per minute)', () => {
-    const stats = makeStats({ rendersPerMinute: 61 });
+  it('returns HOT at boundary (2.0 renders per trigger)', () => {
+    const stats = makeStats({ renderFrequency: 2.0 });
     expect(getSeverityLabels(stats)).toContain('HOT');
   });
 
-  it('does not return HOT at exactly 60 renders per minute', () => {
-    const stats = makeStats({ rendersPerMinute: 60 });
+  it('does not return HOT at 1.9 renders per trigger', () => {
+    const stats = makeStats({ renderFrequency: 1.9 });
     expect(getSeverityLabels(stats)).not.toContain('HOT');
   });
 
-  it('returns EXCESSIVE when rendersPerMinute exceeds 100', () => {
-    const stats = makeStats({ rendersPerMinute: 150 });
+  it('returns EXCESSIVE when renderFrequency >= 5.0', () => {
+    const stats = makeStats({ renderFrequency: 5.5 });
     expect(getSeverityLabels(stats)).toEqual(['EXCESSIVE']);
   });
 
-  it('returns EXCESSIVE at boundary (101 renders per minute)', () => {
-    const stats = makeStats({ rendersPerMinute: 101 });
+  it('returns EXCESSIVE at boundary (5.0 renders per trigger)', () => {
+    const stats = makeStats({ renderFrequency: 5.0 });
     expect(getSeverityLabels(stats)).toContain('EXCESSIVE');
   });
 
-  it('does not return EXCESSIVE at exactly 100 renders per minute', () => {
-    const stats = makeStats({ rendersPerMinute: 100 });
+  it('does not return EXCESSIVE below 5.0 renders per trigger', () => {
+    const stats = makeStats({ renderFrequency: 4.9 });
     expect(getSeverityLabels(stats)).not.toContain('EXCESSIVE');
     expect(getSeverityLabels(stats)).toContain('HOT');
   });
@@ -83,7 +83,7 @@ describe('getSeverityLabels', () => {
 
   it('returns multiple labels when multiple conditions are met', () => {
     const stats = makeStats({
-      rendersPerMinute: 150,
+      renderFrequency: 150,
       causesBreakdown: { signal: 0, input: 0, zone: 0, parent: 10, 'manual-cd': 1 },
     });
     const labels = getSeverityLabels(stats);
@@ -93,7 +93,7 @@ describe('getSeverityLabels', () => {
 
   it('guards against division by zero when all causes are 0', () => {
     const stats = makeStats({
-      rendersPerMinute: 150,
+      renderFrequency: 150,
       causesBreakdown: { signal: 0, input: 0, zone: 0, parent: 0, 'manual-cd': 0 },
     });
     const labels = getSeverityLabels(stats);

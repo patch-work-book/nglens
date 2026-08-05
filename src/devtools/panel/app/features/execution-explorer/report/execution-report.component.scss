@@ -1,0 +1,180 @@
+:host { display: block; height: 100%; }
+
+.report {
+  height: 100%; overflow-y: auto;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Header */
+.header { padding: 10px 16px; border-bottom: 1px solid color-mix(in srgb, var(--bg-tertiary) 60%, transparent); }
+.header-top { display: flex; justify-content: space-between; align-items: center; }
+.header-title { font-size: 12px; font-weight: 400; color: var(--text-primary); }
+.header-actions { display: flex; align-items: center; gap: 8px; }
+.header-total {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px; font-weight: 400; color: var(--text-primary);
+}
+.header-meta { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+
+/* Filter Dropdown */
+.filter-dropdown {
+  font-size: 10px; padding: 3px 8px; border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-secondary) 65%, transparent); color: var(--text-secondary);
+  border: 1px solid color-mix(in srgb, var(--bg-muted) 55%, transparent); cursor: pointer;
+  outline: none; font-weight: 400;
+  &:hover { border-color: color-mix(in srgb, var(--bg-muted) 70%, transparent); color: var(--text-primary); }
+  &:focus { border-color: color-mix(in srgb, var(--color-api) 50%, transparent); }
+}
+
+/* Waterfall */
+.section { padding: 0; display: flex; flex-direction: column; height: calc(100% - 70px); }
+
+/* Sticky timeline header */
+.waterfall-header {
+  display: flex; align-items: center; padding: 6px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--bg-tertiary) 40%, transparent);
+  background: var(--bg-primary);
+  position: sticky; top: 0; z-index: 10;
+  flex-shrink: 0;
+}
+.wf-label {
+  width: 280px; flex-shrink: 0; font-size: 9px; color: var(--text-muted);
+  font-weight: 400; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.wf-timeline-axis {
+  flex: 1; display: flex; justify-content: space-between;
+  font-size: 9px; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace;
+  padding: 0 2px;
+}
+.wf-dur-label {
+  width: 60px; flex-shrink: 0; text-align: right; font-size: 9px;
+  color: var(--text-muted); font-weight: 400; text-transform: uppercase; letter-spacing: 0.3px;
+}
+
+.waterfall {
+  flex: 1; overflow-y: auto; position: relative;
+}
+
+.waterfall-content {
+  position: relative; min-height: 100%;
+}
+
+/* Vertical hover line */
+.hover-line {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  border-left: 1px dashed color-mix(in srgb, var(--color-info) 50%, transparent);
+  z-index: 5; pointer-events: none;
+}
+.hover-line-label {
+  position: sticky; top: 4px;
+  font-size: 9px; color: var(--color-info); font-weight: 400;
+  font-family: 'JetBrains Mono', monospace;
+  background: color-mix(in srgb, var(--bg-primary) 90%, transparent); padding: 1px 4px;
+  border-radius: 2px; white-space: nowrap;
+  margin-left: 4px;
+}
+
+.wf-row {
+  display: flex; align-items: center; padding: 0 16px; height: 24px;
+  &:nth-child(odd) { background: var(--bg-primary); }
+  &:nth-child(even) { background: color-mix(in srgb, var(--bg-secondary) 60%, transparent); }
+  &:hover { background: color-mix(in srgb, var(--bg-secondary) 100%, transparent); }
+  transition: background-color 0.15s ease;
+}
+
+.wf-name {
+  width: 280px; flex-shrink: 0; font-size: 11px; color: var(--text-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 400;
+  .type-api & { color: var(--color-api); font-weight: 400; }
+  .type-render & { color: var(--color-render); font-weight: 400; }
+  .type-store & { color: var(--color-store); font-weight: 400; }
+  .type-signal & { color: var(--color-signal); font-weight: 400; }
+  .is-slow & { color: var(--color-critical); font-weight: 400; }
+}
+
+.wf-bar-track {
+  flex: 1; height: 16px; position: relative;
+  background: color-mix(in srgb, var(--bg-tertiary) 80%, transparent); 
+  border-radius: 2px;
+  border: 1px solid color-mix(in srgb, var(--border-primary) 30%, transparent);
+  // Vertical grid lines at 25%, 50%, 75%
+  background-image:
+    linear-gradient(90deg, color-mix(in srgb, var(--border-primary) 20%, transparent) 1px, transparent 1px);
+  background-size: 25% 100%;
+  background-position: 25% 0;
+}
+
+.wf-bar {
+  position: absolute; top: 3px; height: 10px; border-radius: 2px;
+  min-width: 3px;
+  display: flex; align-items: center;
+  overflow: visible;
+  transition: all 0.2s ease;
+  .type-api & { 
+    background: color-mix(in srgb, var(--color-api) 85%, transparent);
+    box-shadow: 0 0 4px color-mix(in srgb, var(--color-api) 40%, transparent);
+  }
+  .type-render & { 
+    background: color-mix(in srgb, var(--color-render) 85%, transparent);
+    box-shadow: 0 0 4px color-mix(in srgb, var(--color-render) 40%, transparent);
+  }
+  .type-store & { 
+    background: color-mix(in srgb, var(--color-store) 85%, transparent);
+    box-shadow: 0 0 4px color-mix(in srgb, var(--color-store) 40%, transparent);
+  }
+  .type-signal & { 
+    background: color-mix(in srgb, var(--color-signal) 85%, transparent);
+    box-shadow: 0 0 4px color-mix(in srgb, var(--color-signal) 40%, transparent);
+  }
+  .is-slow & { 
+    background: color-mix(in srgb, var(--color-critical) 90%, transparent);
+    box-shadow: 0 0 4px color-mix(in srgb, var(--color-critical) 50%, transparent);
+  }
+}
+
+.wf-bar-time {
+  position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%);
+  font-size: 9px; color: var(--text-secondary); font-weight: 400;
+  font-family: 'JetBrains Mono', monospace; white-space: nowrap;
+  max-width: 50px; overflow: hidden; text-overflow: ellipsis;
+}
+
+.wf-dur {
+  width: 60px; flex-shrink: 0; text-align: right;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-muted);
+  .is-slow & { color: var(--color-critical); font-weight: 400; }
+}
+
+/* Bottleneck */
+.bottleneck {
+  margin: 8px 16px; padding: 8px 12px; border-radius: 4px;
+  background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
+  display: flex; align-items: center; gap: 6px;
+}
+.bottleneck-icon { font-size: 12px; }
+.bottleneck-text { font-size: 10px; color: var(--color-warning); }
+
+/* Bottleneck Highlighting */
+.wf-row {
+  &.is-bottleneck {
+    background: color-mix(in srgb, var(--color-critical) 10%, transparent) !important;
+    border-left: 3px solid var(--color-critical);
+  }
+}
+
+.bottleneck-tag {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 8px;
+  font-weight: 400;
+  color: var(--color-critical);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+

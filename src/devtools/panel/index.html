@@ -1,11 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ngLens DevTools Panel</title>
+  <style>
+    /* Prevent FOUC (Flash of Unstyled Content) - apply theme before scripts load */
+    html {
+      background-color: var(--bg-primary, #0F1419);
+      color: var(--text-primary, #F8FAFC);
+    }
+  </style>
 </head>
-<body class="bg-gray-900 text-gray-100 m-0 p-0 overflow-hidden">
+<body style="margin: 0; padding: 0; overflow: hidden;">
   <app-root></app-root>
 </body>
 </html>

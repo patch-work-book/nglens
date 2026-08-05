@@ -1,8 +1,9 @@
 import type { LeakEvent } from '../../../../types/leak-events';
-import type { ComponentHotspot } from '../../../../types/panel';
+import type { ComponentHotspot, ComponentStats } from '../../../../types/panel';
 import type { OnPushScore, TrackByIssue } from '../../../../types/recommendation-events';
 import type { RenderCause } from '../../../../types/render-events';
 import type { PollutionSourceMetrics } from '../../../../types/zone-pollution-events';
+import { formatRenderRate } from './display-name';
 
 export type ActionConfidence = 'High' | 'Medium' | 'Heuristic';
 export type ActionDifficulty = 'Easy' | 'Medium' | 'Hard';
@@ -30,14 +31,31 @@ export interface RecommendationActionInput {
   hotspots: ComponentHotspot[];
   zonePollutionSources: PollutionSourceMetrics[];
   leakEvents: LeakEvent[];
+  componentStats?: ComponentStats[];
 }
 
 export function buildRecommendationActions(input: RecommendationActionInput): RecommendationAction[] {
+  // Collect components that already have dedicated OnPush or hotspot actions
+  // so renderDiagnosticActions won't duplicate them.
+  const onPushComponents = new Set(
+    deduplicateOnPush(
+      input.onPushRecommendations
+        .filter((item) => item.currentStrategy !== 'OnPush' && normalizedOnPushScore(item) >= 50)
+    ).map((item) => item.component)
+  );
+  const hotspotComponents = new Set(
+    input.hotspots
+      .filter((hotspot) => hotspot.score >= 40)
+      .map((h) => h.componentName)
+  );
+  const excludeFromDiagnostics = new Set([...onPushComponents, ...hotspotComponents]);
+
   return [
     ...input.trackByIssues.map(trackByAction),
-    ...input.onPushRecommendations
-      .filter((item) => item.currentStrategy !== 'OnPush' && normalizedOnPushScore(item) >= 50)
-      .map(onPushAction),
+    ...deduplicateOnPush(
+      input.onPushRecommendations
+        .filter((item) => item.currentStrategy !== 'OnPush' && normalizedOnPushScore(item) >= 50)
+    ).map(onPushAction),
     ...input.zonePollutionSources
       .filter((source) => source.severity !== 'low')
       .map(zoneAction),
@@ -45,6 +63,7 @@ export function buildRecommendationActions(input: RecommendationActionInput): Re
       .filter((hotspot) => hotspot.score >= 40)
       .map(hotspotAction),
     ...groupedMemoryActions(input.leakEvents),
+    ...renderDiagnosticActions(input.componentStats ?? [], excludeFromDiagnostics),
   ].sort((a, b) => {
     if (b.rankScore !== a.rankScore) return b.rankScore - a.rankScore;
     return kindPriority(a.kind) - kindPriority(b.kind);
@@ -124,17 +143,29 @@ function onPushAction(item: OnPushScore): RecommendationAction {
   const confidence: ActionConfidence = score >= 85 ? 'High' : score >= 70 ? 'Medium' : 'Heuristic';
   const gain: ActionGain = score >= 80 ? 'Large' : 'Medium';
 
+  let evidence = `OnPush score ${score}/100. ${met}/${total} suitability factors matched while using ${item.currentStrategy} change detection.`;
+  let suggestedFix = 'Switch to OnPush after checking that inputs use new references and local state updates still mark the view.';
+  let title = `Consider ChangeDetectionStrategy.OnPush for ${item.component}`;
+
+  if (item.cdMer !== undefined && item.cdCount !== undefined && item.cdCount >= 5) {
+    evidence += ` Observed Change Detection Mutation Efficiency Ratio (CD-MER) is ${item.cdMer.toFixed(1)}% (${item.mutationCount} DOM mutations inside ${item.cdCount} CD cycles).`;
+    if (item.cdMer < 25) {
+      title = `Low Change Detection Efficiency (CD-MER: ${item.cdMer.toFixed(1)}%) in ${item.component}`;
+      suggestedFix = `Low mutation efficiency detected! Switch to OnPush strategy or migrate to Signals to avoid executing this component's change detection unless dynamic bindings/inputs actually change.`;
+    }
+  }
+
   return {
     id: `onpush-${item.component}`,
     kind: 'onpush',
-    title: 'Consider ChangeDetectionStrategy.OnPush',
+    title,
     componentName: item.component,
     source: item.component,
     confidence,
-    evidence: `OnPush score ${score}/100. ${met}/${total} suitability factors matched while using ${item.currentStrategy} change detection.`,
+    evidence,
     difficulty: 'Easy',
     expectedGain: gain,
-    suggestedFix: 'Switch to OnPush after checking that inputs use new references and local state updates still mark the view.',
+    suggestedFix,
     rankScore: 70 + score / 3,
     snippet: `@Component({\n  changeDetection: ChangeDetectionStrategy.OnPush\n})`,
   };
@@ -146,6 +177,11 @@ function zoneAction(source: PollutionSourceMetrics): RecommendationAction {
   const gain: ActionGain = source.severity === 'critical' ? 'Large' : 'Medium';
   const owner = source.library ?? source.source;
 
+  let cdRateStr = `${Math.round(source.cdCyclesPerMinute)}/min`;
+  if (source.cdCyclesPerMinute >= 60) {
+    cdRateStr = `${(source.cdCyclesPerMinute / 60).toFixed(1)}/sec`;
+  }
+
   return {
     id: `zone-${source.source}`,
     kind: 'zone',
@@ -153,7 +189,7 @@ function zoneAction(source: PollutionSourceMetrics): RecommendationAction {
     componentName: owner,
     source: owner,
     confidence,
-    evidence: `${Math.round(source.cdCyclesPerMinute)} change-detection cycles/min from ${source.taskCount} ${source.type} task(s).`,
+    evidence: `${cdRateStr} change-detection frequency from ${source.taskCount} ${source.type} task(s).`,
     difficulty: 'Medium',
     expectedGain: gain,
     suggestedFix: source.fixSuggestion ?? 'Wrap high-frequency async work in runOutsideAngular and re-enter Angular only when UI state changes.',
@@ -170,7 +206,7 @@ function hotspotAction(hotspot: ComponentHotspot): RecommendationAction {
     componentName: hotspot.componentName,
     source: hotspot.componentName,
     confidence: hotspot.score >= 90 ? 'High' : hotspot.score >= 70 ? 'Medium' : 'Heuristic',
-    evidence: `${hotspot.renderCount} renders, ${hotspot.rendersPerMinute.toFixed(1)}/min, ${hotspot.averageDuration.toFixed(1)}ms avg. Main cause: ${causeLabel(hotspot.primaryCause)}.`,
+    evidence: `${hotspot.renderCount} renders, ${formatRenderRate(hotspot.renderFrequency)} frequency, ${hotspot.averageDuration.toFixed(1)}ms avg. Main cause: ${causeLabel(hotspot.primaryCause)}.`,
     difficulty: hotspot.primaryCause === 'parent' || hotspot.primaryCause === 'zone' ? 'Medium' : 'Hard',
     expectedGain: hotspot.score >= 80 ? 'Large' : 'Medium',
     suggestedFix: hotspotFix(hotspot.primaryCause),
@@ -225,6 +261,18 @@ function groupedMemoryActions(events: LeakEvent[]): RecommendationAction[] {
 
 function normalizedOnPushScore(item: OnPushScore): number {
   return Math.round(item.score <= 1 ? item.score * 100 : item.score);
+}
+
+/** Keep only the highest-scoring entry per component to avoid duplicate cards. */
+function deduplicateOnPush(items: OnPushScore[]): OnPushScore[] {
+  const best = new Map<string, OnPushScore>();
+  for (const item of items) {
+    const existing = best.get(item.component);
+    if (!existing || normalizedOnPushScore(item) > normalizedOnPushScore(existing)) {
+      best.set(item.component, item);
+    }
+  }
+  return Array.from(best.values());
 }
 
 function severityScore(severity: PollutionSourceMetrics['severity']): number {
@@ -291,4 +339,90 @@ function leakFix(type: LeakEvent['leakType']): string {
     case 'event-listener':
       return 'Remove the listener in the component cleanup path or use Renderer2/listener helpers that return cleanup functions.';
   }
+}
+
+function renderDiagnosticActions(stats: ComponentStats[], excludeComponents: Set<string>): RecommendationAction[] {
+  const actions: RecommendationAction[] = [];
+
+  for (const stat of stats) {
+    if (stat.renderCount < 3) continue;
+    if (excludeComponents.has(stat.componentName)) continue;
+
+    const topCause = getTopCauseFromBreakdown(stat.causesBreakdown);
+
+    if (topCause === 'parent' && stat.renderCount >= 3) {
+      actions.push({
+        id: `render-cascade-${stat.componentName}`,
+        kind: 'render-hotspot',
+        title: `${stat.componentName} rendered ${stat.renderCount}× from parent cascade`,
+        componentName: stat.componentName,
+        source: stat.componentName,
+        confidence: stat.renderCount >= 6 ? 'High' : 'Medium',
+        evidence: `This component re-renders every time its parent does, even when its own inputs haven't changed.`,
+        difficulty: 'Easy',
+        expectedGain: stat.renderCount >= 6 ? 'Large' : 'Medium',
+        suggestedFix: 'Add ChangeDetectionStrategy.OnPush to this component. It will only re-render when its @Input() references change or a signal it reads is written.',
+        rankScore: 75 + Math.min(stat.renderCount, 20),
+        snippet: `@Component({\n  changeDetection: ChangeDetectionStrategy.OnPush\n})`,
+      });
+    } else if (topCause === 'zone' && stat.renderCount >= 4) {
+      actions.push({
+        id: `render-zone-${stat.componentName}`,
+        kind: 'render-hotspot',
+        title: `${stat.componentName} rendered ${stat.renderCount}× from async/timers`,
+        componentName: stat.componentName,
+        source: stat.componentName,
+        confidence: stat.renderCount >= 6 ? 'High' : 'Medium',
+        evidence: `Each setTimeout/setInterval/HTTP callback triggers a Zone.js change detection cycle that re-renders this component.`,
+        difficulty: 'Medium',
+        expectedGain: stat.renderCount >= 8 ? 'Large' : 'Medium',
+        suggestedFix: 'Use OnPush + Signals, or move timer/async logic outside Angular zone with NgZone.runOutsideAngular().',
+        rankScore: 70 + Math.min(stat.renderCount, 20),
+        snippet: `this.ngZone.runOutsideAngular(() => {\n  setInterval(() => {\n    // update state\n    this.ngZone.run(() => this.signal.set(newValue));\n  }, 5000);\n});`,
+      });
+    } else if (stat.renderCount >= 5) {
+      actions.push({
+        id: `render-excessive-${stat.componentName}`,
+        kind: 'render-hotspot',
+        title: `${stat.componentName} rendered ${stat.renderCount}× excessively`,
+        componentName: stat.componentName,
+        source: stat.componentName,
+        confidence: stat.renderCount >= 8 ? 'High' : 'Heuristic',
+        evidence: `This component re-renders too frequently. Each re-render recalculates the template and diffs the DOM.`,
+        difficulty: 'Medium',
+        expectedGain: 'Medium',
+        suggestedFix: 'Use ChangeDetectionStrategy.OnPush and convert state to signals so Angular only marks this component dirty when its dependencies actually change.',
+        rankScore: 60 + Math.min(stat.renderCount, 20),
+      });
+    }
+
+    // Dynamic low CD-MER (wasteful rendering) diagnostic action
+    if (stat.cdCount && stat.cdCount >= 5 && stat.cdMer !== undefined && stat.cdMer < 25) {
+      actions.push({
+        id: `render-cd-mer-low-${stat.componentName}`,
+        kind: 'render-hotspot',
+        title: `Low Change Detection Efficiency Ratio (CD-MER: ${stat.cdMer.toFixed(1)}%) in ${stat.componentName}`,
+        componentName: stat.componentName,
+        source: stat.componentName,
+        confidence: stat.cdCount >= 10 ? 'High' : 'Medium',
+        evidence: `CD-MER efficiency ratio is ${stat.cdMer.toFixed(1)}%. Checked ${stat.cdCount} times by change detection, but only produced ${stat.mutationCount} DOM mutations. Checks are predominantly wasteful.`,
+        difficulty: 'Easy',
+        expectedGain: 'Large',
+        suggestedFix: 'Add ChangeDetectionStrategy.OnPush or convert view dependencies to Signals. This prevents Angular from checking the template when unaffected async tasks or parent views run change detection.',
+        rankScore: 82 + Math.min((100 - stat.cdMer) / 4, 18),
+        snippet: `@Component({\n  changeDetection: ChangeDetectionStrategy.OnPush\n})`,
+      });
+    }
+  }
+
+  return actions;
+}
+
+function getTopCauseFromBreakdown(breakdown: Record<string, number>): string {
+  let winner = 'zone';
+  let max = 0;
+  for (const [type, count] of Object.entries(breakdown)) {
+    if (count > max) { winner = type; max = count; }
+  }
+  return winner;
 }

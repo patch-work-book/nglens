@@ -1,6 +1,6 @@
 {
   "name": "nglens",
-  "version": "1.1.1",
+  "version": "1.1.4",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -11,6 +11,7 @@
     "build:extension": "vite build",
     "dev:panel": "ng build --watch --configuration development",
     "dev:extension": "vite build --watch",
+    "dev:watch-reload": "node scripts/chrome-reload.js",
     "test": "vitest --run"
   },
   "dependencies": {
@@ -22,8 +23,7 @@
     "@angular/platform-browser": "~22.0.2",
     "@angular/router": "~22.0.2",
     "rxjs": "^7.8.2",
-    "tslib": "^2.6.3",
-    "zone.js": "^0.16.2"
+    "tslib": "^2.6.3"
   },
   "devDependencies": {
     "@angular/build": "~22.0.3",

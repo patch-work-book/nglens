@@ -30,6 +30,7 @@ const MESSAGE_TYPES = [
   'DEGRADED_MODE',
   'ZONE_POLLUTION_EVENT',
   'ROUTE_CHANGED',
+  'FLOW_EVENT_BATCH',
 ] as const satisfies readonly MessageType[];
 
 const PAGE_SCRIPT_RESPONSE_TYPES = [
@@ -49,6 +50,7 @@ const PAGE_SCRIPT_ASYNC_EVENT_TYPES = [
   'TRACKING_STOPPED',
   'ERROR',
   'ZONE_POLLUTION_EVENT',
+  'FLOW_EVENT_BATCH',
 ] as const satisfies readonly MessageType[];
 
 const PANEL_COMMAND_TYPES = [

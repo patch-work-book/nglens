@@ -1,0 +1,36 @@
+.detail-cell {
+  background: color-mix(in srgb, var(--bg-secondary) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-primary) 55%, transparent);
+  border-radius: 4px;
+  padding: 8px;
+  min-width: 0;
+}
+
+.detail-cell span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.detail-cell strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 13px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  // Allow Tailwind text-color utilities to override the default color.
+  // The base rule has specificity (0,2,1) due to ViewEncapsulation scoping;
+  // adding a class here raises it to (0,3,1) so utilities win.
+  &.text-red-400    { color: var(--color-critical); }
+  &.text-amber-400  { color: var(--color-warning);  }
+  &.text-green-400  { color: var(--color-success);  }
+  &.text-green-300  { color: var(--color-success);  }
+  &.text-amber-300  { color: var(--color-warning);  }
+  &.text-gray-400   { color: var(--text-muted); }
+  &.font-bold       { font-weight: 700; }
+}

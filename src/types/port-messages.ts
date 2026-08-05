@@ -20,6 +20,8 @@ export type PortMessageType =
   | 'OVERLAY_HIDE'
   | 'ROUTE_CHANGED'
   | 'ZONE_POLLUTION_EVENT'
+  | 'FLOW_EVENT_BATCH'
+  | 'FRAME_LOADED'
   | 'ERROR';
 
 export interface PortMessage<T = unknown> {
@@ -27,4 +29,6 @@ export interface PortMessage<T = unknown> {
   payload: T;
   tabId?: number;
   timestamp: number;
+  frameId?: number;
+  frameUrl?: string;
 }

@@ -37,10 +37,17 @@ const mockDevtoolsPortService = {
   connect: vi.fn(),
 };
 
+// Mock ExecutionIntelligenceService
+const mockExecutionIntelligenceService = {
+  addRenderEvents: vi.fn(),
+  addFlowEvents: vi.fn(),
+  clear: vi.fn(),
+};
+
 // We mock the inject() calls by directly constructing the service
 // and patching its dependencies
 function createTestService(): { service: EventDispatcherService; state: PanelState } {
-  const state = new PanelState();
+  const state = new PanelState(mockExecutionIntelligenceService as any);
 
   // Create the service instance manually (bypassing Angular DI)
   const service = Object.create(EventDispatcherService.prototype) as EventDispatcherService;
@@ -48,6 +55,13 @@ function createTestService(): { service: EventDispatcherService; state: PanelSta
   // Inject the state directly via the private field
   Object.defineProperty(service, 'state', {
     value: state,
+    writable: true,
+    configurable: true,
+  });
+
+  // Inject the execution intelligence service
+  Object.defineProperty(service, '_executionIntelligence', {
+    value: mockExecutionIntelligenceService,
     writable: true,
     configurable: true,
   });
@@ -184,7 +198,7 @@ describe('EventDispatcherService', () => {
     });
 
     it('should keep render data after ROUTE_CHANGED by default', () => {
-      state.renderEvents.set([
+      state.rawRenderEvents.set([
         {
           componentName: 'DashboardComponent',
           timestamp: 100,
@@ -214,7 +228,7 @@ describe('EventDispatcherService', () => {
         description: 'Rendering frequently',
         timestamp: 100,
       });
-      state.renderEvents.set([
+      state.rawRenderEvents.set([
         {
           componentName: 'DashboardComponent',
           timestamp: 100,
@@ -222,7 +236,7 @@ describe('EventDispatcherService', () => {
           causes: [{ type: 'zone' }],
         },
       ]);
-      state.trackByIssues.set([
+      state.rawTrackByIssues.set([
         {
           id: 'trackby-1',
           componentName: 'ListComponent',
@@ -232,7 +246,7 @@ describe('EventDispatcherService', () => {
           recommendation: 'Add trackBy',
         },
       ]);
-      state.onPushRecommendations.set([
+      state.rawOnPushRecommendations.set([
         {
           component: 'CardComponent',
           score: 75,
@@ -241,7 +255,7 @@ describe('EventDispatcherService', () => {
           recommendation: 'Consider OnPush',
         },
       ]);
-      state.zonePollutionSources.set([
+      state.rawZonePollutionSources.set([
         {
           source: 'setInterval',
           type: 'macroTask',

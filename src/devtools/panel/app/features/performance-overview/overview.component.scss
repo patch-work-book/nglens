@@ -1,0 +1,306 @@
+/* ── TIER 1: Status Banner ── */
+.status-banner {
+  border-bottom: 1px solid color-mix(in srgb, var(--border-primary) 60%, transparent);
+  flex-shrink: 0;
+}
+.status-banner.banner-red {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-critical) 20%, transparent), var(--bg-primary));
+  border-left: 4px solid var(--color-critical);
+}
+.status-banner.banner-amber {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-warning) 15%, transparent), var(--bg-primary));
+  border-left: 4px solid var(--color-warning);
+}
+.status-banner.banner-green {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-success) 12%, transparent), var(--bg-primary));
+  border-left: 4px solid var(--color-success);
+}
+.status-banner.banner-neutral {
+  background: var(--bg-primary);
+  border-left: 4px solid var(--text-muted);
+}
+
+/* ── Health Score Card ── */
+.health-score-card {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-secondary) 50%, transparent), color-mix(in srgb, var(--bg-primary) 60%, transparent));
+  border: 1px solid color-mix(in srgb, var(--border-primary) 55%, transparent);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 4px;
+}
+
+.health-score-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.health-score-circle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bg-tertiary) 60%, transparent);
+  border: 2px solid color-mix(in srgb, var(--border-primary) 70%, transparent);
+  flex-shrink: 0;
+}
+
+.health-score-number {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.health-score-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 3px;
+}
+
+.health-score-bar {
+  flex: 1;
+  height: 20px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-tertiary) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-primary) 50%, transparent);
+  overflow: hidden;
+  position: relative;
+}
+
+.health-score-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 300ms ease;
+  box-shadow: inset 0 0 8px color-mix(in srgb, currentColor 20%, transparent);
+}
+
+
+.banner-metric {
+  min-width: 44px;
+}
+.banner-metric strong {
+  display: block;
+  font-size: 15px;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.banner-metric span {
+  display: block;
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-top: 1px;
+}
+
+/* ── CTA Buttons ── */
+.cta-button {
+  border: 1px solid color-mix(in srgb, var(--border-primary) 75%, transparent);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 65%, transparent);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 10px;
+  transition: background 120ms ease, border-color 120ms ease;
+  cursor: pointer;
+}
+.cta-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-tertiary) 85%, transparent);
+  border-color: color-mix(in srgb, var(--color-api) 55%, transparent);
+  color: var(--text-primary);
+}
+.cta-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.cta-button.primary {
+  background: color-mix(in srgb, var(--color-api) 20%, transparent);
+  border-color: color-mix(in srgb, var(--color-api) 50%, transparent);
+  color: var(--color-info);
+}
+.cta-button.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-api) 35%, transparent);
+  border-color: color-mix(in srgb, var(--color-api) 70%, transparent);
+}
+.cta-button.muted {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-primary) 45%, transparent);
+}
+
+/* ── TIER 2: Hint Cards (collapsible) ── */
+.hint-card {
+  background: color-mix(in srgb, var(--bg-primary) 50%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-primary) 50%, transparent);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.hint-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 100ms;
+  text-align: left;
+}
+.hint-header:hover {
+  background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+}
+.hint-icon {
+  font-size: 9px;
+  flex-shrink: 0;
+  width: 12px;
+}
+.hint-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  flex-shrink: 0;
+  min-width: 60px;
+}
+.hint-badge {
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.hint-go {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-info);
+  background: color-mix(in srgb, var(--color-api) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-api) 30%, transparent);
+  border-radius: 3px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 100ms;
+}
+.hint-go:hover {
+  background: color-mix(in srgb, var(--color-api) 30%, transparent);
+}
+.hint-body {
+  padding: 8px 12px 12px 32px;
+  border-top: 1px solid color-mix(in srgb, var(--border-primary) 40%, transparent);
+}
+
+/* ── TIER 3: Evidence Tabs ── */
+.tab-button {
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  transition: color 120ms, border-color 120ms;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tab-button:hover {
+  color: var(--text-secondary);
+}
+.tab-button.tab-active {
+  color: var(--color-info);
+  border-bottom-color: var(--color-api);
+}
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-tertiary) 70%, transparent);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+/* ── Shared ── */
+.metric-cell {
+  background: color-mix(in srgb, var(--bg-secondary) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-primary) 55%, transparent);
+  border-radius: 4px;
+  padding: 8px;
+}
+.metric-cell span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.metric-cell strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 14px;
+  margin-top: 2px;
+
+  &.text-red-400    { color: var(--color-critical); }
+  &.text-amber-400  { color: var(--color-warning);  }
+  &.text-green-400  { color: var(--color-success);  }
+  &.text-gray-400   { color: var(--text-muted); }
+  &.font-bold       { font-weight: 700; }
+}
+.metric-cell small {
+  display: block;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.rank-pill {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--border-primary) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 55%, transparent);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.evidence-chip {
+  border: 1px solid color-mix(in srgb, var(--border-primary) 55%, transparent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-primary) 45%, transparent);
+  font-size: 11px;
+}
+
+.badge {
+  border: 1px solid color-mix(in srgb, var(--border-primary) 55%, transparent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.change-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--border-primary) 60%, transparent);
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 800;
+}

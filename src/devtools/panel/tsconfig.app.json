@@ -18,7 +18,17 @@
     "noFallthroughCasesInSwitch": true,
     "isolatedModules": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": "../../..",
+    "paths": {
+      "@nglens/types/*": ["src/types/*"],
+      "@nglens/types": ["src/types"],
+      "@nglens/utils/*": ["src/utils/*"],
+      "@nglens/utils": ["src/utils"],
+      "@nglens/analyzers/*": ["src/analyzers/*"],
+      "@nglens/analyzers": ["src/analyzers"],
+      "@nglens/instrumentation/*": ["src/instrumentation/*"]
+    }
   },
   "files": [
     "main.ts"

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ngLens",
-  "version": "1.1.1",
-  "description": "Find Angular performance problems and learn how to fix them. All analysis is local. No data leaves the browser.",
+  "version": "1.2.0",
+  "description": "See WHEN things happen, WHY components re-render. Find bottlenecks instantly. All analysis is local.",
   "author": "ngLens Contributors",
   "homepage_url": "https://github.com/gowtham-labs/nglens",
 
@@ -30,6 +30,7 @@
 
   "action": {
     "default_title": "ngLens - Angular Runtime Health Monitor",
+    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -48,7 +49,7 @@
       "matches": ["http://*/*", "https://*/*"],
       "js": ["content.js"],
       "run_at": "document_idle",
-      "all_frames": false
+      "all_frames": true
     }
   ],
 

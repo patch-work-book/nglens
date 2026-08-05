@@ -247,6 +247,18 @@ function initialize(): void {
 
   // Listen for messages from the background worker / popup
   listenFromExtension(handleExtensionMessage);
+
+  // Notify background about this frame load
+  sendToBackground({
+    type: 'FRAME_LOADED',
+    payload: {
+      url: window.location.href,
+      isTop: window === window.top,
+    },
+    timestamp: Date.now(),
+  }).catch(() => {
+    // Background not ready; silently ignore
+  });
 }
 
 // Start immediately

@@ -1,7 +1,7 @@
-import { Component, inject, computed } from '@angular/core';
+import { Component, inject, computed, ChangeDetectionStrategy } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
-import { displayName } from '../../utils/display-name';
+import { displayName, formatRenderRate } from '../../utils/display-name';
 import type { ComponentStats } from '../../../../../types/panel';
 import type { RenderCause } from '../../../../../types/render-events';
 
@@ -17,126 +17,10 @@ interface CauseEntry {
 @Component({
   selector: 'app-why-panel',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NgClass],
-  template: `
-    <div class="h-full flex flex-col p-4 bg-gray-900">
-      <div class="flex items-start justify-between gap-3 mb-4">
-        <div class="min-w-0">
-          <h2 class="text-sm font-bold text-white truncate">{{ componentDisplayName() }}</h2>
-          <p class="text-xs text-gray-400 mt-1">{{ renderExplanation() }}</p>
-        </div>
-        <button
-          type="button"
-          class="text-xs text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-gray-700"
-          (click)="dismiss()"
-        >Dismiss</button>
-      </div>
-
-      @if (!selectedStats()) {
-        <div class="border border-gray-800 rounded p-3 bg-gray-800/45 text-sm text-gray-500">
-          No render statistics are available for this selection yet.
-        </div>
-      } @else {
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-          <div class="detail-cell">
-            <span>Total renders</span>
-            <strong>{{ selectedStats()!.renderCount }}</strong>
-          </div>
-          <div class="detail-cell">
-            <span>Recent renders</span>
-            <strong>{{ recentRenderCount() }}</strong>
-          </div>
-          <div class="detail-cell">
-            <span>Render rate</span>
-            <strong>{{ selectedStats()!.rendersPerMinute.toFixed(1) }}/min</strong>
-          </div>
-          <div class="detail-cell">
-            <span>Avg duration</span>
-            <strong>{{ selectedStats()!.averageDuration.toFixed(1) }}ms</strong>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4">
-          <div class="detail-cell">
-            <span>Render cause</span>
-            <strong>{{ causeLabel(dominantCause()) }}</strong>
-          </div>
-          <div class="detail-cell">
-            <span>Trigger source</span>
-            <strong>{{ triggerSource() }}</strong>
-          </div>
-          <div class="detail-cell">
-            <span>Parent cascade</span>
-            <strong [ngClass]="cascadeClass()">{{ cascadeIndicator() }}</strong>
-          </div>
-        </div>
-
-        <div class="border border-gray-800 rounded bg-gray-800/45 p-3 mb-4">
-          <div class="flex items-center justify-between gap-3 mb-2">
-            <span class="text-[10px] text-gray-400 uppercase font-bold">Cause evidence</span>
-            <span class="text-[10px] px-1.5 py-0.5 rounded border" [ngClass]="confidenceClass()">
-              {{ confidenceLabel() }} confidence
-            </span>
-          </div>
-
-          <div class="space-y-2">
-            @for (entry of causesBreakdown(); track entry.type) {
-              <div>
-                <div class="flex items-center justify-between gap-2 text-xs mb-1">
-                  <span [ngClass]="entry.isDominant ? 'text-gray-100 font-semibold' : 'text-gray-400'">
-                    {{ entry.label }}
-                  </span>
-                  <span class="text-gray-500">{{ entry.count }} renders</span>
-                </div>
-                <div class="h-1.5 bg-gray-900 rounded overflow-hidden">
-                  <div
-                    class="h-full rounded"
-                    [ngClass]="causeBarClass(entry.type)"
-                    [style.width.%]="entry.percent"
-                  ></div>
-                </div>
-                @if (entry.source !== 'No source captured') {
-                  <div class="text-[10px] text-gray-500 mt-1">Source: {{ entry.source }}</div>
-                }
-              </div>
-            }
-          </div>
-        </div>
-
-        <div class="border border-gray-800 rounded bg-gray-800/45 p-3">
-          <span class="text-[10px] text-gray-400 uppercase font-bold block mb-1">Likely fix</span>
-          <p class="text-xs text-gray-200 leading-relaxed">{{ suggestedFix() }}</p>
-        </div>
-      }
-    </div>
-  `,
-  styles: [`
-    .detail-cell {
-      background: rgb(31 41 55 / 0.45);
-      border: 1px solid rgb(55 65 81 / 0.55);
-      border-radius: 4px;
-      padding: 8px;
-      min-width: 0;
-    }
-
-    .detail-cell span {
-      display: block;
-      color: #9ca3af;
-      font-size: 10px;
-      text-transform: uppercase;
-      font-weight: 700;
-    }
-
-    .detail-cell strong {
-      display: block;
-      color: #f3f4f6;
-      font-size: 13px;
-      margin-top: 2px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-  `],
+  templateUrl: './why-panel.component.html',
+  styleUrl: './why-panel.component.scss',
 })
 export class WhyPanelComponent {
   private readonly state = inject(PanelState);
@@ -155,6 +39,48 @@ export class WhyPanelComponent {
     const selected = this.state.selectedComponent();
     if (!selected) return null;
     return this.state.componentStats().find(stats => stats.componentName === selected) ?? null;
+  });
+
+  // ── Render Frequency enrichment ──
+  readonly renderFrequencyClass = computed(() => {
+    const freq = this.selectedStats()?.renderFrequency ?? 0;
+    if (freq <= 0) return 'text-gray-400';
+    if (freq < 1.0) return 'text-green-400';
+    if (freq < 2.0) return 'text-gray-200';
+    if (freq < 5.0) return 'text-amber-400';
+    return 'text-red-400 font-bold';
+  });
+
+  readonly renderFrequencyRating = computed<'Idle' | 'Optimal' | 'Normal' | 'Watch' | 'Critical'>(() => {
+    const freq = this.selectedStats()?.renderFrequency ?? 0;
+    if (freq <= 0) return 'Idle';
+    if (freq < 1.0) return 'Optimal';
+    if (freq < 2.0) return 'Normal';
+    if (freq < 5.0) return 'Watch';
+    return 'Critical';
+  });
+
+  readonly renderFrequencyRatingClass = computed(() => {
+    switch (this.renderFrequencyRating()) {
+      case 'Optimal':  return 'text-green-400 bg-green-500/15 border-green-500/30';
+      case 'Normal':   return 'text-gray-300 bg-gray-700/25 border-gray-600/30';
+      case 'Watch':    return 'text-amber-400 bg-amber-500/15 border-amber-500/30';
+      case 'Critical': return 'text-red-400 bg-red-500/15 border-red-500/30';
+      default:         return 'text-gray-500 bg-gray-800/25 border-gray-700/30';
+    }
+  });
+
+  /**
+   * Wall-clock render rate (renders per second) over the component's observed
+   * lifetime. Complements the trigger-based frequency with a time-anchored view
+   * developers find intuitive for hot-component triage.
+   */
+  readonly rendersPerSec = computed<number | null>(() => {
+    const stats = this.selectedStats();
+    if (!stats || stats.renderCount === 0) return null;
+    const spanMs = stats.lastSeen - stats.firstSeen;
+    if (spanMs < 500) return null; // too short a window for a meaningful rate
+    return stats.renderCount / (spanMs / 1000);
   });
 
   readonly recentRenderCount = computed(() => {
@@ -216,8 +142,19 @@ export class WhyPanelComponent {
   readonly renderExplanation = computed(() => {
     const stats = this.selectedStats();
     if (!stats) return 'Select a rendered component to inspect cause evidence.';
-    return `${stats.renderCount} renders at ${stats.rendersPerMinute.toFixed(1)}/min, mostly from ${causeLabel(this.dominantCause())}.`;
+    let explanation = `${stats.renderCount} renders (${formatRenderRate(stats.renderFrequency)}), mostly from ${causeLabel(this.dominantCause())}.`;
+    if (stats.cdCount && stats.cdCount > 0) {
+      explanation += ` CD-MER CD efficiency is ${stats.cdMer?.toFixed(1)}% (${stats.mutationCount}/${stats.cdCount} cycles mutated).`;
+    }
+    return explanation;
   });
+
+  cdMerClass(cdMer?: number): string {
+    if (cdMer === undefined) return 'text-gray-400';
+    if (cdMer < 25) return 'text-red-400 font-bold';
+    if (cdMer < 60) return 'text-amber-400';
+    return 'text-green-400';
+  }
 
   readonly confidenceLabel = computed(() => {
     const events = this.selectedEvents();
@@ -230,6 +167,10 @@ export class WhyPanelComponent {
 
   dismiss(): void {
     this.state.selectedComponent.set(null);
+  }
+
+  formatRenderRate(renderFrequency: number): string {
+    return formatRenderRate(renderFrequency);
   }
 
   causeLabel(cause: RenderCause['type'] | null): string {
@@ -297,7 +238,7 @@ export function getSuggestedFix(
   dominantCause: RenderCause['type'] | null,
   stats?: ComponentStats | null
 ): string {
-  if (stats?.rendersPerMinute && stats.rendersPerMinute > 100) {
+  if (stats?.renderFrequency && stats.renderFrequency > 100) {
     return 'This component renders very frequently. Check parent state churn, list trackBy coverage, and repeated async callbacks before micro-optimizing the template.';
   }
 

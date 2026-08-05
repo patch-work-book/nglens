@@ -17,19 +17,30 @@ export interface Issue {
 export interface ComponentStats {
   componentName: string;
   renderCount: number;
-  rendersPerMinute: number;
+  renderFrequency: number;
   averageDuration: number;
   totalDuration: number;
   causesBreakdown: Record<RenderCause['type'], number>;
   firstSeen: number;
   lastSeen: number;
+  // CD-MER metrics
+  cdCount?: number;
+  mutationCount?: number;
+  cdMer?: number;
+  // Trigger metrics
+  triggerCount?: number;
+  // Custom template metrics from Ivy context
+  totalTemplateBindings?: number;
+  totalOutputListeners?: number;
+  hasHighFrequencyZonePollution?: boolean;
+  highFrequencyEvents?: string[];
 }
 
 export interface ComponentHotspot {
   componentName: string;
   score: number;
   renderCount: number;
-  rendersPerMinute: number;
+  renderFrequency: number;
   averageDuration: number;
   totalDuration: number;
   primaryCause: RenderCause['type'] | 'unknown';
@@ -58,7 +69,7 @@ export interface PerformanceSnapshot {
     issues: number;
     components: number;
     renders: number;
-    rendersPerMinute: number;
+    renderFrequency: number;
     averageRenderDuration: number;
     totalRenderDuration: number;
     leaks: number;
@@ -73,5 +84,5 @@ export interface SnapshotComparison {
   delta: PerformanceSnapshot['metrics'];
 }
 
-export type HeatmapSortField = 'renderCount' | 'rendersPerMinute' | 'averageDuration' | 'totalDuration';
+export type HeatmapSortField = 'renderCount' | 'renderFrequency' | 'averageDuration' | 'totalDuration';
 export type SortDirection = 'asc' | 'desc';

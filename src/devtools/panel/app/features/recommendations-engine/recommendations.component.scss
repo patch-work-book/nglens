@@ -1,0 +1,76 @@
+.summary-cell {
+  background: color-mix(in srgb, var(--bg-secondary) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-primary) 55%, transparent);
+  border-radius: 4px;
+  padding: 4px 10px;
+  min-width: 0;
+  text-align: center;
+}
+
+.summary-cell span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.summary-cell strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 12px;
+  margin-top: 1px;
+}
+
+.badge,
+.kind-pill {
+  border: 1px solid color-mix(in srgb, var(--border-primary) 55%, transparent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.filter-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.filter-btn-active {
+  background: color-mix(in srgb, var(--color-api) 20%, transparent);
+  border-color: color-mix(in srgb, var(--color-api) 50%, transparent);
+  color: var(--color-info);
+}
+
+.filter-btn-inactive {
+  background: color-mix(in srgb, var(--bg-secondary) 45%, transparent);
+  border-color: color-mix(in srgb, var(--border-primary) 55%, transparent);
+  color: var(--text-muted);
+}
+
+.filter-btn-inactive:hover {
+  color: var(--text-secondary);
+  border-color: color-mix(in srgb, var(--border-primary) 70%, transparent);
+}
+
+.snippet {
+  margin: 0;
+  max-height: 100px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-primary) 75%, transparent);
+  border-radius: 4px;
+  color: var(--color-info);
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 8px;
+}

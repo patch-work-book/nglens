@@ -1,0 +1,367 @@
+<div class="h-full overflow-auto flex flex-col">
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       TIER 1: STATUS BANNER — Immediate health at a glance
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <section class="status-banner" [ngClass]="healthSummary().bannerClass">
+    <div class="flex items-center gap-3 px-4 py-2.5">
+      <span class="text-lg flex-shrink-0">{{ healthSummary().icon }}</span>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <h2 class="text-sm font-bold" [ngClass]="healthSummary().className">
+            {{ healthSummary().label }}
+          </h2>
+          @if (bannerIssueSummary(); as summary) {
+            <span class="text-xs text-gray-300 truncate">— {{ summary }}</span>
+          }
+        </div>
+        <p class="text-[11px] text-gray-400 mt-0.5 truncate">{{ healthSummary().detail }}</p>
+      </div>
+
+      <!-- Key numbers -->
+      <div class="flex gap-3 text-center flex-shrink-0">
+        @if (healthScore() !== null) {
+          <div class="banner-metric">
+            <strong [ngClass]="healthScoreClass()">{{ healthScore() }}</strong>
+            <span>Health</span>
+          </div>
+        }
+        <div class="banner-metric">
+          <strong [ngClass]="scoreClass(highestHotspotScore())">{{ highestHotspotScore() }}</strong>
+          <span>Risk</span>
+        </div>
+        <div class="banner-metric">
+          <strong>{{ issuesCount() }}</strong>
+          <span>Issues</span>
+        </div>
+        <div class="banner-metric">
+          <strong>{{ actions().length }}</strong>
+          <span>Fixes</span>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      @if (hasActivity() && topHotspots().length > 0) {
+        <div class="flex gap-1.5 flex-shrink-0">
+          <button type="button" class="cta-button primary text-[10px] py-1 px-2" (click)="navigateToComponent(topHotspots()[0].componentName)">
+            Investigate
+          </button>
+          <button type="button" class="cta-button text-[10px] py-1 px-2" (click)="goToTab('recommendations')">
+            Recommendations
+          </button>
+        </div>
+      }
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       TIER 2: HINTS — Collapsible, one-line summaries pointing to the right tab
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <section class="flex-1 p-3 space-y-2 overflow-auto">
+
+    @if (!hasActivity()) {
+      <div class="border border-dashed border-gray-700 rounded p-5 bg-gray-800/30 text-center">
+        <div class="text-sm text-gray-300 font-medium">No tracking data yet</div>
+        <p class="text-xs text-gray-400 mt-1">
+          Click <strong>Start</strong>, use your Angular page, then return here.
+        </p>
+      </div>
+    } @else {
+
+      <!-- Health Score Card -->
+      @if (healthScore() !== null) {
+        <div class="health-score-card">
+          <div class="health-score-content">
+            <div class="health-score-circle">
+              <div class="health-score-number" [ngClass]="healthScoreClass()">{{ healthScore() }}</div>
+              <div class="health-score-label">{{ healthScoreLabel() }}</div>
+            </div>
+            <div class="health-score-bar">
+              <div class="health-score-fill" [ngClass]="healthScoreBarClass()" [style.width.%]="healthScore()"></div>
+            </div>
+          </div>
+        </div>
+      }
+
+
+      <!-- HINT: Top Issue -->
+      @if (topHotspots()[0]; as hotspot) {
+        <div class="hint-card">
+          <button type="button" class="hint-header" (click)="toggleSection('issue')">
+            <span class="hint-icon" [ngClass]="scoreClass(hotspot.score)">{{ expanded().issue ? '▼' : '▶' }}</span>
+            <span class="hint-label">Top Issue</span>
+            <span class="flex-1 text-xs text-gray-200 truncate">
+              {{ displayName(hotspot.componentName) }} — {{ formatRenderRate(hotspot.renderFrequency) }} from {{ formatCauses(hotspot.primaryCause) }}
+            </span>
+            <span class="hint-badge" [ngClass]="scoreClass(hotspot.score)">{{ hotspot.score }}/100</span>
+            <button type="button" class="hint-go" (click)="navigateToComponentInRenderTab(hotspot.componentName); $event.stopPropagation()">Go →</button>
+          </button>
+          @if (expanded().issue) {
+            <div class="hint-body">
+              <div class="grid grid-cols-4 gap-3 text-xs">
+                <div><span class="text-gray-500">Renders</span><br><strong>{{ hotspot.renderCount }}</strong></div>
+                <div><span class="text-gray-500">Rate</span><br><strong [ngClass]="renderFrequencyClass(hotspot.renderFrequency)">{{ formatRenderRate(hotspot.renderFrequency) }}</strong></div>
+                <div><span class="text-gray-500">Avg Cost</span><br><strong>{{ hotspot.averageDuration.toFixed(1) }}ms</strong></div>
+                <div><span class="text-gray-500">Cause</span><br><strong [ngClass]="scoreClass(hotspot.score)">{{ formatCauses(hotspot.primaryCause) }}</strong></div>
+              </div>
+              @if (topIssue(); as issue) {
+                <p class="text-[11px] text-gray-400 mt-2">{{ issue.description }}</p>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      <!-- HINT: Quick Fix -->
+      @if (topAction(); as action) {
+        <div class="hint-card">
+          <button type="button" class="hint-header" (click)="toggleSection('fix')">
+            <span class="hint-icon text-green-400">{{ expanded().fix ? '▼' : '▶' }}</span>
+            <span class="hint-label">Fix</span>
+            <span class="flex-1 text-xs text-gray-200 truncate">
+              {{ action.title }} → {{ displayName(action.componentName) }}
+            </span>
+            <span class="badge" [ngClass]="gainClass(action.expectedGain)">{{ action.expectedGain }}</span>
+            <button type="button" class="hint-go" (click)="goToTab('recommendations'); $event.stopPropagation()">Go →</button>
+          </button>
+          @if (expanded().fix) {
+            <div class="hint-body">
+              <div class="flex gap-4 text-xs">
+                <span>Difficulty: <strong [ngClass]="difficultyClass(action.difficulty)">{{ action.difficulty }}</strong></span>
+                <span>Confidence: <strong [ngClass]="confidenceClass(action.confidence)">{{ action.confidence }}</strong></span>
+              </div>
+              <p class="text-[11px] text-gray-400 mt-1">{{ action.suggestedFix }}</p>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- HINT: Memory -->
+      @if (memoryRiskCount() > 0) {
+        <div class="hint-card">
+          <button type="button" class="hint-header" (click)="goToTab('memory')">
+            <span class="hint-icon text-red-400">⚠</span>
+            <span class="hint-label">Memory</span>
+            <span class="flex-1 text-xs text-gray-200">{{ memoryRiskCount() }} cleanup risk(s) — missing teardown</span>
+            <button type="button" class="hint-go">Go →</button>
+          </button>
+        </div>
+      }
+
+      <!-- HINT: Environment -->
+      <div class="hint-card">
+        <button type="button" class="hint-header" (click)="toggleSection('env')">
+          <span class="hint-icon" [ngClass]="environmentHealthClass()">{{ expanded().env ? '▼' : '▶' }}</span>
+          <span class="hint-label">Environment</span>
+          <span class="flex-1 text-xs truncate" [ngClass]="environmentHealthClass()">{{ environmentProfile() }}</span>
+          <span class="text-[10px] text-gray-500">{{ idleCdRate() }}/sec idle · {{ activeZoneSources().length }} zone</span>
+        </button>
+        @if (expanded().env) {
+          <div class="hint-body">
+            <div class="grid grid-cols-3 gap-3 text-xs">
+              <div><span class="text-gray-500">Idle CD Rate</span><br><strong>{{ idleCdRate() }}/sec</strong></div>
+              <div><span class="text-gray-500">Zone Pollution</span><br><strong>{{ activeZoneSources().length }} source(s)</strong></div>
+              <div><span class="text-gray-500">Active Streams</span><br><strong>{{ state.interactionProfiles().length }}</strong></div>
+            </div>
+            @if (activeZoneSources().length > 0) {
+              <div class="mt-2 text-[11px] text-gray-400">
+                Sources: {{ activeZoneSources()[0].source }}@if (activeZoneSources().length > 1) {, +{{ activeZoneSources().length - 1 }} more}
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════════════════
+           TIER 3: EVIDENCE TABS — Hotspots list + Compare Runs
+           ═══════════════════════════════════════════════════════════════════ -->
+      <div class="border border-gray-800 rounded bg-gray-900 overflow-hidden">
+        <!-- Tab bar -->
+        <div class="flex border-b border-gray-800 overflow-x-auto">
+          @for (tab of evidenceTabs; track tab.id) {
+            <button
+              type="button"
+              class="tab-button"
+              [ngClass]="{'tab-active': activeEvidenceTab() === tab.id}"
+              (click)="activeEvidenceTab.set(tab.id)"
+            >
+              {{ tab.label }}
+              @if (tab.count() > 0) {
+                <span class="tab-badge">{{ tab.count() }}</span>
+              }
+            </button>
+          }
+        </div>
+
+        <!-- Tab content -->
+        <div class="p-4">
+
+          <!-- HOTSPOTS TAB -->
+          @if (activeEvidenceTab() === 'hotspots') {
+            @if (state.componentHotspots().length === 0) {
+              <div class="text-sm text-gray-500">No component hotspots in this recording.</div>
+            } @else {
+              <div class="divide-y divide-gray-800">
+                @for (hotspot of state.componentHotspots().slice(0, 10); track hotspot.componentName; let i = $index) {
+                  <button type="button" (click)="selectHotspot(hotspot)" class="w-full text-left py-3 hover:bg-gray-800/40 transition-colors flex items-start gap-3">
+                    <div class="rank-pill" [ngClass]="scoreClass(hotspot.score)">{{ i + 1 }}</div>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <div class="text-sm font-medium text-gray-100 truncate flex items-center gap-2">
+                            <span>{{ displayName(hotspot.componentName) }}</span>
+                          </div>
+                          <div class="text-xs text-gray-500 mt-0.5 truncate">{{ hotspot.reasons.join(', ') }}</div>
+                        </div>
+                        <div class="text-right flex-shrink-0">
+                          <div class="text-sm font-bold" [ngClass]="scoreClass(hotspot.score)">{{ hotspot.score }}/100</div>
+                          <div class="text-[10px] text-gray-500">{{ causeLabel(hotspot.primaryCause) }}</div>
+                        </div>
+                      </div>
+                      <div class="flex gap-2 mt-2 text-xs">
+                        <span class="evidence-chip">{{ hotspot.renderCount }} renders</span>
+                        <span class="evidence-chip" [ngStyle]="renderFrequencyChipStyle(hotspot.renderFrequency)">{{ formatRenderRate(hotspot.renderFrequency) }}</span>
+                        <span class="evidence-chip">{{ hotspot.averageDuration.toFixed(1) }}ms avg</span>
+                      </div>
+                    </div>
+                  </button>
+                }
+              </div>
+            }
+          }
+
+          <!-- ENVIRONMENT TAB -->
+          @if (activeEvidenceTab() === 'environment') {
+            <div class="space-y-4">
+              <!-- Raw metrics (moved from top-level) -->
+              <div>
+                <div class="text-xs font-semibold text-gray-400 uppercase mb-2">Recording Metrics</div>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  <div class="metric-cell cursor-help" title="Total re-renders captured across all active components since tracking started.">
+                    <span>Recorded renders</span>
+                    <strong>{{ state.renderEvents().length }}</strong>
+                    <small>events captured</small>
+                  </div>
+                  <div class="metric-cell cursor-help" title="The number of unique Angular components discovered and tracked in the active DOM tree.">
+                    <span>Components seen</span>
+                    <strong>{{ componentsCount() }}</strong>
+                    <small>rendered at least once</small>
+                  </div>
+                  <div class="metric-cell cursor-help" title="System-wide trigger-based frequency: renders per async trigger (route change, interaction, microtask, HTTP). Optimal <1.0×, Normal 1–2×, Watch 2–5×, Critical ≥5×.">
+                    <span>Render frequency</span>
+                    <strong [ngClass]="renderFrequencyClass(renderRateNumber())">{{ formatRenderRate(renderRateNumber()) }}</strong>
+                    <div class="flex items-center gap-1.5 mt-1">
+                      <span class="text-[9px] px-1 py-0.5 rounded border font-semibold" [ngClass]="renderFrequencyRatingClass(renderRateNumber())">{{ renderFrequencyRating(renderRateNumber()) }}</span>
+                      <span class="text-[10px] text-gray-500">all components</span>
+                    </div>
+                  </div>
+                  <div class="metric-cell cursor-help" title="The average CPU execution duration of a single component render pass.">
+                    <span>Avg render cost</span>
+                    <strong>{{ averageRenderDuration() }}ms</strong>
+                    <small>per captured render</small>
+                  </div>
+                  <div class="metric-cell cursor-help" title="RxJS subscriptions, timers, or event listeners left context-active when components were destroyed, flagging potential leaks.">
+                    <span>Cleanup risks</span>
+                    <strong>{{ memoryRiskCount() }}</strong>
+                    <small>missing teardown</small>
+                  </div>
+                  <div class="metric-cell cursor-help" title="The count of user interaction cycles (clicks, inputs, keypresses) that triggered downstream rendering cascades inside Zone.js.">
+                    <span>Action windows</span>
+                    <strong>{{ interactionsCount() }}</strong>
+                    <small>render bursts grouped</small>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Zone pollution details -->
+              @if (activeZoneSources().length > 0) {
+                <div>
+                  <div class="text-xs font-semibold text-gray-400 uppercase mb-2">Zone Pollution Sources</div>
+                  <div class="space-y-2">
+                    @for (source of activeZoneSources(); track source.source) {
+                      <div class="p-2 border border-amber-500/30 bg-amber-500/5 rounded">
+                        <div class="text-xs font-medium text-amber-300">{{ source.source }}</div>
+                        <div class="text-[11px] text-gray-400 mt-1">
+                          {{ formatRenderRate(source.cdCyclesPerMinute) }} CD cycles
+                          &middot; Severity: {{ source.severity }}
+                        </div>
+                        @if (source.fixSuggestion) {
+                          <div class="text-[11px] text-gray-300 mt-1">Fix: {{ source.fixSuggestion }}</div>
+                        }
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+
+              <!-- Environment recommendation -->
+              <div>
+                <div class="text-xs font-semibold text-gray-400 uppercase mb-2">System Recommendation</div>
+                <p class="text-xs text-gray-300 leading-relaxed">{{ state.environmentRecommendation() }}</p>
+              </div>
+            </div>
+          }
+
+          <!-- COMPARE RUNS TAB -->
+          @if (activeEvidenceTab() === 'compare') {
+            <div class="space-y-4">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <p class="text-xs text-gray-500">{{ comparisonStatus() }}</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <button type="button" class="cta-button" (click)="saveBaseline()">Save Baseline</button>
+                  <button
+                    type="button"
+                    class="cta-button"
+                    [class.opacity-50]="state.snapshots().length === 0"
+                    [disabled]="state.snapshots().length === 0"
+                    (click)="captureCurrent()"
+                  >Capture Current</button>
+                  @if (state.snapshots().length > 0) {
+                    <button type="button" class="cta-button muted" (click)="resetComparison()">Reset</button>
+                  }
+                </div>
+              </div>
+
+              @if (state.latestComparison(); as comparison) {
+                <table class="w-full text-xs">
+                  <thead>
+                    <tr class="text-gray-500 border-b border-gray-800">
+                      <th class="text-left py-2 px-2 font-medium">Metric</th>
+                      <th class="text-right py-2 px-2 font-medium">{{ comparison.baseline.label }}</th>
+                      <th class="text-right py-2 px-2 font-medium">{{ comparison.current.label }}</th>
+                      <th class="text-right py-2 px-2 font-medium">Change</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (metric of comparisonMetrics(comparison); track metric.label) {
+                      <tr class="border-b border-gray-900 last:border-b-0">
+                        <td class="py-2 px-2 text-gray-300 font-medium cursor-help" [attr.title]="getMetricTooltip(metric.label)">{{ metric.label }}</td>
+                        <td class="py-2 px-2 text-right text-gray-400">{{ metric.baseline }}</td>
+                        <td class="py-2 px-2 text-right text-gray-200">{{ metric.current }}</td>
+                        <td class="py-2 px-2 text-right" [title]="metricWhyLabel(metric.label, metric.verdict)">
+                          <span class="change-pill" [ngClass]="changeClass(metric.verdict)">{{ metric.delta }}</span>
+                          <span class="text-[10px] font-medium ml-1" [ngClass]="verdictClass(metric.verdict)">{{ verdictLabel(metric.verdict) }}</span>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              } @else {
+                <div class="text-xs text-gray-400 bg-gray-800/40 border border-gray-700/50 rounded p-3 space-y-2">
+                  <div class="font-semibold text-gray-200">How to use Compare Runs:</div>
+                  <ol class="space-y-1 list-decimal list-inside">
+                    <li><strong>Save Baseline</strong> — record current metrics as reference</li>
+                    <li><strong>Make Changes</strong> — modify your component (OnPush, fix leak, etc.)</li>
+                    <li><strong>Capture Current</strong> — record metrics after changes</li>
+                    <li><strong>Review</strong> — green = improved, red = regressed</li>
+                  </ol>
+                </div>
+              }
+            </div>
+          }
+
+        </div>
+      </div>
+    }
+  </section>
+</div>

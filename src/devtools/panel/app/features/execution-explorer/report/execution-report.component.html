@@ -1,0 +1,80 @@
+<div class="report">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-top">
+      <span class="header-title">Execution Timeline</span>
+      <div class="header-actions">
+        @if (availableFilters().length > 0) {
+          <select class="filter-dropdown" [value]="activeFilter()" (change)="onFilterChange($event)">
+            <option value="all">All Types</option>
+            @for (opt of availableFilters(); track opt.key) {
+              <option [value]="opt.key">{{ opt.label }}</option>
+            }
+          </select>
+        }
+      </div>
+      <span class="header-total">{{ formatTime(duration()) }}</span>
+    </div>
+    <div class="header-meta">
+      {{ trigger() }} · {{ totalSteps() }} events · {{ uniqueComponents() }} components
+    </div>
+  </div>
+
+  <!-- Waterfall Timeline -->
+  @if (filteredWaterfall().length > 0) {
+    <div class="section">
+      <!-- Sticky timeline axis header - OUTSIDE scrollable container -->
+      <div class="waterfall-header">
+        <span class="wf-label">COMPONENT</span>
+        <div class="wf-timeline-axis">
+          <span>0ms</span>
+          <span>{{ formatTime(Math.round(duration() / 4)) }}</span>
+          <span>{{ formatTime(Math.round(duration() / 2)) }}</span>
+          <span>{{ formatTime(Math.round(duration() * 3 / 4)) }}</span>
+          <span>{{ formatTime(duration()) }}</span>
+        </div>
+        <span class="wf-dur-label">DURATION</span>
+      </div>
+
+      <div class="waterfall" (mouseleave)="onWaterfallMouseLeave()">
+        <div class="waterfall-content">
+          <!-- Vertical hover indicator line -->
+          @if (hoverLinePct() !== null) {
+            <div class="hover-line" [style.left.%]="hoverLinePct()">
+              <span class="hover-line-label">{{ hoverTimeLabel() }}</span>
+            </div>
+          }
+
+          @for (item of filteredWaterfall(); track item.id) {
+            <div class="wf-row" [class]="'type-' + item.type" [class.is-slow]="item.isSlow"
+                 [class.is-bottleneck]="bottleneckItem()?.id === item.id"
+                 [title]="item.name + ' — Started: ' + formatTime(item.startTime) + ' | Ended: ' + formatTime(item.endTime) + ' | Duration: ' + formatTime(item.duration)">
+              <span class="wf-name" [title]="item.name">
+                {{ item.name }}
+                @if (bottleneckItem()?.id === item.id) {
+                  <span class="bottleneck-tag">🔴 Bottleneck</span>
+                }
+              </span>
+              <div class="wf-bar-track" (mousemove)="onBarTrackHover($event)" (mouseleave)="onWaterfallMouseLeave()">
+                <!-- Timeline bar positioned by start time and sized by duration -->
+                <div class="wf-bar" [style.left.%]="item.startPct" [style.width.%]="item.widthPct">
+                </div>
+              </div>
+              <span class="wf-dur">{{ item.duration > 0 ? formatTime(item.duration) : '<1ms' }}</span>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Bottleneck -->
+  @if (bottleneck()) {
+    <div class="bottleneck">
+      <span class="bottleneck-icon">⚠</span>
+      <span class="bottleneck-text">{{ bottleneck() }}</span>
+    </div>
+  }
+
+</div>

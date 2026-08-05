@@ -20,6 +20,7 @@ import { SelectiveAnalyzer } from './selective-analyzer';
 import { TemplateExpressionTracker } from './template-expression-tracker';
 import { FreezeDetector } from './freeze-detector';
 import { ZonePollutionDetector } from './zone-pollution-detector';
+import { FlowTracker } from './flow-tracker';
 import { checkAngularVersion } from './version-check';
 
 /** Event name used by the content script to dispatch commands to the page script */
@@ -37,6 +38,7 @@ const selectiveAnalyzer = new SelectiveAnalyzer();
 const templateExpressionTracker = new TemplateExpressionTracker(null);
 const freezeDetector = new FreezeDetector();
 const zonePollutionDetector = ZonePollutionDetector.getInstance();
+const flowTracker = FlowTracker.getInstance();
 
 type InstrumentationStartCandidate = {
   component: string;
@@ -44,6 +46,9 @@ type InstrumentationStartCandidate = {
   currentStrategy: 'Default';
   factors: Array<{ name: string; weight: number; met: boolean; description: string }>;
   recommendation: string;
+  cdCount?: number;
+  mutationCount?: number;
+  cdMer?: number;
 };
 
 function safeInvoke(action: () => void): void {
@@ -112,17 +117,45 @@ function collectOnPushCandidates(limit: number): InstrumentationStartCandidate[]
     // Simple heuristic: count inputs
     const inputCount = cmp.inputs ? Object.keys(cmp.inputs).length : 0;
 
+    // Change Detection Mutation Efficiency Ratio (CD-MER) metrics
+    const cdCount = renderTracker.getCdCount(name);
+    const mutationCount = renderTracker.getMutationCount(name);
+    const cdMer = renderTracker.getCdMer(name);
+
+    const hasCdData = cdCount >= 5;
+    const isInefficient = hasCdData && cdMer < 25;
+
+    const factors: Array<{ name: string; weight: number; met: boolean; description: string }> = [
+      { name: 'Has inputs', weight: 0.3, met: inputCount > 0, description: `${inputCount} input(s)` },
+      { name: 'Not using OnPush', weight: 0.25, met: true, description: 'Currently Default strategy' },
+    ];
+
+    if (hasCdData) {
+      factors.push({
+        name: 'Change Detection Efficiency',
+        weight: 0.45,
+        met: isInefficient,
+        description: `CD-MER: ${cdMer.toFixed(1)}% (${mutationCount} muts in ${cdCount} CDs)`
+      });
+    }
+
+    // Dynamic scoring adjustment based on CD-MER data
+    let score = inputCount > 0 ? 75 : 40;
+    if (isInefficient) {
+      score = Math.min(100, score + Math.round((100 - cdMer) / 2));
+    }
+
     candidates.push({
       component: name,
-      score: inputCount > 0 ? 75 : 40,
+      score,
       currentStrategy: 'Default',
-      factors: [
-        { name: 'Has inputs', weight: 0.3, met: inputCount > 0, description: `${inputCount} input(s)` },
-        { name: 'Not using OnPush', weight: 0.25, met: true, description: 'Currently Default strategy' },
-      ],
-      recommendation: inputCount > 0
-        ? 'Recommended: ChangeDetectionStrategy.OnPush'
-        : 'Consider OnPush if data flows through inputs',
+      factors,
+      recommendation: isInefficient
+        ? `Low Change Detection Efficiency! CD-MER is only ${cdMer.toFixed(1)}%. Checked ${cdCount} times but only mutated ${mutationCount} times. Recheck is wasteful. Switch to ChangeDetectionStrategy.OnPush.`
+        : (inputCount > 0 ? 'Recommended: ChangeDetectionStrategy.OnPush' : 'Consider OnPush if data flows through inputs'),
+      cdCount,
+      mutationCount,
+      cdMer,
     });
   });
 
@@ -134,9 +167,7 @@ function collectOnPushCandidates(limit: number): InstrumentationStartCandidate[]
  * Checks Angular version support, then starts all continuous detectors.
  */
 function handleStartTracking(): void {
-  // console.log('[ngLens] START_TRACKING received');
   const versionResult = checkAngularVersion();
-  // console.log('[ngLens] Angular version check:', versionResult);
   if (!versionResult.supported) {
     // Emit an error back to the content script
     dispatchToContent('ERROR', {
@@ -152,6 +183,7 @@ function handleStartTracking(): void {
   safeInvoke(() => performanceGuard.start());
   safeInvoke(() => freezeDetector.start());
   safeInvoke(() => zonePollutionDetector.start());
+  safeInvoke(() => flowTracker.start());
 
   // Instrument components for template expression tracking
   safeInvoke(() => {
@@ -167,7 +199,9 @@ function handleStartTracking(): void {
     // console.log('[ngLens] TrackBy analysis:', trackByIssues.length, 'issues');
     if (trackByIssues.length > 0) {
       for (const issue of trackByIssues) {
-        dispatchToContent('TRACKBY_ISSUE', issue);
+        dispatchToContent('TRACKBY_ISSUE', {
+          ...issue,
+        });
       }
     }
   } catch (err) {
@@ -178,7 +212,10 @@ function handleStartTracking(): void {
   safeInvoke(() => {
     const analyzed = collectOnPushCandidates(500);
     for (const result of analyzed) {
-      dispatchToContent('ONPUSH_RESULT', result);
+      dispatchToContent('ONPUSH_RESULT', {
+        ...result,
+
+      });
     }
   });
 
@@ -194,14 +231,65 @@ function handleStartTracking(): void {
  * Stops all continuous detectors.
  */
 function handleStopTracking(): void {
+  // Dispatch finalized OnPush / CD-MER suitability candidate results before stopping
+  safeInvoke(() => {
+    const analyzed = collectOnPushCandidates(500);
+    for (const result of analyzed) {
+      dispatchToContent('ONPUSH_RESULT', {
+        ...result,
+
+      });
+    }
+  });
+
   renderTracker.stop();
   leakDetector.stop();
   performanceGuard.stop();
   freezeDetector.stop();
   zonePollutionDetector.stop();
+  flowTracker.stop();
   templateExpressionTracker.setEnabled(false);
   dispatchToContent('TRACKING_STOPPED', {
     timestamp: performance.now(),
+  });
+}
+
+/**
+ * Triggers re-running of on-demand scans (trackBy and OnPush) on route changes,
+ * and increments instrumented component list for expression tracking.
+ * This accumulates findings for new pages as the user navigates!
+ */
+function handleRouteChanged(toUrl: string): void {
+  // Let the dispatcher know about the route change so it can display a flow event / timeline entry
+  dispatchToContent('ROUTE_CHANGED', { timestamp: Date.now(), url: toUrl });
+
+  // Re-run analyzers on newly loaded components of the target route
+  safeInvoke(() => {
+    const trackByIssues = trackByDetector.analyze();
+    if (trackByIssues.length > 0) {
+      for (const issue of trackByIssues) {
+        dispatchToContent('TRACKBY_ISSUE', {
+          ...issue,
+        });
+      }
+    }
+  });
+
+  safeInvoke(() => {
+    const analyzed = collectOnPushCandidates(500);
+    for (const result of analyzed) {
+      dispatchToContent('ONPUSH_RESULT', {
+        ...result,
+      });
+    }
+  });
+
+  // Re-instrument newly mounted components for template expressions
+  safeInvoke(() => {
+    forEachAngularComponent(1000, (component, index) => {
+      const name = component.constructor?.name ?? `Component_${index}`;
+      templateExpressionTracker.instrumentComponent(component, name);
+    });
   });
 }
 
@@ -231,6 +319,7 @@ function handleSelectComponent(payload: { name: string } | null): void {
 function handleClearData(): void {
   renderTracker.clearBuffer();
   zonePollutionDetector.clear();
+  flowTracker.clear();
   // LeakDetector doesn't expose a buffer clear — it tracks live components
   // TrackByDetector and OnPushEngine are on-demand analyzers, no persistent buffer
 }
@@ -286,4 +375,26 @@ function handleCommand(event: Event): void {
  */
 export function initOrchestrator(): void {
   globalThis.addEventListener(CONTENT_TO_PAGE_EVENT, handleCommand);
+  (globalThis as any).__nglens_orchestrator_on_route_changed = handleRouteChanged;
+
+  // Set up flow event forwarding: when flowTracker emits events, inject them into renderTracker
+  setupFlowEventForwarding();
+}
+
+/**
+ * Sets up event listener for flow events so they can be correlated with render reasons.
+ * FlowTracker emits FlowEventBatch events on the page script side.
+ */
+function setupFlowEventForwarding(): void {
+  const flowBatchEventName = '__ng_flow_events';
+  
+  globalThis.addEventListener(flowBatchEventName, ((event: any) => {
+    const batch = event.detail?.payload;
+    if (!batch?.events || !Array.isArray(batch.events)) return;
+    
+    // Inject each flow event into the render tracker for correlation
+    for (const flowEvent of batch.events) {
+      renderTracker.injectFlowEvent(flowEvent);
+    }
+  }) as EventListener);
 }
