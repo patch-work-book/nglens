@@ -61,7 +61,7 @@ export class CausalityChainDetectorService {
    * Detect all causality chains in an execution story.
    */
   detectChains(story: ExecutionStory): CausalityChain[] {
-    if (story.steps.length === 0) return [];
+    if (!story?.steps || story.steps.length === 0) return [];
 
     const chains: CausalityChain[] = [];
     const processedStepIds = new Set<string>();

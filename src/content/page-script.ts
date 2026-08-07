@@ -8,6 +8,7 @@
  * 4. Enforce performance budget (CPU < 3%, memory < 50MB)
  * 5. Respect DOM traversal cap (1000 elements per pass)
  * 6. Dispatch results back to the content script via CustomEvents
+ * 7. Initialize V2 real-time tracking orchestrator for START_TRACKING commands
  */
 
 import type { AnalyzerResult, AnalyzerType, RuntimeMode } from '../types/analyzer';
@@ -19,6 +20,7 @@ import { findAngularComponents } from '../utils/dom-utils';
 import { createBudgetMonitor, type BudgetMonitor } from '../utils/performance-budget';
 import { cleanupAllObservers } from '../utils/sampling';
 import { runAnalyzers, getRegisteredCount } from '../analyzers';
+import { initOrchestrator } from '@nglens/instrumentation/orchestrator';
 import {
   injectOverlayStyles,
   showOverlay,
@@ -322,9 +324,6 @@ function handleContentMessage(event: Event): void {
       break;
   }
 }
-
-// --- Orchestrator Import ---
-import { initOrchestrator } from '../instrumentation/orchestrator';
 
 // --- Initialization ---
 

@@ -1,194 +1,86 @@
 # ngLens
 
-**See what Angular doesn't show you.**
+**See WHY your Angular components re-render.**
 
-ngLens is a Chrome DevTools extension that tells you WHY your Angular app is slow — in seconds, with zero config, and nothing leaves your machine.
+ngLens is a Chrome DevTools extension that answers the question every Angular developer asks: **"Why did this component render?"**
 
-![ngLens — Angular Performance DevTools](https://raw.githubusercontent.com/patch-work-book/nglens/execution-explorer/screenshots/first-page.png)
+It works with Angular 14-22, requires zero configuration, runs entirely in your browser, and nothing leaves your machine.
 
 ---
 
 ## The Problem
 
-![Every Angular developer asks...](https://raw.githubusercontent.com/patch-work-book/nglens/execution-explorer/screenshots/the-problem.png)
+Every Angular developer debugs render performance issues:
 
-Angular DevTools shows you components. ngLens shows you **why they rendered**, **what triggered it**, and **how to fix it**.
+- "Which component is re-rendering 47 times?"
+- "Why did this parent render cascade to 200 grandchildren?"
+- "Did that API call really cause this component to render?"
+
+Angular DevTools shows you the component tree. **ngLens shows you the causality chain.**
 
 ---
 
-## ngLens vs Angular DevTools
+## How It Works
 
-![ngLens vs Angular DevTools](https://raw.githubusercontent.com/patch-work-book/nglens/execution-explorer/screenshots/comparison-ng-s-nglens.png)
+Open ngLens, interact with your app, and see:
 
-| Feature | Angular DevTools | ngLens |
-|---------|:---:|:---:|
-| Component tree | ✓ | ✓ |
-| WHY it rendered | ✗ | ✓ |
-| Waterfall timeline | ✗ | ✓ |
-| API → Store → Component chain | ✗ | ✓ |
-| Memory leak detection | ✗ | ✓ |
-| Impact scoring | ✗ | ✓ |
-| Targeted fix per component | ✗ | ✓ |
-| Signal tracking (computed, input) | ✗ | ✓ |
-| Duplicate API detection | ✗ | ✓ |
-| Jank detection (frame drops) | ✗ | ✓ |
+1. **Waterfall Timeline** — When each component rendered (millisecond precision)
+2. **Causality Chain** — What triggered each render (user click? API response? signal mutation?)
+3. **Component Cascade** — How the render propagated from parent to children
+4. **Health Score** — Overall performance health (0-100)
+
+### Example: "Why did 47 ListItems render?"
+
+```
+User clicks "Load"
+  ↓ triggers API call (/api/items)
+    ↓ API responds with 50 items
+      ↓ Store updates state
+        ↓ ListComponent subscribes → re-renders
+          ↓ No trackBy on *ngFor
+            ↓ 50 ListItemComponents re-render unnecessarily
+              → Solution: Add trackBy with unique ID
+```
+
+ngLens shows this entire chain visually, with timing and impact metrics.
 
 ---
 
 ## Features
 
-### Execution Explorer
+### Render Timeline
+Waterfall view showing WHEN components rendered, in what order, and for how long:
+- Render duration per component
+- Severity indicators (low/medium/high/critical)
+- Scroll to zoom, click to drill down
 
-![Execution Explorer](https://raw.githubusercontent.com/patch-work-book/nglens/execution-explorer/screenshots/execution-explorer.png)
+### Component Cascade
+Hierarchical view showing how renders propagated:
+- Parent → Child → Grandchild nesting
+- Render counts and timing
+- Hotspot indicators (most expensive renders)
 
-Horizontal waterfall timeline showing WHEN things happened — like Chrome's Network tab, but for your Angular app's internal execution:
+### Health Dashboard
+Quick overview of app performance:
+- Overall health score (0-100)
+- Hotspot components (excessive renders)
+- Session summary (what user interaction caused this?)
 
-- When each component rendered relative to others
-- Which API call is the bottleneck (highlighted automatically)
-- Millisecond-precision timing for every operation
-- Interactive category filters (APIs, Components, State, Signals)
-
-### Performance Overview
-
-![Overview — app health at a glance](https://raw.githubusercontent.com/patch-work-book/nglens/execution-explorer/screenshots/overview.png)
-
-Instant health check with zero effort:
-
-- Risk score (0–100) per component
-- Top issue with root cause identified
-- Suggested fix with expected performance gain
-- Environment detection (production/dev mode)
-
-### Render Inspector
-
-![Render Inspector](https://raw.githubusercontent.com/patch-work-book/nglens/execution-explorer/screenshots/render-inspector.png)
-
-Component cascade showing render counts, severity, and data flow:
-
-- Ranked by render count and time cost
-- Hotspot indicator for worst offenders
-- Action-level breakdown (Click, Change, Input events)
-
-### Causal Chains
-
-![Causal chains — which API affected which component](https://raw.githubusercontent.com/patch-work-book/nglens/execution-explorer/screenshots/render-inspector-casual-chains.png)
-
-Trace the full path: API → Store → Component:
-
-- Links API calls to state changes to component renders
-- Flags duplicate APIs automatically
-- Counts impacted components per action
-
-### Memory Analyzer & Recommendations
-
-![Memory leaks and recommendations](https://raw.githubusercontent.com/patch-work-book/nglens/execution-explorer/screenshots/memory-recommandations.png)
-
-Detects leaks and gives you prioritized, actionable fixes:
-
-- Surviving subscriptions with exact fix patterns
-- Unmanaged timers and DOM listeners
-- Recommendations ranked by impact (HIGH / MED / LOW)
-
-### Hotspots & Compare Runs
-
-![Hotspots and Compare](https://raw.githubusercontent.com/patch-work-book/nglens/execution-explorer/screenshots/overview-hotspot.png)
-
-Save a baseline → Make your fix → Capture again → See the improvement instantly.
-
-### Signal Reactivity Tracking
-
-![Signals — Angular 17-22](https://raw.githubusercontent.com/patch-work-book/nglens/execution-explorer/screenshots/singals.png)
-
-Full signal chain tracking across Angular versions:
-
-- **Angular 17+** — `computed()` recomputation, `input()` signals
-- **Angular 19+** — `linkedSignal()`, `resource()`, `httpResource()`
-- **Angular 22** — Signal Forms, `@Service()`, all stable signal APIs
+### Causality Analysis
+Shows what triggered each render:
+- Parent component update? ✓
+- API response? ✓
+- Signal mutation? ✓
+- Timer/WebSocket? ✓
 
 ---
 
-## Architecture
+## Installation
 
-```
-src/
-├── instrumentation/        # Runtime instrumentation (page-script, MAIN world)
-│   ├── render-tracker.ts           # Change detection cycle monitoring
-│   ├── flow-tracker.ts             # RxJS, Signals, HTTP, Router tracing
-│   ├── leak-detector.ts            # Subscription & timer leak detection
-│   ├── freeze-detector.ts          # UI jank detection
-│   ├── zone-pollution-detector.ts  # Idle CD trigger identification
-│   ├── trackby-detector.ts         # Missing trackBy in *ngFor
-│   ├── template-expression-tracker.ts  # Expensive binding detection
-│   ├── selective-analyzer.ts       # Deep per-component scan
-│   └── orchestrator.ts             # Coordination & lifecycle
-│
-├── analyzers/              # Static analyzers (on-demand scan)
-│   ├── performance-scorer.ts       # Health scoring (0-100)
-│   ├── dom-inspector.ts            # DOM tree analysis
-│   ├── production-analyzer.ts      # Production heuristics
-│   ├── enterprise-optimizer.ts     # Enterprise-scale patterns
-│   ├── best-practices-detector.ts  # Anti-pattern detection
-│   ├── subscription-leak-detector.ts  # RxJS cleanup analysis
-│   └── signals-analyzer.ts         # Signal usage analysis
-│
-├── devtools/panel/app/features/    # Angular DevTools Panel UI
-│   ├── execution-explorer/         # Waterfall timeline
-│   ├── performance-overview/       # Health & hotspots
-│   ├── rendering-inspector/        # Component cascade
-│   ├── memory-analyzer/            # Leak detection
-│   ├── recommendations-engine/     # Fix suggestions
-│   └── metrics-help/               # Learning & docs
-│
-├── background/             # Service worker (message routing, tab state)
-├── content/                # Content script (message bridge, injection)
-├── services/               # Shared services
-├── types/                  # TypeScript interfaces
-└── utils/                  # DOM helpers, serialization, timing
-```
+**Chrome Web Store** (pending approval):
+[Install ngLens](https://chrome.google.com/webstore)
 
----
-
-## Compatibility
-
-- **Angular 14–22** — Full runtime tracking
-- **Signals** — Angular 17+ (computed, input, linkedSignal, resource)
-- **Works in production** — DOM attribute heuristics when `window.ng` unavailable
-- **Standalone & Module-based** — Both architectures supported
-- **Micro-frontends** — Multi-app detection
-- **NgRx / Signal Store / Facades** — State management aware
-
----
-
-## Performance Budget
-
-ngLens self-monitors to stay invisible:
-
-- **< 3% CPU** overhead
-- **< 50MB memory** usage
-- Event batching (100ms debounce)
-- Automatic throttling on heavy apps
-
----
-
-## Privacy & Security
-
-- ✅ All analysis runs **locally in your browser**
-- ✅ Source code and results **never leave your machine**
-- ✅ **Minimal permissions** — `activeTab`, `storage`, `scripting`
-- ✅ Strict Content Security Policy
-- ✅ No telemetry — optional analytics require explicit opt-in
-- ✅ MIT License — fully open source and auditable
-
-See [PRIVACY.md](./PRIVACY.md) and [SECURITY.md](./SECURITY.md) for details.
-
----
-
-## Install
-
-**Chrome Web Store:**
-[Install ngLens](https://chrome.google.com/webstore/category/extensions)
-
-**Or build from source:**
+**Or build from source**:
 
 ```bash
 git clone https://github.com/patch-work-book/nglens.git
@@ -205,16 +97,64 @@ Then load in Chrome:
 
 ---
 
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Extension | Chrome Manifest V3 |
+| Panel UI | Angular 22 |
+| Styling | Tailwind CSS |
+| Build | Vite + Angular CLI |
+| Testing | Vitest |
+| Language | TypeScript |
+
+---
+
+## Compatibility
+
+- **Angular**: 14, 15, 16, 17, 18, 19, 20, 21, 22
+- **Chrome**: 90+ (with Manifest V3 support)
+- **Signals**: Angular 17+ (tracked automatically)
+- **Works in**: Development mode AND production (heuristic analysis)
+- **Standalone & Module-based**: Both architectures supported
+
+---
+
+## Architecture
+
+ngLens uses a simple 3-stage pipeline:
+
+1. **Collect** — Normalize raw render events from page-script
+2. **Analyze** — Build causality chains and compute impact
+3. **Format** — Prepare data for UI display
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed technical overview.
+
+---
+
+## Privacy & Security
+
+✅ All analysis runs **locally in your browser**
+✅ Source code and results **never leave your machine**
+✅ **Zero telemetry** — no data collection
+✅ **Minimal permissions** — `activeTab`, `storage`, `scripting` only
+✅ **Production-safe** — uses DOM heuristics when DevTools APIs unavailable
+✅ **MIT License** — fully open source and auditable
+
+See [PRIVACY.md](./PRIVACY.md) and [SECURITY.md](./SECURITY.md) for details.
+
+---
+
 ## Development
 
 ```bash
 # Install dependencies
 npm install
 
-# Dev mode (panel + extension with hot reload)
+# Development mode (with hot reload)
 npm run dev
 
-# Build for production
+# Production build
 npm run build
 
 # Run tests
@@ -223,39 +163,35 @@ npm test
 
 ---
 
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Language | TypeScript |
-| Panel UI | Angular 22 |
-| Styling | Tailwind CSS |
-| Extension Build | Vite |
-| Testing | Vitest |
-| Extension Standard | Chrome Manifest V3 |
-
----
-
 ## Contributing
 
 We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
-- MIT License
-- "ngLens" name and logo are trademark protected ([TRADEMARK.md](./TRADEMARK.md))
-- Follow secure coding practices
-- Sign your commits
+- Report bugs with reproduction steps
+- Suggest features for specific performance problems
+- Submit PRs with tests included
 
 ---
 
 ## Roadmap
 
-- **V1.2** (current): Execution Explorer, Render Inspector, Memory Analyzer, Recommendations, Signals tracking
-- **V2**: CD profiler, Zone.js profiler, FPS monitor, interaction latency
-- **V3**: Architecture smells, regression detection, Signals migration assistant
+**v2.0** (Current): Render causality analysis and health scoring
+**v2.5**: Memory leak detection, subscription cleanup analysis
+**v3.0**: Architecture pattern detection, performance regressions
+
+---
+
+## Support
+
+- **Docs**: [ARCHITECTURE.md](./ARCHITECTURE.md)
+- **Issues**: [GitHub Issues](https://github.com/patch-work-book/nglens/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/patch-work-book/nglens/discussions)
 
 ---
 
 ## License
+
+MIT License. See LICENSE file for details.
 
 MIT
 

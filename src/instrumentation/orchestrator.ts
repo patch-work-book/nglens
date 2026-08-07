@@ -51,14 +51,10 @@ type InstrumentationStartCandidate = {
   cdMer?: number;
 };
 
-function safeInvoke(action: () => void): void {
-  try {
-    action();
-  } catch {
-    // Intentionally ignore instrumentation failures to avoid breaking page behavior.
-  }
-}
-
+/**
+ * Iterate Angular components up to a limit.
+ * Failures in visitor are fatal (not silently ignored).
+ */
 function forEachAngularComponent(
   limit: number,
   visitor: (component: any, index: number) => void
@@ -70,32 +66,29 @@ function forEachAngularComponent(
   const effectiveLimit = Math.min(elements.length, limit);
 
   for (let i = 0; i < effectiveLimit; i++) {
-    try {
-      const component = ng.getComponent(elements[i]);
-      if (!component) continue;
-      visitor(component, i);
-    } catch {
-      continue;
-    }
+    const component = ng.getComponent(elements[i]);
+    if (!component) continue;
+    // Let errors bubble up - don't silently continue
+    visitor(component, i);
   }
 }
 
+/**
+ * Find Angular component by class name.
+ * Returns null if not found or if Angular API unavailable.
+ */
 function findAngularComponentByName(name: string): any | null {
   const ng = (globalThis as any).ng;
   if (!ng?.getComponent) return null;
 
   const elements = document.querySelectorAll('*');
   for (let i = 0; i < elements.length; i++) {
-    try {
-      const component = ng.getComponent(elements[i]);
-      if (!component) continue;
+    const component = ng.getComponent(elements[i]);
+    if (!component) continue;
 
-      const componentName = component.constructor?.name ?? '';
-      if (componentName === name) {
-        return component;
-      }
-    } catch {
-      continue;
+    const componentName = component.constructor?.name ?? '';
+    if (componentName === name) {
+      return component;
     }
   }
 
@@ -164,66 +157,62 @@ function collectOnPushCandidates(limit: number): InstrumentationStartCandidate[]
 
 /**
  * Handles START_TRACKING command from the panel.
- * Checks Angular version support, then starts all continuous detectors.
+ * Starts all continuous detectors and runs one-time analyzers.
+ *
+ * All errors are caught here and reported to the panel.
  */
 function handleStartTracking(): void {
-  const versionResult = checkAngularVersion();
-  if (!versionResult.supported) {
-    // Emit an error back to the content script
-    dispatchToContent('ERROR', {
-      message: versionResult.version
-        ? `Angular ${versionResult.version} is not supported. Requires Angular 17+.`
-        : 'Angular not detected on this page.',
-    });
-    return;
-  }
+  try {
+    // Check Angular version (required)
+    const versionResult = checkAngularVersion();
+    if (!versionResult.supported) {
+      dispatchToContent('ERROR', {
+        message: versionResult.version
+          ? `Angular ${versionResult.version} is not supported. Requires Angular 17+.`
+          : 'Angular not detected on this page.',
+      });
+      return;
+    }
 
-  safeInvoke(() => renderTracker.start());
-  safeInvoke(() => leakDetector.start());
-  safeInvoke(() => performanceGuard.start());
-  safeInvoke(() => freezeDetector.start());
-  safeInvoke(() => zonePollutionDetector.start());
-  safeInvoke(() => flowTracker.start());
+    // Start all continuous detectors
+    renderTracker.start();
+    leakDetector.start();
+    performanceGuard.start();
+    freezeDetector.start();
+    zonePollutionDetector.start();
+    flowTracker.start();
 
-  // Instrument components for template expression tracking
-  safeInvoke(() => {
+    // Instrument components for template expression tracking
     forEachAngularComponent(200, (component, index) => {
       const name = component.constructor?.name ?? `Component_${index}`;
       templateExpressionTracker.instrumentComponent(component, name);
     });
-  });
 
-  // Run one-time analyzers
-  try {
+    // Run one-time analyzers
     const trackByIssues = trackByDetector.analyze();
-    // console.log('[ngLens] TrackBy analysis:', trackByIssues.length, 'issues');
     if (trackByIssues.length > 0) {
       for (const issue of trackByIssues) {
-        dispatchToContent('TRACKBY_ISSUE', {
-          ...issue,
-        });
+        dispatchToContent('TRACKBY_ISSUE', { ...issue });
       }
     }
-  } catch (err) {
-    // console.error('[ngLens] TrackBy analysis failed:', err);
-  }
 
-  // Run OnPush analysis using ng.getComponent (works on Angular 20)
-  safeInvoke(() => {
-    const analyzed = collectOnPushCandidates(500);
-    for (const result of analyzed) {
-      dispatchToContent('ONPUSH_RESULT', {
-        ...result,
-
-      });
+    // Run OnPush analysis
+    const onPushCandidates = collectOnPushCandidates(500);
+    for (const result of onPushCandidates) {
+      dispatchToContent('ONPUSH_RESULT', { ...result });
     }
-  });
 
-  dispatchToContent('TRACKING_STARTED', {
-    timestamp: performance.now(),
-  });
-
-  // console.log('[ngLens] Tracking started successfully');
+    dispatchToContent('TRACKING_STARTED', {
+      timestamp: performance.now(),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[ngLens] Failed to start tracking:', message);
+    dispatchToContent('ERROR', {
+      message: `Tracking failed: ${message}`,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+  }
 }
 
 /**
@@ -231,66 +220,62 @@ function handleStartTracking(): void {
  * Stops all continuous detectors.
  */
 function handleStopTracking(): void {
-  // Dispatch finalized OnPush / CD-MER suitability candidate results before stopping
-  safeInvoke(() => {
-    const analyzed = collectOnPushCandidates(500);
-    for (const result of analyzed) {
-      dispatchToContent('ONPUSH_RESULT', {
-        ...result,
-
-      });
+  try {
+    // Dispatch final OnPush results before stopping
+    const onPushCandidates = collectOnPushCandidates(500);
+    for (const result of onPushCandidates) {
+      dispatchToContent('ONPUSH_RESULT', { ...result });
     }
-  });
 
-  renderTracker.stop();
-  leakDetector.stop();
-  performanceGuard.stop();
-  freezeDetector.stop();
-  zonePollutionDetector.stop();
-  flowTracker.stop();
-  templateExpressionTracker.setEnabled(false);
-  dispatchToContent('TRACKING_STOPPED', {
-    timestamp: performance.now(),
-  });
+    // Stop all detectors
+    renderTracker.stop();
+    leakDetector.stop();
+    performanceGuard.stop();
+    freezeDetector.stop();
+    zonePollutionDetector.stop();
+    flowTracker.stop();
+    templateExpressionTracker.setEnabled(false);
+
+    dispatchToContent('TRACKING_STOPPED', {
+      timestamp: performance.now(),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[ngLens] Error stopping tracking:', message);
+  }
 }
 
 /**
- * Triggers re-running of on-demand scans (trackBy and OnPush) on route changes,
- * and increments instrumented component list for expression tracking.
- * This accumulates findings for new pages as the user navigates!
+ * Handles ROUTE_CHANGED event from Angular Router.
+ * Re-runs on-demand analyzers for newly loaded components.
  */
 function handleRouteChanged(toUrl: string): void {
-  // Let the dispatcher know about the route change so it can display a flow event / timeline entry
-  dispatchToContent('ROUTE_CHANGED', { timestamp: Date.now(), url: toUrl });
+  try {
+    dispatchToContent('ROUTE_CHANGED', { timestamp: Date.now(), url: toUrl });
 
-  // Re-run analyzers on newly loaded components of the target route
-  safeInvoke(() => {
+    // Re-run analyzers on newly loaded components
     const trackByIssues = trackByDetector.analyze();
     if (trackByIssues.length > 0) {
       for (const issue of trackByIssues) {
-        dispatchToContent('TRACKBY_ISSUE', {
-          ...issue,
-        });
+        dispatchToContent('TRACKBY_ISSUE', { ...issue });
       }
     }
-  });
 
-  safeInvoke(() => {
-    const analyzed = collectOnPushCandidates(500);
-    for (const result of analyzed) {
-      dispatchToContent('ONPUSH_RESULT', {
-        ...result,
-      });
+    // Run OnPush analysis for new route
+    const onPushCandidates = collectOnPushCandidates(500);
+    for (const result of onPushCandidates) {
+      dispatchToContent('ONPUSH_RESULT', { ...result });
     }
-  });
 
-  // Re-instrument newly mounted components for template expressions
-  safeInvoke(() => {
+    // Re-instrument newly mounted components
     forEachAngularComponent(1000, (component, index) => {
       const name = component.constructor?.name ?? `Component_${index}`;
       templateExpressionTracker.instrumentComponent(component, name);
     });
-  });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[ngLens] Error analyzing route change:', message);
+  }
 }
 
 /**

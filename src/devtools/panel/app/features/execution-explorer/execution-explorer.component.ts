@@ -92,12 +92,12 @@ export class ExecutionExplorerComponent {
     const narratives = new Map<string, ExecutionNarrative>();
 
     stories.forEach(story => {
-      const chains = this.chainDetector.detectChains(story);
-      const chapters = this.chapterBuilder.buildChapters(story);
+      const chains = this.chainDetector.detectChains(story) || [];
+      const chapters = this.chapterBuilder.buildChapters(story) || [];
 
-      const totalApiCalls = chains.reduce((s: number, c: CausalityChain) => s + (c.trigger.type === 'data-fetch' ? 1 : 0), 0);
-      const totalComponents = chains.reduce((s: number, c: CausalityChain) => s + c.renders.length, 0);
-      const totalSignalEmissions = chains.reduce((s: number, c: CausalityChain) => s + c.computations.length, 0);
+      const totalApiCalls = chains.reduce((s: number, c: CausalityChain) => s + (c.trigger?.type === 'data-fetch' ? 1 : 0), 0);
+      const totalComponents = chains.reduce((s: number, c: CausalityChain) => s + (c.renders?.length || 0), 0);
+      const totalSignalEmissions = chains.reduce((s: number, c: CausalityChain) => s + (c.computations?.length || 0), 0);
 
       const metrics = {
         totalApiCalls,
@@ -173,7 +173,7 @@ export class ExecutionExplorerComponent {
   }
 
   private extractTrigger(story: ExecutionStory | { steps?: any[] }): string {
-    if (!('steps' in story) || !story.steps || story.steps.length === 0) {
+    if (!story?.steps?.length) {
       return 'User action';
     }
     const firstStep = story.steps[0];
