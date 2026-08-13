@@ -10,10 +10,14 @@
 
 import { Signal, WritableSignal } from '@angular/core';
 import type { Chapter, Subsection, ExecutionNarrative } from './execution-narrative';
+import type { RuntimeEvent } from './execution-intelligence';
 
 export type TreeNodeType = 'session' | 'chapter' | 'step';
 
 export interface TreeNode {
+  /** The underlying runtime event (if applicable) */
+  event?: RuntimeEvent;
+
   // Identity
   id: string;
   type: TreeNodeType;
@@ -49,6 +53,11 @@ export interface TreeNode {
   // Performance hint (for visual indicators)
   isBottleneck?: boolean;
   severity?: 'high' | 'medium' | 'low';
+
+  /** Graph Connectivity for 'Bloom Tree' UX */
+  isDirectImpact?: boolean;    // True if this component was directly triggered
+  cascadeSourceId?: string;    // ID of the component that triggered this cascade
+  renderDepth?: number;        // Depth within the render-only subtree
 }
 
 /**

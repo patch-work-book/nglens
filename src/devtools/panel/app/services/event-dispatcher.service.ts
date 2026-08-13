@@ -85,6 +85,9 @@ export class EventDispatcherService {
       case 'TAB_NAVIGATED':
         this.handleTabNavigated();
         break;
+      case 'SCAN_RESULTS':
+        this.state.lastScanResults.set(message.payload);
+        break;
       case 'CONNECTION_ACK':
         this.state.connectionState.set('connected');
         break;

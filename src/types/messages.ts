@@ -16,6 +16,7 @@ export type MessageType =
   | 'OVERLAY_SHOW'
   | 'OVERLAY_HIDE'
   | 'OVERLAY_CLEAR_ALL'
+  | 'OVERLAY_PULSE'
   | 'DETECTION_STATUS'
   | 'TAB_NAVIGATED'
   | 'ERROR'

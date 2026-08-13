@@ -45,6 +45,7 @@ export async function routeMessage(
     case 'OVERLAY_SHOW':
     case 'OVERLAY_HIDE':
     case 'OVERLAY_CLEAR_ALL':
+    case 'OVERLAY_PULSE':
       return forwardToContentScript(message, tabId, 'Failed to forward message to content script.');
 
     case 'ERROR':

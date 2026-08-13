@@ -1,9 +1,14 @@
 import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
-import { NgClass, TitleCasePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { PanelState } from '../../state/panel.state';
 import { displayName } from '../../utils/display-name';
 import { CommandService } from '../../services/command.service';
-import { TooltipDirective } from '../../shared/tooltip.directive';
+import { RenderInspectorAdapterService } from '../../services/render-inspector-adapter.service';
+import { InvestigationQueueService } from '../../services/investigation-queue.service';
+import { ExecutionStoryService } from '../../services/execution-story.service';
+import { RenderTreeViewComponent } from './components/render-tree-view.component';
+import { getActionIcon, getSeverityIcon } from './casual-icons';
 import type { InteractionProfile } from '../../../../../types/panel';
 import type { RenderCause, RenderEvent, FlowEvent, RenderReason } from '../../../../../types/render-events';
 
@@ -92,7 +97,10 @@ interface CascadeNode {
   selector: 'app-rendering',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass],
+  imports: [
+    CommonModule,
+    RenderTreeViewComponent,
+  ],
   templateUrl: './rendering.component.html',
   styleUrl: './rendering.component.scss',
 })
@@ -100,7 +108,23 @@ export class RenderingComponent {
   readonly state = inject(PanelState);
   readonly displayName = displayName;
   readonly Math = Math;
+  readonly sumRenders = (acc: number, node: CascadeNode) => acc + node.count;
+  private readonly sanitizer = inject(DomSanitizer);
+  readonly getActionIcon = getActionIcon;
+  readonly getSeverityIcon = getSeverityIcon;
+  
+  /** Safe icon rendering method */
+  getSafeActionIcon(trigger: string): SafeHtml {
+    return this.sanitizer.bypassSecurityTrustHtml(getActionIcon(trigger));
+  }
+
+  getSafeSeverityIcon(severity: string): SafeHtml {
+    return this.sanitizer.bypassSecurityTrustHtml(getSeverityIcon(severity));
+  }
   private readonly commandService = inject(CommandService);
+  private readonly adapter = inject(RenderInspectorAdapterService);
+  private readonly investigationQueueService = inject(InvestigationQueueService);
+  private readonly executionStoryService = inject(ExecutionStoryService);
 
   constructor() {
     // Debounced card builder: only rebuild cards after 600ms of no new events
@@ -112,18 +136,33 @@ export class RenderingComponent {
         clearTimeout(this.cardRebuildTimer);
         this.cardRebuildTimer = setTimeout(() => {
           const newReplays = this.actionReplays();
-          const prevReplayCount = this.stableActionReplays().length;
           this.stableActionReplays.set(newReplays);
           
-          // Auto-select the latest action ONLY on first load (when no action was previously selected)
-          // After that, user selection is preserved even as new actions arrive
-          if (newReplays.length > 0 && prevReplayCount === 0 && this.selectedActionId() === null) {
+          // Auto-select: whenever replays exist but nothing is selected, pick the latest
+          if (newReplays.length > 0 && this.selectedActionId() === null) {
             const latestActionId = newReplays[newReplays.length - 1].id;
             this.selectedActionId.set(latestActionId);
+          }
+          // If the currently selected action was removed (stale ID), reset to latest
+          if (this.selectedActionId() !== null && !newReplays.find(r => r.id === this.selectedActionId())) {
+            this.selectedActionId.set(newReplays.length > 0 ? newReplays[newReplays.length - 1].id : null);
           }
         }, 600);
       }
     }, 300);
+
+    // Immediate check: if events already exist when component mounts, build replays now
+    setTimeout(() => {
+      const currentCount = this.state.renderEvents().length + this.state.flowEvents().length;
+      if (currentCount > 0 && this.stableActionReplays().length === 0) {
+        this.lastEventCount = currentCount;
+        const newReplays = this.actionReplays();
+        this.stableActionReplays.set(newReplays);
+        if (newReplays.length > 0 && this.selectedActionId() === null) {
+          this.selectedActionId.set(newReplays[newReplays.length - 1].id);
+        }
+      }
+    }, 100);
   }
   readonly expandedActions = signal(new Set<string>());
   readonly collapsedActions = signal(new Set<string>());
@@ -135,6 +174,116 @@ export class RenderingComponent {
   readonly expandedComponentReasons = signal<string | null>(null);
   /** Track which action is selected in the timeline view */
   readonly selectedActionId = signal<string | null>(null);
+  
+  /** UX Level 3: Contextual Detail Drawer */
+  readonly selectedComponentName = signal<string | null>(null);
+  /** Full component data for the selected node (from tree view hover) */
+  readonly selectedComponentData = signal<any>(null);
+  
+  readonly filter = signal<'all' | 'slow' | 'changed'>('all');
+  
+  /** Focus mode state (Phase 2) */
+  readonly focusMode = signal(false);
+  readonly focusComponentName = signal<string | null>(null);
+  
+  /** Default to tree view in new UX */
+  readonly showTreeView = signal(true);
+
+  onComponentSelected(componentData: any): void {
+    // Show details panel for the selected component
+    // Use display name if available, fallback to raw component name
+    const displayedName = componentData.displayName || componentData.componentName;
+    this.selectedComponentName.set(displayedName);
+    this.selectedComponentData.set(componentData);
+  }
+
+  /** Get component metrics for the detail drawer */
+  readonly selectedComponentMetrics = computed(() => {
+    const data = this.selectedComponentData();
+    if (!data) return null;
+
+    const impact = data.count * data.totalDuration;
+    let severity: 'high' | 'medium' | 'low' = 'low';
+    if (impact >= 500 || data.count >= 6) severity = 'high';
+    else if (impact >= 100 || data.count >= 3) severity = 'medium';
+
+    const causeLabel = this.formatCauseLabel(data.cause);
+    const childrenCount = data.children ? data.children.length : 0;
+
+    return {
+      renderCount: data.count,
+      totalDuration: data.totalDuration,
+      averageDuration: Math.round(data.totalDuration / Math.max(1, data.count)),
+      impact,
+      severity,
+      causeLabel,
+      causeType: data.cause?.type || 'unknown',
+      causeSource: data.cause?.source || '',
+      childrenCount,
+      children: data.children || [],
+    };
+  });
+
+
+
+  private formatCauseLabel(cause: any): string {
+    // If we don't have cause data, bail out
+    if (!cause) return 'Unknown';
+
+    const causeType = cause.type || 'zone';
+    const sourceInfo = cause.source || '';
+
+    // Signal writes are usually specific property names like "items", "count", etc.
+    if (causeType === 'signal') {
+      // Extract just the property name for cleaner display
+      if (sourceInfo.includes('.')) {
+        const prop = sourceInfo.split('.').pop();
+        return `Signal Changed — ${prop}`;
+      }
+      return 'Signal Changed';
+    }
+
+    // Direct input property changes (form, two-way binding)
+    if (causeType === 'input') return 'Input Property Changed';
+
+    // Component re-rendered because parent re-rendered
+    if (causeType === 'parent') return 'Parent Rendered';
+
+    // Manual change detection trigger
+    if (causeType === 'manual-cd') return 'Manual Change Detection';
+
+    // User-initiated actions
+    if (sourceInfo.includes('click')) return 'User Clicked';
+    if (sourceInfo.includes('input')) return 'User Typed';
+    if (sourceInfo.includes('timer')) return 'Timer Fired';
+
+    // Async operations completing
+    if (sourceInfo.includes('fetch') || sourceInfo.includes('XMLHttpRequest')) {
+      return 'API Response Arrived';
+    }
+
+    // Fallback to whatever source we have
+    return sourceInfo || causeType;
+  }
+
+  readonly deduplicatedComponentCount = computed(() => {
+    const events = this.state.renderEvents();
+    return new Set(events.map(e => e.componentName)).size;
+  });
+
+  readonly avgIFP = computed(() => {
+    const replays = this.stableActionReplays();
+    if (replays.length === 0) return 0;
+    return Math.round(replays.reduce((acc, r) => acc + (r.duration || 0), 0) / replays.length);
+  });
+
+  readonly totalEfficiency = computed(() => {
+    const replays = this.stableActionReplays();
+    if (replays.length === 0) return 100;
+    const totalRenders = replays.reduce((acc, r) => acc + (r.totalRenders || 0), 0);
+    const wasted = replays.reduce((acc, r) => acc + Math.floor((r.totalRenders || 0) * 0.2), 0);
+    return Math.round(((totalRenders - wasted) / totalRenders) * 100);
+  });
 
   // Card stability: cache previous cards to prevent flickering
   private cachedCards: ActionReplay[] = [];
@@ -157,9 +306,8 @@ export class RenderingComponent {
     if (allEvents.length === 0) return 0;
 
     const lastCountedTs = new Map<string, number>();
-    const SAME_CYCLE_MS = 50;
+    const SAME_CYCLE_MS = 16; // One frame window for coalescing
     let count = 0;
-
     for (const event of allEvents) {
       const lastTs = lastCountedTs.get(event.componentName);
       const isDistinctRender = lastTs == null || (event.timestamp - lastTs) >= SAME_CYCLE_MS;
@@ -279,17 +427,27 @@ export class RenderingComponent {
   // ── Actions ───────────────────────────────────────────────────────────────
 
   toggleAction(id: string): void {
+    // Track which action cards are expanded/collapsed
     const next = new Set(this.collapsedActions());
-    if (next.has(id)) { next.delete(id); } else { next.add(id); }
+    if (next.has(id)) {
+      next.delete(id); // Expand
+    } else {
+      next.add(id); // Collapse
+    }
     this.collapsedActions.set(next);
   }
 
   selectAction(id: string | null): void {
-    this.selectedActionId.set(this.selectedActionId() === id ? null : id);
+    // Toggle selection (clicking same action again deselects)
+    const isAlreadySelected = this.selectedActionId() === id;
+    this.selectedActionId.set(isAlreadySelected ? null : id);
   }
 
   getPerformanceScore(duration: number): number {
-    return Math.max(0, Math.min(100, 100 - duration / 5));
+    // Score from 0-100: lower duration = higher score
+    // At 500ms (frame budget), score is 0. At 0ms, score is 100.
+    const score = Math.max(0, 100 - duration / 5);
+    return Math.min(100, score);
   }
 
   getSelectedAction = computed(() => {
@@ -298,21 +456,159 @@ export class RenderingComponent {
     return this.stableActionReplays().find(a => a.id === selected) ?? null;
   });
 
+  // ── Phase 1 & 2 Integration ───────────────────────────────────────────────
+
+  /** Phase 1: Sticky metrics for the selected action */
+  readonly stickyMetrics = computed(() => {
+    return this.adapter.toStickyMetrics(this.getSelectedAction());
+  });
+
+  /** Phase 1: Headline data for the selected action */
+  readonly headline = computed(() => {
+    return this.adapter.toHeadline(this.getSelectedAction());
+  });
+
+  /** Phase 1: Hotspots (top issues) for the selected action */
+  readonly hotspots = computed(() => {
+    return this.adapter.toHotspots(this.getSelectedAction());
+  });
+
+  /** Phase 2: API timeline phases for the selected action */
+  readonly apiPhases = computed(() => {
+    return this.adapter.toAPITimeline(this.getSelectedAction());
+  });
+
+  /** Phase 2: Component cards from the cascade tree */
+  readonly componentCards = computed(() => {
+    const action = this.getSelectedAction();
+    if (!action || !action.tree) return [];
+
+    const nodes = this.flattenTree(action.tree);
+    return nodes.slice(0, 10).map(node => this.adapter.toComponentCard(node));
+  });
+
+  /** Phase 2: Focus mode data for the selected component */
+  readonly focusData = computed(() => {
+    const action = this.getSelectedAction();
+    const componentName = this.focusComponentName();
+
+    if (!componentName || !action) return null;
+
+    return this.adapter.toFocusData(action, componentName);
+  });
+
+  /** Detective: Ranked investigations (Investigation Queue) */
+  readonly detectedInvestigations = computed(() => {
+    const action = this.getSelectedAction();
+    if (!action) return [];
+
+    return this.investigationQueueService.rankInvestigations(action);
+  });
+
+  // ── Execution Detective UX (Task 7) ────────────────────────────────────────
+
+  /** Detective: Inline summary (single/double line) */
+  readonly inlineSummary = computed(() => {
+    const action = this.getSelectedAction();
+    if (!action) return null;
+
+    const nodes = this.flattenTree(action.tree);
+    let maxImpact = 0;
+
+    for (const node of nodes) {
+      const impact = node.count * node.totalDuration;
+      if (impact > maxImpact) maxImpact = impact;
+    }
+
+    let health: 'green' | 'yellow' | 'red' = 'green';
+    if (action.frameBudgetExceeded) {
+      health = 'red';
+    } else if (maxImpact > 100 || action.totalRenders > 10) {
+      health = 'yellow';
+    }
+
+    return {
+      duration: action.duration,
+      renderCount: action.totalRenders,
+      uniqueComponents: action.uniqueComponents,
+      frameBudgetExceeded: action.frameBudgetExceeded,
+      framesMissed: action.framesDropped,
+      health,
+      confidence: 95,
+    };
+  });
+
+  /** Detective: Ranked investigations (prominent) */
+  readonly rankedInvestigations = computed(() => {
+    const investigations = this.detectedInvestigations();
+    if (!investigations || investigations.length === 0) return [];
+
+    return investigations.map((inv: any, idx: number) => ({
+      rank: idx + 1,
+      id: inv.id,
+      title: inv.title,
+      icon: inv.icon,
+      impact: inv.impactScore,
+      potential: inv.optimizationPotential * 100,
+      gainScore: inv.gainScore,
+      affected: inv.metrics.affected,
+      savings: inv.metrics.savings,
+      confidence: inv.confidence,
+      suggestion: `Optimizing this could save ${inv.metrics.savings}ms`,
+    }));
+  });
+
+  /** Detective: Execution story (visual narrative) */
+  readonly executionStory = computed(() => {
+    const action = this.getSelectedAction();
+    if (!action) return null;
+
+    return this.executionStoryService.buildStory(action);
+  });
+
+  /** Detective: Toggle story view */
+  readonly showStoryMode = signal(false);
+
+  toggleStoryMode(): void {
+    // Switch between tree view and execution story view
+    this.showStoryMode.set(!this.showStoryMode());
+  }
+
+  toggleTreeView(): void {
+    // Show/hide the full render cascade tree
+    this.showTreeView.set(!this.showTreeView());
+  }
+
   toggleFlowDetails(entryId: string): void {
+    // Expand/collapse flow event details
     const next = new Set(this.expandedFlows());
-    if (next.has(entryId)) { next.delete(entryId); } else { next.add(entryId); }
+    if (next.has(entryId)) {
+      next.delete(entryId);
+    } else {
+      next.add(entryId);
+    }
     this.expandedFlows.set(next);
   }
 
   toggleDataFlow(actionId: string): void {
+    // Track which action's data flow is visible
     const next = new Set(this.expandedDataFlow());
-    if (next.has(actionId)) { next.delete(actionId); } else { next.add(actionId); }
+    if (next.has(actionId)) {
+      next.delete(actionId);
+    } else {
+      next.add(actionId);
+    }
     this.expandedDataFlow.set(next);
   }
 
   toggleFlowType(flowType: string): void {
+    // Show/hide flow events of a specific type
     const next = new Set(this.expandedFlowTypes());
-    if (next.has(flowType)) { next.delete(flowType); } else { next.add(flowType); }
+    if (next.has(flowType)) {
+      next.delete(flowType);
+    } else {
+      next.add(flowType);
+    }
     this.expandedFlowTypes.set(next);
   }
 
@@ -327,44 +623,47 @@ export class RenderingComponent {
 
   /** Get label for flow type */
   flowTypeLabel(type: string): string {
-    switch (type) {
-      case 'subject-emit': return 'RxJS Subjects';
-      case 'signal-write': return 'Signals';
-      case 'http-response': return 'HTTP Services';
-      case 'websocket': return 'WebSocket';
-      case 'facade-method': return 'State Management (Facade)';
-      case 'store-dispatch': return 'Store Dispatch (NgRx)';
-      case 'store-select': return 'Store Selectors (NgRx)';
-      default: return type;
-    }
+    // Human-readable labels for data flow event categories
+    const labels: Record<string, string> = {
+      'subject-emit': 'RxJS Subjects',
+      'signal-write': 'Signals',
+      'http-response': 'HTTP Calls',
+      'websocket': 'WebSocket Events',
+      'facade-method': 'State Facade',
+      'store-dispatch': 'Store Dispatch',
+      'store-select': 'Store Select',
+    };
+    return labels[type] || type;
   }
 
   /** Get color class for flow type */
   flowTypeColor(type: string): string {
-    switch (type) {
-      case 'subject-emit': return 'border-purple-500/40 bg-purple-900/20 text-purple-300';
-      case 'signal-write': return 'border-green-500/40 bg-green-900/20 text-green-300';
-      case 'http-response': return 'border-cyan-500/40 bg-cyan-900/20 text-cyan-300';
-      case 'websocket': return 'border-indigo-500/40 bg-indigo-900/20 text-indigo-300';
-      case 'facade-method': return 'border-orange-500/40 bg-orange-900/20 text-orange-300';
-      case 'store-dispatch': return 'border-red-500/40 bg-red-900/20 text-red-300';
-      case 'store-select': return 'border-pink-500/40 bg-pink-900/20 text-pink-300';
-      default: return 'border-gray-500/40 bg-gray-900/20 text-gray-300';
-    }
+    // Consistent visual coding: each data source has a distinct color
+    const colorMap: Record<string, string> = {
+      'subject-emit': 'border-purple-500/40 bg-purple-900/20 text-purple-300',
+      'signal-write': 'border-green-500/40 bg-green-900/20 text-green-300',
+      'http-response': 'border-cyan-500/40 bg-cyan-900/20 text-cyan-300',
+      'websocket': 'border-indigo-500/40 bg-indigo-900/20 text-indigo-300',
+      'facade-method': 'border-orange-500/40 bg-orange-900/20 text-orange-300',
+      'store-dispatch': 'border-red-500/40 bg-red-900/20 text-red-300',
+      'store-select': 'border-pink-500/40 bg-pink-900/20 text-pink-300',
+    };
+    return colorMap[type] || 'border-gray-500/40 bg-gray-900/20 text-gray-300';
   }
 
   /** Get icon for flow type */
   flowTypeIcon(type: string): string {
-    switch (type) {
-      case 'subject-emit': return '📡';
-      case 'signal-write': return '⚡';
-      case 'http-response': return '🌐';
-      case 'websocket': return '🔗';
-      case 'facade-method': return '🏛️';
-      case 'store-dispatch': return '📤';
-      case 'store-select': return '📥';
-      default: return '•';
-    }
+    // Quick visual indicator for what kind of event this is
+    const icons: Record<string, string> = {
+      'subject-emit': '📡',      // Broadcasting
+      'signal-write': '⚡',      // Fast/reactive
+      'http-response': '🌐',     // Network
+      'websocket': '🔗',         // Connection
+      'facade-method': '🏛️',    // Architecture
+      'store-dispatch': '📤',    // Outgoing
+      'store-select': '📥',      // Incoming
+    };
+    return icons[type] || '•';
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -422,48 +721,57 @@ export class RenderingComponent {
     const allEvents = this.state.renderEvents();
     const componentEvents = allEvents.filter(e => e.componentName === componentName);
     
+    // No render events for this component yet
     if (componentEvents.length === 0) return [];
 
-    // Merge all reasons from this component's render events
+    // Aggregate reasons across all renders of this component
+    // (same reason might trigger multiple times)
     const reasonsMap = new Map<string, RenderReason>();
     
     for (const event of componentEvents) {
       if (!event.reasons) continue;
       
       for (const reason of event.reasons) {
-        const key = `${reason.type}:${reason.source}`;
-        const existing = reasonsMap.get(key);
+        const reasonKey = `${reason.type}:${reason.source}`;
+        const existing = reasonsMap.get(reasonKey);
         
         if (existing) {
+          // Count this reason again (it triggered another render)
           existing.count += reason.count;
           // Keep the most recent value
-          if (reason.after !== undefined) existing.after = reason.after;
+          if (reason.after !== undefined) {
+            existing.after = reason.after;
+          }
         } else {
-          reasonsMap.set(key, { ...reason });
+          reasonsMap.set(reasonKey, { ...reason });
         }
       }
     }
     
+    // Sort by frequency (most common first)
     return Array.from(reasonsMap.values()).sort((a, b) => b.count - a.count);
   }
 
   /** Get reason type icon and color */
   getReasonIcon(type: string): { icon: string; class: string } {
-    const icons: Record<string, { icon: string; class: string }> = {
-      'signal': { icon: '⚡', class: 'reason-signal' },
-      'input': { icon: '📥', class: 'reason-input' },
-      'parent': { icon: '👨‍👧', class: 'reason-parent' },
-      'zone': { icon: '⏱️', class: 'reason-zone' },
-      'api': { icon: '🌐', class: 'reason-api' },
-      'route': { icon: '🛣️', class: 'reason-route' },
+    // Each reason type gets a distinct visual identity
+    const iconMap: Record<string, { icon: string; class: string }> = {
+      'signal': { icon: '⚡', class: 'reason-signal' },        // Reactive
+      'input': { icon: '📥', class: 'reason-input' },          // External input
+      'parent': { icon: '👨‍👧', class: 'reason-parent' },     // Parent cascade
+      'zone': { icon: '⏱️', class: 'reason-zone' },           // Timing
+      'api': { icon: '🌐', class: 'reason-api' },             // Network
+      'route': { icon: '🛣️', class: 'reason-route' },        // Navigation
     };
-    return icons[type] || { icon: '❓', class: 'reason-default' };
+    return iconMap[type] || { icon: '❓', class: 'reason-default' };
   }
 
   /** Toggle component render reasons expansion */
   toggleComponentReasons(componentName: string): void {
+    // Track which component's render reasons are visible
     const current = this.expandedComponentReasons();
-    this.expandedComponentReasons.set(current === componentName ? null : componentName);
+    const shouldExpand = current !== componentName;
+    this.expandedComponentReasons.set(shouldExpand ? componentName : null);
   }
 
   /** Check if a component's render reasons are expanded */
@@ -472,27 +780,40 @@ export class RenderingComponent {
   }
 
   formatCauseSource(cause: RenderCause): string {
-    const src = cause.source ?? cause.type;
+    // Format cause info into a human-readable phrase
+    const source = cause.source ?? cause.type;
+
+    // Parent component re-renders cascade down to children
     if (cause.type === 'parent') {
-      return src ? `by ${displayName(src)}` : 'parent cascade';
+      return source ? `by ${displayName(source)}` : 'parent cascade';
     }
-    if (src.startsWith('addEventListener:')) return src.replace('addEventListener:', '') + ' event';
-    if (src === 'setTimeout') return 'timer';
-    if (src === 'setInterval') return 'interval';
-    if (src === 'fetch' || src === 'XMLHttpRequest') return 'HTTP response';
-    if (src === 'Promise.then') return 'async';
-    return src;
+
+    // User events (click, input, etc.)
+    if (source.startsWith('addEventListener:')) {
+      const eventType = source.replace('addEventListener:', '');
+      return `${eventType} event`;
+    }
+
+    // Async operations
+    if (source === 'setTimeout') return 'timer';
+    if (source === 'setInterval') return 'interval';
+    if (source === 'fetch' || source === 'XMLHttpRequest') return 'HTTP response';
+    if (source === 'Promise.then') return 'async callback';
+
+    return source;
   }
 
   causePillClass(type: RenderCause['type'] | 'unknown'): string {
-    switch (type) {
-      case 'zone': return 'bg-blue-900/60 text-blue-300';
-      case 'signal': return 'bg-green-900/60 text-green-300';
-      case 'input': return 'bg-cyan-900/60 text-cyan-300';
-      case 'parent': return 'bg-purple-900/60 text-purple-300';
-      case 'manual-cd': return 'bg-amber-900/60 text-amber-300';
-      default: return 'bg-gray-700 text-gray-400';
-    }
+    // Color-coded pills for render cause types (helps quick visual scanning)
+    const pillColors: Record<string, string> = {
+      'zone': 'bg-blue-900/60 text-blue-300',        // Angular zone events
+      'signal': 'bg-green-900/60 text-green-300',    // Reactive signals
+      'input': 'bg-cyan-900/60 text-cyan-300',       // @Input changes
+      'parent': 'bg-purple-900/60 text-purple-300',  // Parent re-renders
+      'manual-cd': 'bg-amber-900/60 text-amber-300', // Manual CD trigger
+      'unknown': 'bg-gray-700 text-gray-400',
+    };
+    return pillColors[type] || 'bg-gray-700 text-gray-400';
   }
 
   flattenTree(tree: CascadeNode[]): CascadeNode[] {
@@ -512,7 +833,6 @@ export class RenderingComponent {
   }
 
   /** Reducer to sum render counts from flattened tree */
-  sumRenders = (total: number, node: CascadeNode): number => total + node.count;
 
   /** Severity of a component's render — based on IMPACT (count × duration), not just count. */
   renderSeverity(node: CascadeNode): 'high' | 'medium' | 'none' {
@@ -990,7 +1310,8 @@ export class RenderingComponent {
       if (f.triggeredByInteractionTs != null) {
         return f.triggeredByInteractionTs >= profile.startTime - 100 && f.triggeredByInteractionTs <= profile.endTime + 100;
       }
-      return f.timestamp >= profile.startTime - 100 && f.timestamp <= profile.endTime + 2000;
+      // Extended window: API responses can arrive up to 10s after the interaction
+      return f.timestamp >= profile.startTime - 100 && f.timestamp <= profile.endTime + 10000;
     });
     const interaction = events.find(e => e.interactionComponent);
     const duration = profile.duration;
@@ -1048,7 +1369,7 @@ export class RenderingComponent {
       // (covers route changes where APIs respond and trigger re-renders)
       const timeSincePrev = prev ? group[0].timestamp - prev[prev.length - 1].timestamp : Infinity;
       const isAsyncCascade =
-        prev && prevInteraction && !groupInteraction && timeSincePrev < 2000;
+        prev && prevInteraction && !groupInteraction && timeSincePrev < 10000;
 
       // Also merge if a route-change happened in the previous group's window
       const prevStart = prev?.[0]?.timestamp ?? 0;
@@ -1077,8 +1398,8 @@ export class RenderingComponent {
         if (f.triggeredByInteractionTs != null) {
           return f.triggeredByInteractionTs >= startTs - 100 && f.triggeredByInteractionTs <= endTs + 100;
         }
-        // Fallback: time proximity for flow events without interaction stamp
-        return f.timestamp >= startTs - 100 && f.timestamp <= endTs + 2000;
+        // Extended window: API responses can take several seconds after interaction
+        return f.timestamp >= startTs - 100 && f.timestamp <= endTs + 10000;
       });
 
       // Count how many input keystrokes were merged
@@ -1411,6 +1732,175 @@ export class RenderingComponent {
     }
   }
 
+  // ── New UX: Semantic Labels, CD-MER, Cause Distribution, Flow Correlation ──
+
+  /** Semantic label for action chips: "[Type] [Target]" format */
+  getSemanticLabel(action: ActionReplay): string {
+    const trigger = action.trigger;
+    const target = action.targetSelector;
+
+    if (trigger === 'Page Load') return 'Page Load';
+    if (trigger.startsWith('navigation')) return trigger;
+    if (trigger.includes('click') && target) return `Click "${this.shortenSelector(target)}"`;
+    if (trigger.includes('input') && target) return `Input "${this.shortenSelector(target)}"`;
+    if (trigger.includes('keystroke')) return trigger;
+
+    // Check if we have signal/API info in flow entries
+    const signalFlow = action.flowEntries.find(f => f.type === 'signal-write');
+    if (signalFlow) return `Signal: ${signalFlow.label.replace('Signal: ', '').split('.').pop() || 'update'}`;
+    const httpFlow = action.flowEntries.find(f => f.type === 'http-response');
+    if (httpFlow) return `API ${this.shortenUrl(httpFlow.label)}`;
+
+    if (target) return `${trigger} "${this.shortenSelector(target)}"`;
+    return trigger || 'Action';
+  }
+
+  /** Shorten CSS selector for display */
+  private shortenSelector(selector: string): string {
+    if (!selector) return '';
+    // Extract meaningful part: #id, .class, or tag
+    const match = selector.match(/#[\w-]+|\.[\w-]+|button|input|a|select|textarea/);
+    if (match) return match[0];
+    return selector.length > 20 ? selector.slice(0, 20) + '…' : selector;
+  }
+
+  /** Component hover handler for bi-directional correlation */
+  onComponentHovered(componentData: any | null): void {
+    // Future: highlight corresponding flow entries in drawer
+    // For now, just track for potential use
+  }
+
+  /** Cause distribution: breakdown of signal/zone/parent/input/manual percentages */
+  getCauseDistribution(): Array<{ type: string; label: string; pct: number }> {
+    const data = this.selectedComponentData();
+    if (!data) return [];
+
+    // Get all render events for this component in the selected action
+    const action = this.getSelectedAction();
+    if (!action) return [{ type: data.cause?.type || 'unknown', label: this.causeTypeLabel(data.cause?.type), pct: 100 }];
+
+    const events = this.getActionEvents(action).filter(e => e.componentName === data.componentName);
+    if (events.length === 0) return [{ type: data.cause?.type || 'unknown', label: this.causeTypeLabel(data.cause?.type), pct: 100 }];
+
+    const counts: Record<string, number> = {};
+    for (const e of events) {
+      const type = e.causes[0]?.type || 'zone';
+      counts[type] = (counts[type] || 0) + 1;
+    }
+
+    const total = Object.values(counts).reduce((s, c) => s + c, 0) || 1;
+    return Object.entries(counts)
+      .map(([type, count]) => ({ type, label: this.causeTypeLabel(type), pct: Math.round((count / total) * 100) }))
+      .sort((a, b) => b.pct - a.pct);
+  }
+
+  private causeTypeLabel(type: string | undefined): string {
+    const labels: Record<string, string> = {
+      signal: 'Signal', zone: 'Zone/Async', parent: 'Parent', input: 'Input', 'manual-cd': 'Manual CD',
+    };
+    return labels[type || ''] || 'Unknown';
+  }
+
+  /** Render count severity class */
+  getRenderCountClass(count: number): string {
+    if (count >= 5) return 'color-critical';
+    if (count >= 3) return 'color-warning';
+    return '';
+  }
+
+  /** Duration severity class */
+  getDurationClass(ms: number): string {
+    if (ms > 50) return 'color-critical';
+    if (ms > 16) return 'color-warning';
+    return 'color-success';
+  }
+
+  /** CD-MER severity class */
+  getCdMerClass(pct: number): string {
+    if (pct < 25) return 'color-critical';
+    if (pct < 60) return 'color-warning';
+    return 'color-success';
+  }
+
+  /** Get CD-MER for currently selected component */
+  getComponentCdMer(): number {
+    const name = this.selectedComponentName();
+    if (!name) return 100;
+    const stats = this.state.componentStats().find(s => this.displayName(s.componentName) === name);
+    return stats?.cdMer ?? 100;
+  }
+
+  /** Get template bindings count for selected component */
+  getComponentBindings(): number | string {
+    const name = this.selectedComponentName();
+    if (!name) return '—';
+    const stats = this.state.componentStats().find(s => this.displayName(s.componentName) === name);
+    return stats?.totalTemplateBindings ?? '—';
+  }
+
+  /** Get output listeners count for selected component */
+  getComponentListeners(): number | string {
+    const name = this.selectedComponentName();
+    if (!name) return '—';
+    const stats = this.state.componentStats().find(s => this.displayName(s.componentName) === name);
+    return stats?.totalOutputListeners ?? '—';
+  }
+
+  /** Get flow entries associated with the selected component */
+  getSelectedComponentFlows(): FlowEntry[] {
+    const action = this.getSelectedAction();
+    const name = this.selectedComponentName();
+    if (!action || !name) return [];
+
+    // Match by ownerClass or subscribers mentioning this component
+    return action.flowEntries.filter(f => {
+      if (f.ownerClass && this.displayName(f.ownerClass) === name) return true;
+      if (f.sourceComponent && this.displayName(f.sourceComponent) === name) return true;
+      if (f.subscribers?.some(s => this.displayName(s) === name)) return true;
+      return false;
+    }).slice(0, 8);
+  }
+
+  /** Smart fix suggestion based on metrics */
+  getSmartFix(m: any): string {
+    if (!m) return '';
+    const cdMer = this.getComponentCdMer();
+
+    if (cdMer < 25) {
+      return `Low CD-MER (${cdMer.toFixed(1)}%) — most change detection cycles produce no DOM mutations. Add ChangeDetectionStrategy.OnPush or memoize expensive template expressions.`;
+    }
+    if (m.renderCount >= 6) {
+      return `Excessive re-renders (${m.renderCount}×). Investigate why the component is marked dirty so often. Consider OnPush + signals for fine-grained reactivity.`;
+    }
+    if (m.totalDuration > 50) {
+      return `Slow render cycle (${m.totalDuration}ms total). Reduce template complexity, defer heavy computations, or split into smaller components.`;
+    }
+    if (m.causeType === 'parent') {
+      return `Rendered due to parent cascade. This component re-renders even when its own state hasn't changed. Add OnPush to opt out of unnecessary checks.`;
+    }
+    if (m.causeType === 'zone' && m.causeSource?.includes('scroll')) {
+      return `Scroll events trigger re-renders via Zone.js. Use runOutsideAngular() or switch to Intersection Observer.`;
+    }
+    if (m.causeType === 'zone' && m.causeSource?.includes('timer')) {
+      return `Timer triggers re-renders. Run timers outside Angular zone and manually trigger CD when UI state changes.`;
+    }
+    return 'Performance looks acceptable. No immediate optimization needed.';
+  }
+
+  /** Get a component file path (heuristic: derive from class name) */
+  getComponentFilePath(name: string): string | null {
+    if (!name) return null;
+    // Convert PascalCase to kebab-case for file path heuristic
+    const kebab = name.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase().replace(/\s+component$/i, '');
+    return `src/app/${kebab}/${kebab}.component.ts`;
+  }
+
+  /** Open file in VS Code via protocol handler */
+  openInVSCode(filePath: string): void {
+    const url = `vscode://file/${filePath}`;
+    window.open(url, '_blank');
+  }
+
   // ── Per-Component Diagnostics ─────────────────────────────────────────────
 
   getDiagnostics(action: ActionReplay): Array<{ component: string; severity: 'high' | 'medium'; problem: string; reason: string; fix: string }> {
@@ -1565,5 +2055,26 @@ export class RenderingComponent {
     // Many components re-rendering = likely navigation
     if (new Set(events.map(e => e.componentName)).size >= 5) return '🧭';
     return '▸';
+  }
+
+  // ── ENHANCED CASCADE TREE HELPERS ──────────────────────────────────────────
+
+  /** Helper to get cause badge text for cascade rows */
+  getCauseBadgeText(cause: { type: string; source?: string }): string {
+    switch (cause.type) {
+      case 'signal': return '⚡ Signal';
+      case 'zone': return '⚠️ Zone';
+      case 'parent': return '⬆️ Parent';
+      case 'input': return '📥 Input';
+      case 'manual-cd': return '🔧 Manual';
+      default: return '• Unknown';
+    }
+  }
+
+  /** Expand all cascade children (shows all 10+ children) */
+  expandCascadeAll(): void {
+    // This would toggle a signal to show all children instead of slice:0:10
+    // For now, just a stub that developers can extend
+    console.log('Cascade expansion toggled');
   }
 }

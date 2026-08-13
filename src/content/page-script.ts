@@ -319,6 +319,13 @@ function handleContentMessage(event: Event): void {
       break;
     }
 
+    case 'OVERLAY_PULSE': {
+      const spatialData = message.payload as { top: number; left: number; width: number; height: number };
+      showPulseHighlight(spatialData);
+      dispatchResult(message.eventId, 'SUCCESS', {});
+      break;
+    }
+
     default:
       // Unknown message type — ignore
       break;

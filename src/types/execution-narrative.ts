@@ -242,6 +242,15 @@ export interface ExecutionNarrative {
   
   // Raw execution data (for fallback)
   originalStory: any;                // Reference to ExecutionStory (for debugging)
+
+  /** Forensic metrics for Level 4 investigation */
+  forensicMetrics?: {
+    interactionToFinalPaint: number; // IFP in ms
+    asyncToRenderRatio: number;      // 0-100 (high = IO bound, low = CPU/Render bound)
+    criticalPathDepth: number;       // Number of hops in the main causality chain
+    signalGlitches: number;          // Number of redundant reactive cycles
+    bottleneckTrack: 'USER' | 'EXTERNAL' | 'LOGIC' | 'UI';
+  };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

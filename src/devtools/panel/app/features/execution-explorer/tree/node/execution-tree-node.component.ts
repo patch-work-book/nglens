@@ -15,9 +15,10 @@
  *     - Signal: value + consumers
  */
 
-import { Component, Input, Output, EventEmitter, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, signal, ChangeDetectionStrategy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import type { TreeNode } from '@nglens/types/execution-tree';
+import { DevtoolsPortService } from '../../../../services/devtools-port.service';
 
 @Component({
   selector: 'app-execution-tree-node',
@@ -33,7 +34,9 @@ import type { TreeNode } from '@nglens/types/execution-tree';
            [class.is-step]="node.type === 'step'"
            [class.is-bottleneck]="node.isBottleneck"
            [class.is-expanded]="node.isExpanded()"
-           (click)="onNodeClick()">
+           (click)="onNodeClick()"
+           (mouseenter)="onMouseEnter()"
+           (mouseleave)="onMouseLeave()">
         
         <!-- Expand/collapse toggle -->
         @if (node.children.length > 0 || node.type === 'step') {
@@ -355,6 +358,23 @@ import type { TreeNode } from '@nglens/types/execution-tree';
 export class ExecutionTreeNodeComponent {
   @Input() node!: TreeNode;
   @Output() stepSelected = new EventEmitter<TreeNode>();
+
+  private readonly portService = inject(DevtoolsPortService);
+
+  onMouseEnter(): void {
+    const spatial = (this.node.event as any)?.spatialMetadata;
+    if (spatial) {
+      this.portService.send({
+        type: 'OVERLAY_PULSE',
+        payload: spatial,
+        timestamp: Date.now()
+      });
+    }
+  }
+
+  onMouseLeave(): void {
+    // No-op for now, pulse self-destructs
+  }
 
   onNodeClick(): void {
     this.node.isExpanded.update((v: boolean) => !v);

@@ -83,6 +83,21 @@ export interface RuntimeEvent {
   frameId?: number;
   route?: string;
 
+  /** 
+   * Spatial metadata for "Blast Radius" heatmap.
+   * Captured for component renders and user interactions.
+   */
+  spatialMetadata?: {
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+    selector: string;
+  };
+
+  // Render reasons for component-render events
+  reasons?: Array<{ type: string; reason: string; count: number; icon: string }>;
+
   // Future extensibility
   metadata?: Record<string, any>;
 }
@@ -248,6 +263,31 @@ export interface ImpactMetrics {
   totalRenderCount: number;
   averageRenderDuration: number;
   totalDuration: number;
+
+  /**
+   * Render Efficiency Index (0-100).
+   * 100 = Perfect (All renders caused DOM mutations).
+   * < 20 = Critical (Too many "wasted" renders).
+   */
+  renderEfficiencyIndex: number;
+
+  /** Maximum depth of the render cascade */
+  maxCascadingDepth: number;
+  
+  /** Render reasons for component-render events */
+  reasons?: Array<{ type: string; reason: string; count: number; icon: string }>;
+
+  /** 
+   * Interaction-to-Final-Paint (ms).
+   * Total time from trigger to last mutation.
+   */
+  interactionToFinalPaint: number;
+
+  /** 
+   * Ratio of transitive (forced) renders vs total renders.
+   * High values suggest missing OnPush.
+   */
+  parasiticRenderRatio: number;
   
   // Consumer tree
   directConsumers: string[];     // Immediate consumers

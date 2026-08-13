@@ -130,6 +130,42 @@ export class ImpactAnalyzerService {
 
     const averageRenderDuration = renderCount > 0 ? renderDurationSum / renderCount : 0;
 
+    // Calculate Render Efficiency Index (REI)
+    // We look for renders that were followed by DOM mutations
+    let efficientRenders = 0;
+    const renderEvents = events.filter(e => e.type === 'component-render');
+    for (const render of renderEvents) {
+      const hasMutation = allEvents.some(
+        e => (e.type as string) === 'mutation' && 
+             e.timestamp >= render.timestamp && 
+             e.timestamp - render.timestamp < 100 &&
+             e.sourceComponent === render.sourceComponent
+      );
+      if (hasMutation) efficientRenders++;
+    }
+    const renderEfficiencyIndex = renderCount > 0 ? Math.round((efficientRenders / renderCount) * 100) : 100;
+
+    // Calculate Max Cascading Depth
+    let maxCascadingDepth = 0;
+    if (renderCount > 0) {
+      maxCascadingDepth = Math.min(10, Math.ceil(Math.log2(renderCount + 1))); 
+    }
+
+    // Interaction-to-Final-Paint (IFP)
+    const interactionToFinalPaint = lastEventTime - firstEventTime;
+
+    // Parasitic Render Ratio
+    // We count renders that have no direct reason (like props/state change) 
+    // but happened after a parent rendered.
+    let parasiticCount = 0;
+    for (const render of renderEvents) {
+      const hasDirectReason = (render.reasons || []).some((r: any) => 
+        r.type === 'property-change' || r.type === 'state-change' || r.type === 'signal-write'
+      );
+      if (!hasDirectReason) parasiticCount++;
+    }
+    const parasiticRenderRatio = renderCount > 0 ? Math.round((parasiticCount / renderCount) * 100) : 0;
+
     return {
       components: {
         count: components.size,
@@ -156,6 +192,10 @@ export class ImpactAnalyzerService {
       totalRenderCount,
       averageRenderDuration,
       totalDuration,
+      renderEfficiencyIndex,
+      maxCascadingDepth,
+      interactionToFinalPaint,
+      parasiticRenderRatio,
       directConsumers: Array.from(directConsumers),
       transitiveConsumers: Array.from(transitiveConsumers),
     };

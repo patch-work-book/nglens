@@ -153,6 +153,23 @@ export function injectOverlayStyles(): void {
       margin-top: 4px;
       font-style: italic;
     }
+
+    .ng-lens-pulse-highlight {
+      position: fixed;
+      z-index: 2147483646;
+      pointer-events: none;
+      background: rgba(255, 68, 68, 0.3);
+      border: 2px solid #ff4444;
+      box-sizing: border-box;
+      border-radius: 4px;
+      animation: ng-lens-pulse 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    @keyframes ng-lens-pulse {
+      0% { opacity: 0; transform: scale(0.98); }
+      20% { opacity: 0.8; transform: scale(1.02); }
+      100% { opacity: 0; transform: scale(1.05); }
+    }
   `;
 
   document.head.appendChild(style);
@@ -313,6 +330,31 @@ export function hideOverlay(overlayId: string): void {
 export function clearAllOverlays(): void {
   const overlayIds = Array.from(activeOverlays.keys());
   overlayIds.forEach(id => hideOverlay(id));
+}
+
+/**
+ * Shows a "pulse" highlight at specific spatial coordinates.
+ * Used for the "Blast Radius" heatmap visualization.
+ */
+export function showPulseHighlight(spatialData: { top: number; left: number; width: number; height: number }): void {
+  // Ensure styles are injected
+  if (!stylesInjected) {
+    injectOverlayStyles();
+  }
+
+  const pulse = document.createElement('div');
+  pulse.className = 'ng-lens-pulse-highlight';
+  pulse.style.top = `${spatialData.top}px`;
+  pulse.style.left = `${spatialData.left}px`;
+  pulse.style.width = `${spatialData.width}px`;
+  pulse.style.height = `${spatialData.height}px`;
+
+  document.body.appendChild(pulse);
+  
+  // Self-destruct after animation completes (1s matching @keyframes)
+  setTimeout(() => {
+    pulse.remove();
+  }, 1000);
 }
 
 /**

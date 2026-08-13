@@ -27,6 +27,7 @@ import { DiffEngineService } from './diff-engine.service';
 import { InsightEngineService } from './insight-engine.service';
 import { ExecutionScoreService } from './execution-score.service';
 import { ExecutionGraphEngineService } from './execution-graph-engine.service';
+import { EventCompressionService } from './event-compression.service';
 
 @Injectable({ providedIn: 'root' })
 export class ExecutionIntelligenceService {
@@ -39,6 +40,7 @@ export class ExecutionIntelligenceService {
   private insightEngine = new InsightEngineService();
   private scoreService = new ExecutionScoreService();
   private graphEngine = new ExecutionGraphEngineService();
+  private compressor = new EventCompressionService();
 
   // State signals
   private readonly rawFlowEvents = signal<FlowEvent[]>([]);
@@ -49,6 +51,7 @@ export class ExecutionIntelligenceService {
   private readonly sessions = signal<ExecutionSession[]>([]);
   private readonly stories = signal<ExecutionStory[]>([]);
   private readonly graphs = signal<Map<string, ExecutionGraph>>(new Map());
+  private readonly compressedStories = signal<any[]>([]); // From EventCompressionService
 
   // Map for easy lookup
   private eventMap = new Map<string, RuntimeEvent>();
@@ -59,6 +62,7 @@ export class ExecutionIntelligenceService {
   readonly executionGraphs = computed(() => this.graphs());
   readonly sessionCount = computed(() => this.sessions().length);
   readonly totalEvents = computed(() => this.normalizedEvents().length);
+  readonly compressedExecutionStories = computed(() => this.compressedStories());
 
   constructor() {}
 
@@ -151,6 +155,21 @@ export class ExecutionIntelligenceService {
   }
 
   /**
+   * Compress raw events into 5-10 meaningful execution stories.
+   * This is the new fast path for handling large event streams.
+   */
+  compressEvents(): void {
+    const normalized = this.normalizedEvents();
+    if (normalized.length === 0) {
+      this.compressedStories.set([]);
+      return;
+    }
+
+    const compressed = this.compressor.compress(normalized);
+    this.compressedStories.set(compressed);
+  }
+
+  /**
    * Clear all data.
    */
   clear(): void {
@@ -160,6 +179,7 @@ export class ExecutionIntelligenceService {
     this.sessions.set([]);
     this.stories.set([]);
     this.graphs.set(new Map());
+    this.compressedStories.set([]);
     this.eventMap.clear();
 
     this.normalizer.reset();
@@ -271,5 +291,8 @@ export class ExecutionIntelligenceService {
     }
 
     this.stories.set(stories);
+
+    // BONUS: Run compression algorithm on normalized events
+    this.compressEvents();
   }
 }

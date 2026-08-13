@@ -1,79 +1,319 @@
-<div class="report">
+<div class="ee-workspace">
 
-  <!-- Header -->
-  <div class="header">
-    <div class="header-top">
-      <span class="header-title">Execution Timeline</span>
-      <div class="header-actions">
-        @if (availableFilters().length > 0) {
-          <select class="filter-dropdown" [value]="activeFilter()" (change)="onFilterChange($event)">
-            <option value="all">All Types</option>
-            @for (opt of availableFilters(); track opt.key) {
-              <option [value]="opt.key">{{ opt.label }}</option>
-            }
-          </select>
+  @if (swimlaneData(); as data) {
+
+    <!-- ═══ HEADER: High-Load Summary ═══ -->
+    <header class="ee-header">
+      <div class="ee-header__left">
+        <span class="ee-header__label">EXECUTION EXPLORER</span>
+        <span class="ee-header__trigger">{{ trigger() }}</span>
+      </div>
+      <div class="ee-header__metrics">
+        <div class="ee-metric">
+          <span class="ee-metric__value">{{ data.summary.totalApis }}</span>
+          <span class="ee-metric__label">APIs</span>
+        </div>
+        <div class="ee-metric">
+          <span class="ee-metric__value">{{ data.summary.totalRenders }}</span>
+          <span class="ee-metric__label">Renders</span>
+        </div>
+        <div class="ee-metric">
+          <span class="ee-metric__value">{{ data.summary.totalSignals + data.summary.totalStoreUpdates }}</span>
+          <span class="ee-metric__label">State</span>
+        </div>
+        @if (data.summary.duplicateApiCount > 0) {
+          <div class="ee-metric ee-metric--warn">
+            <span class="ee-metric__value">{{ data.summary.duplicateApiCount }}</span>
+            <span class="ee-metric__label">Dupes</span>
+          </div>
         }
-      </div>
-      <span class="header-total">{{ formatTime(duration()) }}</span>
-    </div>
-    <div class="header-meta">
-      {{ trigger() }} · {{ totalSteps() }} events · {{ uniqueComponents() }} components
-    </div>
-  </div>
-
-  <!-- Waterfall Timeline -->
-  @if (filteredWaterfall().length > 0) {
-    <div class="section">
-      <!-- Sticky timeline axis header - OUTSIDE scrollable container -->
-      <div class="waterfall-header">
-        <span class="wf-label">COMPONENT</span>
-        <div class="wf-timeline-axis">
-          <span>0ms</span>
-          <span>{{ formatTime(Math.round(duration() / 4)) }}</span>
-          <span>{{ formatTime(Math.round(duration() / 2)) }}</span>
-          <span>{{ formatTime(Math.round(duration() * 3 / 4)) }}</span>
-          <span>{{ formatTime(duration()) }}</span>
+        <div class="ee-metric ee-metric--duration">
+          <span class="ee-metric__value">{{ formatTime(data.summary.totalDuration) }}</span>
+          <span class="ee-metric__label">Total</span>
         </div>
-        <span class="wf-dur-label">DURATION</span>
+      </div>
+    </header>
+
+    <!-- ═══ NARRATIVE HEADLINE CARD ═══ -->
+    @if (data.summary.primaryBottleneck) {
+      <div class="ee-narrative">
+        <span class="ee-narrative__icon">🔍</span>
+        <p class="ee-narrative__text">
+          <strong>{{ data.summary.totalApis }} API calls</strong> and
+          <strong>{{ data.summary.totalRenders }} component renders</strong> in
+          <strong>{{ formatTime(data.summary.totalDuration) }}</strong>.
+          @if (data.summary.duplicateApiCount > 0) {
+            <span class="ee-narrative__highlight ee-narrative__highlight--warn">{{ data.summary.duplicateApiCount }} duplicate network calls detected.</span>
+          }
+          Primary bottleneck: <span class="ee-narrative__highlight ee-narrative__highlight--error">{{ data.summary.primaryBottleneck }} ({{ formatTime(data.summary.bottleneckDuration) }})</span>.
+        </p>
+      </div>
+    }
+
+    <!-- ═══ FILTER & NOISE SUPPRESSION TOOLBAR ═══ -->
+    <div class="ee-toolbar">
+      <div class="ee-toolbar__left">
+        <!-- Search Input -->
+        <div class="ee-search">
+          <span class="ee-search__icon">🔎</span>
+          <input class="ee-search__input"
+                 type="text"
+                 placeholder="Filter APIs, Signals, Components..."
+                 [value]="searchQuery()"
+                 (input)="onSearchInput($event)" />
+          @if (searchQuery()) {
+            <button class="ee-search__clear" (click)="clearSearch()">×</button>
+          }
+        </div>
+
+        <!-- Filter Chips -->
+        <div class="ee-filter-chips">
+          <button class="ee-chip" [class.active]="activeFilter() === 'all'" (click)="setFilter('all')">All Events</button>
+          <button class="ee-chip" [class.active]="activeFilter() === 'critical'" (click)="setFilter('critical')">Critical Path Only</button>
+          <button class="ee-chip" [class.active]="activeFilter() === 'slow'" (click)="setFilter('slow')">Slow &gt;16ms</button>
+          <button class="ee-chip" [class.active]="activeFilter() === 'duplicates'" (click)="setFilter('duplicates')">Duplicates</button>
+        </div>
       </div>
 
-      <div class="waterfall" (mouseleave)="onWaterfallMouseLeave()">
-        <div class="waterfall-content">
-          <!-- Vertical hover indicator line -->
-          @if (hoverLinePct() !== null) {
-            <div class="hover-line" [style.left.%]="hoverLinePct()">
-              <span class="hover-line-label">{{ hoverTimeLabel() }}</span>
-            </div>
-          }
+      <div class="ee-toolbar__right">
+        <!-- Density Toggle -->
+        <div class="ee-density-toggle">
+          <button class="ee-density-btn" [class.active]="densityMode() === 'coalesced'" (click)="setDensity('coalesced')">Coalesced</button>
+          <button class="ee-density-btn" [class.active]="densityMode() === 'expanded'" (click)="setDensity('expanded')">Expanded</button>
+        </div>
+      </div>
+    </div>
 
-          @for (item of filteredWaterfall(); track item.id) {
-            <div class="wf-row" [class]="'type-' + item.type" [class.is-slow]="item.isSlow"
-                 [class.is-bottleneck]="bottleneckItem()?.id === item.id"
-                 [title]="item.name + ' — Started: ' + formatTime(item.startTime) + ' | Ended: ' + formatTime(item.endTime) + ' | Duration: ' + formatTime(item.duration)">
-              <span class="wf-name" [title]="item.name">
-                {{ item.name }}
-                @if (bottleneckItem()?.id === item.id) {
-                  <span class="bottleneck-tag">🔴 Bottleneck</span>
-                }
-              </span>
-              <div class="wf-bar-track" (mousemove)="onBarTrackHover($event)" (mouseleave)="onWaterfallMouseLeave()">
-                <!-- Timeline bar positioned by start time and sized by duration -->
-                <div class="wf-bar" [style.left.%]="item.startPct" [style.width.%]="item.widthPct">
+    <!-- ═══ GROUPED SWIMLANE TIMELINE ═══ -->
+    <div class="ee-swimlanes">
+
+      <!-- Timeline Ruler -->
+      <div class="ee-ruler">
+        <span class="ee-ruler__label">0ms</span>
+        <span class="ee-ruler__label">{{ formatTime(data.sessionDuration * 0.25) }}</span>
+        <span class="ee-ruler__label">{{ formatTime(data.sessionDuration * 0.5) }}</span>
+        <span class="ee-ruler__label">{{ formatTime(data.sessionDuration * 0.75) }}</span>
+        <span class="ee-ruler__label">{{ formatTime(data.sessionDuration) }}</span>
+      </div>
+
+      @for (lane of filteredResult().lanes; track lane.id) {
+        <!-- LANE -->
+        <div class="ee-lane" [class]="'ee-lane--' + lane.category">
+
+          <!-- Lane Header -->
+          <div class="ee-lane__header">
+            <span class="ee-lane__icon">{{ lane.icon }}</span>
+            <span class="ee-lane__label">{{ lane.label }}</span>
+            <span class="ee-lane__count">{{ lane.totalItemCount }}</span>
+          </div>
+
+          <!-- Lane Body -->
+          <div class="ee-lane__body">
+            @for (entry of lane.entries; track getEntryId(entry)) {
+
+              @if (isGroup(entry)) {
+                <!-- ═══ BATCH GROUP NODE (Collapsible) ═══ -->
+                <div class="ee-group" [class.ee-group--expanded]="isGroupExpanded(entry.id)">
+                  <button class="ee-group__header" (click)="toggleGroup(entry.id)">
+                    <span class="ee-group__toggle">{{ isGroupExpanded(entry.id) ? '▼' : '▶' }}</span>
+                    <span class="ee-group__icon">{{ entry.icon }}</span>
+                    <span class="ee-group__title">{{ entry.title }}</span>
+                    <span class="ee-group__duration">{{ formatTime(entry.totalDuration) }}</span>
+                    <!-- Group bar -->
+                    <div class="ee-group__bar" [style.left.%]="entry.startPct" [style.width.%]="entry.widthPct"></div>
+                  </button>
+
+                  <!-- Expanded Children -->
+                  @if (isGroupExpanded(entry.id)) {
+                    <div class="ee-group__children">
+                      @for (item of entry.items; track item.id) {
+                        <div class="ee-item"
+                             [class.ee-item--slow]="item.isSlow"
+                             [class.ee-item--bottleneck]="item.isBottleneck"
+                             [class.ee-item--duplicate]="item.isDuplicate"
+                             (click)="selectItem(item)"
+                             (mouseenter)="hoverItem(item)"
+                             (mouseleave)="hoverItem(null)">
+                          <span class="ee-item__name">
+                            {{ item.title }}
+                            @if (item.duplicateCount > 1) {
+                              <span class="ee-item__dupe-badge">{{ item.duplicateCount }}×</span>
+                            }
+                          </span>
+                          <div class="ee-item__bar-track">
+                            <div class="ee-item__bar"
+                                 [class]="'ee-bar--' + item.category"
+                                 [class.ee-bar--slow]="item.isSlow"
+                                 [class.ee-bar--bottleneck]="item.isBottleneck"
+                                 [style.left.%]="item.startPct"
+                                 [style.width.%]="Math.max(0.4, item.widthPct)">
+                            </div>
+                          </div>
+                          <span class="ee-item__duration" [class.ee-item__duration--slow]="item.isSlow">{{ formatTime(item.duration) }}</span>
+                        </div>
+                      }
+                    </div>
+                  }
                 </div>
+
+              } @else {
+                <!-- ═══ INDIVIDUAL ITEM ═══ -->
+                <div class="ee-item"
+                     [class.ee-item--slow]="entry.isSlow"
+                     [class.ee-item--bottleneck]="entry.isBottleneck"
+                     [class.ee-item--duplicate]="entry.isDuplicate"
+                     (click)="selectItem(entry)"
+                     (mouseenter)="hoverItem(entry)"
+                     (mouseleave)="hoverItem(null)">
+                  <span class="ee-item__name">
+                    {{ entry.title }}
+                    @if (entry.duplicateCount > 1) {
+                      <span class="ee-item__dupe-badge">{{ entry.duplicateCount }}×</span>
+                    }
+                    @if (entry.isBottleneck) {
+                      <span class="ee-item__bottleneck-tag">⚠ BOTTLENECK</span>
+                    }
+                  </span>
+                  <div class="ee-item__bar-track">
+                    <div class="ee-item__bar"
+                         [class]="'ee-bar--' + entry.category"
+                         [class.ee-bar--slow]="entry.isSlow"
+                         [class.ee-bar--bottleneck]="entry.isBottleneck"
+                         [style.left.%]="entry.startPct"
+                         [style.width.%]="Math.max(0.4, entry.widthPct)">
+                    </div>
+                  </div>
+                  <span class="ee-item__duration" [class.ee-item__duration--slow]="entry.isSlow">{{ formatTime(entry.duration) }}</span>
+                </div>
+              }
+            }
+
+            @if (lane.entries.length === 0) {
+              <div class="ee-lane__empty">No events in this lane</div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- ═══ DETAIL INSPECTOR DRAWER ═══ -->
+    <div class="ee-drawer" [class.ee-drawer--open]="selectedItem() !== null">
+      @if (selectedItem(); as item) {
+        <div class="ee-drawer__header">
+          <div class="ee-drawer__title-row">
+            <span class="ee-drawer__category-icon">{{ getCategoryIcon(item.category) }}</span>
+            <h3 class="ee-drawer__name">{{ item.title }}</h3>
+            <button class="ee-drawer__close" (click)="clearSelection()">×</button>
+          </div>
+          @if (getSourceFilePath(item); as filePath) {
+            <button class="ee-drawer__ide-link" (click)="openInVSCode(filePath)">Open in VS Code →</button>
+          }
+        </div>
+
+        <section class="ee-drawer__section">
+          <h4 class="ee-drawer__section-title">Timing</h4>
+          <div class="ee-drawer__timing-grid">
+            <div class="ee-drawer__timing-item">
+              <span class="ee-drawer__timing-label">Start</span>
+              <span class="ee-drawer__timing-value">{{ formatTime(item.startTime) }}</span>
+            </div>
+            <div class="ee-drawer__timing-item">
+              <span class="ee-drawer__timing-label">Duration</span>
+              <span class="ee-drawer__timing-value" [class.ee-text--slow]="item.isSlow">{{ formatTime(item.duration) }}</span>
+            </div>
+            <div class="ee-drawer__timing-item">
+              <span class="ee-drawer__timing-label">End</span>
+              <span class="ee-drawer__timing-value">{{ formatTime(item.endTime) }}</span>
+            </div>
+            <div class="ee-drawer__timing-item">
+              <span class="ee-drawer__timing-label">Category</span>
+              <span class="ee-drawer__timing-value ee-drawer__timing-value--category">{{ item.category | uppercase }}</span>
+            </div>
+          </div>
+        </section>
+
+        @if (item.isSlow || item.isBottleneck || item.isDuplicate) {
+          <section class="ee-drawer__section ee-drawer__section--alert">
+            <h4 class="ee-drawer__section-title">Flags</h4>
+            <div class="ee-drawer__flags">
+              @if (item.isBottleneck) {
+                <span class="ee-flag ee-flag--error">⚠ Primary Bottleneck</span>
+              }
+              @if (item.isSlow) {
+                <span class="ee-flag ee-flag--warn">🐢 Slow Operation</span>
+              }
+              @if (item.isDuplicate) {
+                <span class="ee-flag ee-flag--warn">🔁 Duplicate ({{ item.duplicateCount }}×)</span>
+              }
+            </div>
+          </section>
+        }
+
+        @if (item.stepData?.impact?.components?.names?.length > 0) {
+          <section class="ee-drawer__section">
+            <h4 class="ee-drawer__section-title">Affected Components</h4>
+            <div class="ee-drawer__affected">
+              @for (comp of item.stepData.impact.components.names; track $index) {
+                <span class="ee-drawer__affected-chip">{{ comp }}</span>
+              }
+            </div>
+          </section>
+        }
+
+        @if (item.stepData?.rootCauseChain?.summary) {
+          <section class="ee-drawer__section">
+            <h4 class="ee-drawer__section-title">Root Cause</h4>
+            <p class="ee-drawer__root-cause">{{ item.stepData.rootCauseChain.summary }}</p>
+          </section>
+        }
+
+        @if (item.stepData?.changes?.modified?.count > 0 || item.stepData?.changes?.added?.count > 0) {
+          <section class="ee-drawer__section">
+            <h4 class="ee-drawer__section-title">State Diff</h4>
+            <div class="ee-drawer__diff">
+              @if (item.stepData.changes.added.count > 0) {
+                <div class="ee-diff-row ee-diff-row--added">+{{ item.stepData.changes.added.count }} added</div>
+              }
+              @if (item.stepData.changes.modified.count > 0) {
+                <div class="ee-diff-row ee-diff-row--modified">~{{ item.stepData.changes.modified.count }} modified</div>
+              }
+              @if (item.stepData.changes.removed.count > 0) {
+                <div class="ee-diff-row ee-diff-row--removed">-{{ item.stepData.changes.removed.count }} removed</div>
+              }
+            </div>
+          </section>
+        }
+      }
+    </div>
+
+    <!-- ═══ HIGH-DENSITY ISSUES ALERT BOX (Bottom) ═══ -->
+    @if (filteredResult().issues.length > 0) {
+      <div class="ee-issues">
+        <div class="ee-issues__header">
+          <span class="ee-issues__icon">⚠</span>
+          <span class="ee-issues__title">Detected Issues ({{ filteredResult().issues.length }})</span>
+        </div>
+        <div class="ee-issues__list">
+          @for (issue of filteredResult().issues; track issue.id) {
+            <div class="ee-issue" [class]="'ee-issue--' + issue.severity">
+              <div class="ee-issue__top">
+                <span class="ee-issue__severity">{{ issue.severity === 'error' ? '🔴' : issue.severity === 'warning' ? '🟡' : '🔵' }}</span>
+                <span class="ee-issue__title">{{ issue.title }}</span>
               </div>
-              <span class="wf-dur">{{ item.duration > 0 ? formatTime(item.duration) : '<1ms' }}</span>
+              <p class="ee-issue__detail">{{ issue.detail }}</p>
+              <p class="ee-issue__suggestion">💡 {{ issue.suggestion }}</p>
             </div>
           }
         </div>
       </div>
-    </div>
-  }
+    }
 
-  <!-- Bottleneck -->
-  @if (bottleneck()) {
-    <div class="bottleneck">
-      <span class="bottleneck-icon">⚠</span>
-      <span class="bottleneck-text">{{ bottleneck() }}</span>
+  } @else {
+    <!-- ═══ EMPTY STATE ═══ -->
+    <div class="ee-empty">
+      <div class="ee-empty__icon">👁️‍🗨️</div>
+      <h3 class="ee-empty__title">Execution Explorer</h3>
+      <p class="ee-empty__text">Interact with your application to capture execution telemetry. API calls, state changes, and component renders will appear here as a grouped swimlane waterfall.</p>
     </div>
   }
 

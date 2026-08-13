@@ -1,344 +1,222 @@
 /**
- * Execution Report - "Execution Timeline"
- * 
- * Horizontal waterfall showing WHEN things happened during an interaction.
- * Groups by phase: Interaction -> APIs -> Renders -> Complete
- * Shows parallelism, bottlenecks, and timing gaps.
- * Handles page loads with 40+ APIs gracefully by grouping.
+ * Execution Report Component — High-Density Grouped Swimlane Waterfall
+ *
+ * Transforms ExecutionNarrative into a grouped swimlane timeline with:
+ * - Automatic batch grouping (parallel APIs, bootstrap cascades, signal bursts)
+ * - Progressive disclosure (expand/collapse groups)
+ * - Filter chips (All, Critical Path, Slow >16ms, Duplicates)
+ * - Search across APIs, Signals, and Components
+ * - Density toggle (Coalesced vs Expanded)
+ * - Detail Inspector Drawer with timing, state diffs, and VS Code links
+ * - Automated high-density issues alert box
  */
 
-import { Component, Input, signal, computed, ChangeDetectionStrategy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, Input, inject, signal, computed, ChangeDetectionStrategy } from '@angular/core';
+import { CommonModule, UpperCasePipe } from '@angular/common';
 import type { ExecutionNarrative } from '@nglens/types/execution-narrative';
+import {
+  SwimlaneGroupingService,
+  SwimlaneItem,
+  SwimlaneGroup,
+  SwimlaneResult,
+} from '../../../services/swimlane-grouping.service';
 
-/** Category metadata for filter dropdown */
-interface FilterOption {
-  key: string;
-  label: string;
-  color: string;
-}
-
-const CATEGORY_META: Record<string, FilterOption> = {
-  api: { key: 'api', label: 'API', color: 'rgb(100, 160, 255)' },
-  render: { key: 'render', label: 'Component', color: 'rgb(200, 160, 255)' },
-  store: { key: 'store', label: 'State', color: 'rgb(200, 170, 50)' },
-  signal: { key: 'signal', label: 'WebSocket / Signal', color: 'rgb(140, 200, 140)' },
-};
+type FilterMode = 'all' | 'critical' | 'slow' | 'duplicates';
+type DensityMode = 'coalesced' | 'expanded';
 
 @Component({
   selector: 'app-execution-report',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, UpperCasePipe],
   templateUrl: './execution-report.component.html',
   styleUrl: './execution-report.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ExecutionReportComponent {
   Math = Math;
-  
-  @Input() set narrative(value: ExecutionNarrative | null) {    
-    if (value !== this.narrativeData()) {
-      clearTimeout(this.debounceTimer);
+
+  private readonly groupingService = inject(SwimlaneGroupingService);
+
+  // ── Input ──
+  @Input() set narrative(value: ExecutionNarrative | null) {
+    if (value !== this._narrative()) {
+      clearTimeout(this._debounceTimer);
       if (value === null) {
-        this.narrativeData.set(null);
+        this._narrative.set(null);
       } else {
-        this.debounceTimer = setTimeout(() => {
-          this.narrativeData.set(value);
-        }, 100);
+        this._debounceTimer = setTimeout(() => {
+          this._narrative.set(value);
+        }, 80);
       }
     }
   }
+  private _debounceTimer: any;
+  private readonly _narrative = signal<ExecutionNarrative | null>(null);
 
-  readonly narrativeData = signal<ExecutionNarrative | null>(null);
-  private debounceTimer: any;
+  // ── State Signals ──
+  readonly searchQuery = signal('');
+  readonly activeFilter = signal<FilterMode>('all');
+  readonly densityMode = signal<DensityMode>('coalesced');
+  readonly expandedGroups = signal(new Set<string>());
+  readonly selectedItem = signal<SwimlaneItem | null>(null);
+  readonly hoveredItem = signal<SwimlaneItem | null>(null);
+
+  // ── Derived: Build swimlane data from narrative ──
+  readonly swimlaneData = computed((): SwimlaneResult | null => {
+    const n = this._narrative();
+    if (!n) return null;
+    return this.groupingService.buildSwimlanes(n);
+  });
+
+  readonly trigger = computed((): string => {
+    const n = this._narrative();
+    return n?.trigger || 'No interaction';
+  });
+
+  // ── Derived: Apply filters and search ──
+  readonly filteredResult = computed((): SwimlaneResult => {
+    let data = this.swimlaneData();
+    if (!data) {
+      return { summary: { totalApis: 0, totalRenders: 0, totalSignals: 0, totalStoreUpdates: 0, duplicateApiCount: 0, totalDuration: 0, primaryBottleneck: null, bottleneckDuration: 0 }, lanes: [], issues: [], allItems: [], sessionDuration: 0 };
+    }
+
+    // Apply density mode: in expanded mode, flatten all groups
+    if (this.densityMode() === 'expanded') {
+      data = this.expandAllGroups(data);
+    }
+
+    // Apply filter
+    const filter = this.activeFilter();
+    switch (filter) {
+      case 'critical':
+        data = this.groupingService.filterCriticalPath(data);
+        break;
+      case 'slow':
+        data = this.groupingService.filterSlow(data);
+        break;
+      case 'duplicates':
+        data = this.groupingService.filterDuplicates(data);
+        break;
+    }
+
+    // Apply search
+    const query = this.searchQuery();
+    if (query.trim()) {
+      data = this.groupingService.filterByQuery(data, query);
+    }
+
+    return data;
+  });
+
+  // ── Actions ──
+
+  onSearchInput(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.searchQuery.set(value);
+  }
+
+  clearSearch(): void {
+    this.searchQuery.set('');
+  }
+
+  setFilter(mode: FilterMode): void {
+    this.activeFilter.set(mode);
+  }
+
+  setDensity(mode: DensityMode): void {
+    this.densityMode.set(mode);
+  }
+
+  toggleGroup(groupId: string): void {
+    const next = new Set(this.expandedGroups());
+    if (next.has(groupId)) {
+      next.delete(groupId);
+    } else {
+      next.add(groupId);
+    }
+    this.expandedGroups.set(next);
+  }
+
+  isGroupExpanded(groupId: string): boolean {
+    return this.expandedGroups().has(groupId);
+  }
+
+  selectItem(item: SwimlaneItem): void {
+    const current = this.selectedItem();
+    if (current?.id === item.id) {
+      this.selectedItem.set(null);
+    } else {
+      this.selectedItem.set(item);
+    }
+  }
+
+  clearSelection(): void {
+    this.selectedItem.set(null);
+  }
+
+  hoverItem(item: SwimlaneItem | null): void {
+    this.hoveredItem.set(item);
+  }
+
+  // ── Template Helpers ──
+
+  isGroup(entry: SwimlaneItem | SwimlaneGroup): entry is SwimlaneGroup {
+    return this.groupingService.isGroup(entry);
+  }
+
+  getEntryId(entry: SwimlaneItem | SwimlaneGroup): string {
+    return entry.id;
+  }
+
+  getCategoryIcon(category: string): string {
+    switch (category) {
+      case 'api': return '🌐';
+      case 'render': return '📦';
+      case 'signal': return '⚡';
+      case 'store': return '🗄';
+      case 'interaction': return '🔘';
+      default: return '•';
+    }
+  }
+
+  getSourceFilePath(item: SwimlaneItem): string | null {
+    if (!item || item.category !== 'render') return null;
+    const name = item.title;
+    if (!name) return null;
+    const kebab = name.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase().replace(/\s+component$/i, '');
+    return `src/app/${kebab}/${kebab}.component.ts`;
+  }
+
+  openInVSCode(filePath: string): void {
+    const url = `vscode://file/${filePath}`;
+    window.open(url, '_blank');
+  }
 
   formatTime(ms: number): string {
-    if (ms >= 1000) {
-      return (ms / 1000).toFixed(2) + 's';
-    }
+    if (ms >= 1000) return (ms / 1000).toFixed(1) + 's';
     return Math.round(ms) + 'ms';
   }
 
-  readonly activeFilter = signal<string>('all');
-  readonly hoverLinePct = signal<number | null>(null);
-  readonly hoverTimeLabel = signal<string>('');
+  // ── Private Helpers ──
 
-  readonly availableFilters = computed((): FilterOption[] => {
-    const items = this.waterfall();
-    const types = new Set(items.map(i => i.type));
-    return Object.values(CATEGORY_META).filter(opt => types.has(opt.key));
-  });
-
-  readonly filteredWaterfall = computed(() => {
-    const filter = this.activeFilter();
-    const items = this.waterfall();
-    if (filter === 'all') return items;
-    return items.filter(i => i.type === filter);
-  });
-
-  onFilterChange(event: Event): void {
-    const value = (event.target as HTMLSelectElement).value;
-    this.activeFilter.set(value);
-  }
-
-  onBarTrackHover(event: MouseEvent): void {
-    const barTrack = event.currentTarget as HTMLElement;
-    const waterfall = barTrack.closest('.waterfall') as HTMLElement;
-    if (!waterfall) return;
-    
-    const waterfallRect = waterfall.getBoundingClientRect();
-    const x = event.clientX - waterfallRect.left;
-    const pct = Math.max(0, Math.min(100, (x / waterfallRect.width) * 100));
-    this.hoverLinePct.set(pct);
-    
-    // Calculate time at this position based on the bar-track portion only
-    const barTrackRect = barTrack.getBoundingClientRect();
-    const xInBar = event.clientX - barTrackRect.left;
-    const pctInBar = Math.max(0, Math.min(100, (xInBar / barTrackRect.width) * 100));
-    const timeAtPosition = (pctInBar / 100) * this.duration();
-    this.hoverTimeLabel.set(this.formatTime(Math.round(timeAtPosition)));
-  }
-
-  onWaterfallMouseLeave(): void {
-    this.hoverLinePct.set(null);
-  }
-
-  readonly trigger = computed(() => this.narrativeData()?.trigger || 'No interaction');
-  readonly duration = computed(() => this.narrativeData()?.duration || 0);
-  readonly totalSteps = computed(() => this.narrativeData()?.originalStory?.steps?.length || 0);
-  readonly uniqueComponents = computed(() => {
-    const steps = this.narrativeData()?.originalStory?.steps || [];
-    return new Set(steps.map((s: any) => s.title)).size;
-  });
-
-  readonly waterfall = computed(() => {
-    const n = this.narrativeData();
-    
-    if (!n) {
-      return [];
-    }
-
-    const steps = n.originalStory?.steps || [];
-    const total = n.duration || 1;
-    const storyStart = n.originalStory?.startTime || 0;
-
-    const items: any[] = [];
-    let idCounter = 0;
-
-    // Track last counted timestamp per component name to coalesce rapid renders
-    const lastCountedTs = new Map<string, number>();
-    const SAME_CYCLE_MS = 50;
-
-    steps.forEach((step: any) => {
-      const title = step.title || '';
-      const type = step.type || '';
-      const itemStart = step.startTime || storyStart;
-      const itemDur = step.duration || 0;
-
-      // Determine type
-      let category = 'render';
-      if (type === 'data-fetch' || title.includes('GET ') || title.includes('POST ') || title.includes('Loaded')) {
-        category = 'api';
-      } else if (type === 'store-mutation' || title.includes('Store')) {
-        category = 'store';
-      } else if (type === 'state-update' || type === 'signal-write' || title.includes('Signal') || title.includes('signal')) {
-        if (step.impact?.components?.names?.length > 0) {
-          category = 'render';
+  /**
+   * Expand all groups (flatten batch nodes into individual items).
+   * Used in "Expanded" density mode.
+   */
+  private expandAllGroups(data: SwimlaneResult): SwimlaneResult {
+    const expandedLanes = data.lanes.map(lane => {
+      const flatEntries: Array<SwimlaneItem | SwimlaneGroup> = [];
+      for (const entry of lane.entries) {
+        if (this.groupingService.isGroup(entry)) {
+          // Flatten group into individual items
+          flatEntries.push(...(entry as SwimlaneGroup).items);
         } else {
-          category = 'signal';
+          flatEntries.push(entry);
         }
-      } else if (type === 'ui-update' || title.includes('Rendered') || title.includes('Component')) {
-        category = 'render';
       }
-
-      // Build display names - for steps with multiple impacted components, create one entry per component
-      const componentNames: string[] = [];
-      if (category === 'api') {
-        componentNames.push(step.summary || step.title || 'API');
-      } else if (step.impact?.components?.names?.length > 0) {
-        step.impact.components.names.forEach((name: string) => {
-          componentNames.push(name.replace(/^_/, '').replace(' Rendered', '').replace(' rendered', ''));
-        });
-      } else {
-        componentNames.push(title || step.summary || 'Unknown');
-      }
-
-      // Create a waterfall entry for each component name
-      componentNames.forEach((rawName: string) => {
-        const displayName = rawName.replace(/^_/, '').replace(' Rendered', '').replace(' rendered', '');
-
-        const startPct = total > 0 ? Math.max(0, ((itemStart - storyStart) / total) * 100) : 0;
-        const widthPct = itemDur > 0 && total > 0 ? Math.max(0.5, (itemDur / total) * 100) : 0.5;
-
-        // Group with last item if same name AND within 50ms coalescing window
-        const last = items[items.length - 1];
-        const cacheKey = `${displayName}-${category}`;
-        const lastTs = lastCountedTs.get(cacheKey);
-        const isDistinctRender = lastTs == null || (itemStart - lastTs) >= SAME_CYCLE_MS;
-
-        if (last && last.baseName === displayName && last.type === category && isDistinctRender) {
-          last.groupCount++;
-          last.name = `${displayName} (${last.groupCount}x)`;
-          last.duration = last.duration + itemDur;
-          // Extend bar to cover the new end time
-          const newEndPct = startPct + widthPct;
-          last.widthPct = newEndPct - last.startPct;
-          last.endTime = Math.round(itemStart + itemDur - storyStart);
-          lastCountedTs.set(cacheKey, itemStart);
-        } else if (last && last.baseName === displayName && last.type === category && !isDistinctRender) {
-          // Same render cycle (within 50ms), take max duration
-          last.duration = Math.max(last.duration, itemDur);
-          const newEndPct = startPct + widthPct;
-          if (newEndPct > last.startPct + last.widthPct) {
-            last.widthPct = newEndPct - last.startPct;
-          }
-          last.endTime = Math.max(last.endTime, Math.round(itemStart + itemDur - storyStart));
-        } else {
-          items.push({
-            id: `wf-${idCounter++}`,
-            name: displayName,
-            baseName: displayName,
-            type: category,
-            duration: itemDur,
-            startTime: Math.round(itemStart - storyStart),
-            endTime: Math.round(itemStart + itemDur - storyStart),
-            startPct,
-            widthPct,
-            isSlow: itemDur > 300 || (category === 'render' && itemDur > 16),
-            groupCount: 1,
-          });
-          lastCountedTs.set(cacheKey, itemStart);
-        }
-      });
+      return { ...lane, entries: flatEntries };
     });
 
-    return items;
-  });
-
-  readonly detectedIssues = computed(() => {
-    const n = this.narrativeData();
-    if (!n) return [];
-
-    const issues: Array<{ type: string; title: string; suggestion: string; severity: 'info' | 'warning' | 'error' }> = [];
-
-    const steps = n.originalStory?.steps || [];
-
-    // Check for duplicate APIs
-    const apiCallMap = new Map<string, number>();
-    
-    steps.forEach((step: any) => {
-      if (step.type === 'data-fetch' || step.title?.includes('GET ') || step.title?.includes('POST ')) {
-        const url = step.title || 'API Call';
-        apiCallMap.set(url, (apiCallMap.get(url) || 0) + 1);
-      }
-    });
-
-    apiCallMap.forEach((count, url) => {
-      if (count > 1) {
-        const displayUrl = url.substring(0, 40) + (url.length > 40 ? '...' : '');
-        issues.push({
-          type: 'duplicate-api',
-          title: `Duplicate API: ${displayUrl} called ${count}x`,
-          suggestion: 'Consider caching or deduplicating API calls',
-          severity: 'warning',
-        });
-      }
-    });
-
-    // Check for excessive renders
-    const componentRenderMap = new Map<string, number>();
-    steps.forEach((step: any) => {
-      if (step.type === 'ui-update' || step.title?.includes('Rendered')) {
-        const name = step.title?.replace(' Rendered', '')?.replace(' rendered', '') || 'Unknown';
-        componentRenderMap.set(name, (componentRenderMap.get(name) || 0) + 1);
-      }
-    });
-
-    componentRenderMap.forEach((count, name) => {
-      if (count > 5) {
-        issues.push({
-          type: 'excessive-renders',
-          title: `${name} rendered ${count}x`,
-          suggestion: 'Consider OnPush detection or memoization',
-          severity: 'warning',
-        });
-      }
-    });
-
-    // Check for slow operations
-    let hasSlowOp = false;
-    steps.forEach((step: any) => {
-      if ((step.duration || 0) > 300 && !hasSlowOp) {
-        issues.push({
-          type: 'slow-operation',
-          title: `Slow operation: ${step.title} (${step.duration}ms)`,
-          suggestion: 'Break into smaller chunks or defer non-critical work',
-          severity: 'warning',
-        });
-        hasSlowOp = true;
-      }
-    });
-
-    return issues;
-  });
-
-
-
-  // ── Bottleneck detection ──
-  readonly bottleneckItem = computed(() => {
-    const items = this.waterfall();
-    if (items.length === 0) return null;
-    
-    // Find slowest item
-    const slowest = items.reduce((a, b) => 
-      a.duration > b.duration ? a : b
-    );
-    
-    // Check if it's significant (> 100ms or > 20% of total)
-    if (slowest.duration > 100 || (slowest.duration / this.duration()) > 0.2) {
-      return slowest;
-    }
-    
-    return null;
-  });
-
-  readonly bottleneck = computed((): string | null => {
-    const n = this.narrativeData();
-    if (!n) return null;
-
-    const steps = n.originalStory?.steps || [];
-    const total = n.duration || 0;
-
-    let slowest: any = null;
-    steps.forEach((step: any) => {
-      if (!slowest || (step.duration || 0) > (slowest.duration || 0)) {
-        slowest = step;
-      }
-    });
-
-    if (slowest && slowest.duration > 100) {
-      const pct = Math.round((slowest.duration / total) * 100);
-      return `Bottleneck: ${slowest.title} (${slowest.duration}ms, ${pct}% of total)`;
-    }
-
-    const renderCounts = new Map<string, number>();
-    steps.forEach((step: any) => {
-      const title = step.title || '';
-      if (title.includes('Rendered') || step.type === 'ui-update') {
-        renderCounts.set(title, (renderCounts.get(title) || 0) + 1);
-      }
-    });
-
-    let hottest = '';
-    let hottestCount = 0;
-    renderCounts.forEach((count, name) => {
-      if (count > hottestCount) { hottest = name; hottestCount = count; }
-    });
-
-    if (hottestCount > 5) {
-      return `${hottest} rendered ${hottestCount}x - consider OnPush or memoization`;
-    }
-
-    return null;
-  });
+    return { ...data, lanes: expandedLanes };
+  }
 }

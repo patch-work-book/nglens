@@ -24,14 +24,17 @@ import type {
   AnalyzerResult,
   AnalysisIssue,
 } from '../types/analyzer';
+import type { SignalGraph } from '../types/signal-graph';
 import { findAngularComponents } from '../utils/dom-utils';
 import { registerAnalyzer } from './index';
 
 class SignalsAnalyzer implements Analyzer {
   readonly type = 'signals-analyzer' as const;
   readonly requiresDevMode = false;
+  private transientGraph: SignalGraph | null = null;
 
   async analyze(config: AnalyzerConfig): Promise<AnalyzerResult> {
+    this.transientGraph = { nodes: new Map(), edges: [], glitches: [] };
     const issues: AnalysisIssue[] = [];
     const components = findAngularComponents(document);
 
@@ -55,6 +58,12 @@ class SignalsAnalyzer implements Analyzer {
       }
     }
 
+    // Convert Map to Object for serialization
+    const graphData = this.transientGraph ? {
+      nodes: Object.fromEntries(this.transientGraph.nodes),
+      glitches: this.transientGraph.glitches
+    } : null;
+
     return {
       analyzer: this.type,
       issues,
@@ -64,6 +73,7 @@ class SignalsAnalyzer implements Analyzer {
         componentsScanned: components.length,
         angularVersion: this.detectAngularVersion(),
         supportsSignals: this.checkSignalsSupport(),
+        signalGraph: graphData,
       },
     };
   }
@@ -118,8 +128,26 @@ class SignalsAnalyzer implements Analyzer {
     element: Element
   ): AnalysisIssue[] {
     const issues: AnalysisIssue[] = [];
+    const nodeId = `${componentName}.${propName}`;
 
     try {
+      // Extract graph metadata
+      const deps = this.extractSignalDependencies(signal, nodeId);
+      
+      // Store in transient metadata for the analyzer result
+      if (!this.transientGraph) this.transientGraph = { nodes: new Map(), edges: [], glitches: [] };
+      this.transientGraph.nodes.set(nodeId, {
+        id: nodeId,
+        label: propName,
+        type: 'signal',
+        value: this.summarizeValue(signal()),
+        ownerComponent: componentName,
+        producers: deps.producers,
+        consumers: deps.consumers,
+        isDirty: false,
+        recalculationCount: 0
+      });
+
       // Get current value
       const value = signal();
 
@@ -169,8 +197,26 @@ class SignalsAnalyzer implements Analyzer {
     element: Element
   ): AnalysisIssue[] {
     const issues: AnalysisIssue[] = [];
+    const nodeId = `${componentName}.${propName}`;
 
     try {
+      // Extract graph metadata
+      const deps = this.extractSignalDependencies(computed, nodeId);
+      
+      if (this.transientGraph) {
+        this.transientGraph.nodes.set(nodeId, {
+          id: nodeId,
+          label: propName,
+          type: 'computed',
+          value: '(computed)',
+          ownerComponent: componentName,
+          producers: deps.producers,
+          consumers: deps.consumers,
+          isDirty: false,
+          recalculationCount: 0
+        });
+      }
+
       // Try to analyze the computation function
       const computationStr = computed.toString();
 
@@ -373,6 +419,59 @@ class SignalsAnalyzer implements Analyzer {
     }
 
     return props;
+  }
+
+  /**
+   * Extracts the dependency graph for a signal/computed node.
+   * Traverses Angular's internal reactive graph via the brand symbol.
+   */
+  private extractSignalDependencies(signal: any, nodeId: string): { producers: string[], consumers: string[] } {
+    const producers: string[] = [];
+    const consumers: string[] = [];
+
+    try {
+      // Find the internal brand symbol (varies slightly by Angular version, usually contains 'SIGNAL')
+      const syms = Object.getOwnPropertySymbols(signal);
+      const brandSym = syms.find(s => s.description?.includes('SIGNAL') || String(s).includes('SIGNAL'));
+      
+      if (!brandSym) return { producers, consumers };
+      
+      const node = signal[brandSym];
+      if (!node) return { producers, consumers };
+
+      // Producers: What this node depends on (upstream)
+      // Supports both 'producerNode' (standard) and 'producers' (older/alternative internal names)
+      const rawProducers = node.producerNode || node.producers || node.producer;
+      if (rawProducers) {
+        const producerNodes = Array.isArray(rawProducers) ? rawProducers : [rawProducers];
+        producerNodes.forEach((p: any) => {
+          // Extract ID or property name if ID is missing
+          const pId = p.id || p.debugName || p.name;
+          if (pId) producers.push(pId);
+        });
+      }
+
+      // Consumers: What depends on this node (downstream)
+      const rawConsumers = node.liveConsumerNode || node.consumers;
+      if (rawConsumers) {
+        const consumerNodes = Array.isArray(rawConsumers) ? rawConsumers : [rawConsumers];
+        consumerNodes.forEach((c: any) => {
+          // If consumer is another signal/computed, it will have an ID or debugName
+          const cId = c.id || c.debugName || c.name;
+          if (cId) {
+            consumers.push(cId);
+          } else if (c.lView || c.template) {
+            consumers.push('Template');
+          } else if (c.fn) {
+            consumers.push('Effect');
+          }
+        });
+      }
+    } catch (e) {
+      console.debug('[SignalsAnalyzer] Failed to extract dependencies:', e);
+    }
+
+    return { producers, consumers };
   }
 
   private isSignal(value: any): boolean {

@@ -95,8 +95,13 @@ export class TreeNodeBuilderService {
       isExpanded: signal(false),               // Steps are leaf nodes (no expand)
       isSelected: signal(false),
       subsectionData: subsection,
-      isBottleneck: subsection.isSlowOperation || false,
-      severity: subsection.isSlowOperation ? 'high' : 'low',
+      isBottleneck: (subsection as any).isSlowOperation || false,
+      severity: (subsection as any).isSlowOperation ? 'high' : 'low',
+
+      // Graph Connectivity for 'Bloom Tree' UX
+      isDirectImpact: (subsection as any).impact?.parasiticRenderRatio ? (subsection as any).impact.parasiticRenderRatio < 50 : true,
+      renderDepth: (subsection as any).impact?.maxCascadingDepth || 0,
+      cascadeSourceId: (subsection as any).rootCauseChain?.rootCause?.eventId,
     };
 
     return node;

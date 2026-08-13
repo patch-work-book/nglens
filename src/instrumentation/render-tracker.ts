@@ -601,6 +601,18 @@ export class RenderTracker {
         totalOutputListeners: totalListeners > 0 ? totalListeners : undefined,
         hasHighFrequencyZonePollution: hasHiFreqZonePollution ? true : undefined,
         highFrequencyEvents: hiFreqEvents.length > 0 ? hiFreqEvents : undefined,
+        spatialMetadata: (node.element && node.element.isConnected) ? (() => {
+          const rect = node.element.getBoundingClientRect();
+          // Ensure we don't capture zero-rects for hidden or detached elements
+          if (rect.width === 0 && rect.height === 0) return undefined;
+          return {
+            top: rect.top,
+            left: rect.left,
+            width: rect.width,
+            height: rect.height,
+            selector: this.buildSelector(node.element)
+          };
+        })() : undefined,
       };
       // Compute render reasons from causes + flow events
       event.reasons = this.computeRenderReasons(event);
@@ -785,10 +797,19 @@ export class RenderTracker {
     zoneDelegate.scheduleTask = (targetZone: any, task: any): any => {
       const source = tracker.categorizeZoneTask(task);
       if (source) {
+        // Capture interaction component from event target if possible
+        let triggerComp: string | null = null;
+        if (source.startsWith('addEventListener') && task.data?.target instanceof Element) {
+          triggerComp = tracker.findOwnerComponent(task.data.target);
+        }
+
         // Don't push zone causes if we have a recent user interaction —
         // the interaction is the true cause, timer/promise are just consequences.
         if (!tracker.lastInteraction) {
-          tracker.zoneCauseStack.push({ type: 'zone', source });
+          tracker.zoneCauseStack.push({ 
+            type: 'zone', 
+            source: triggerComp ? `${source} (in ${triggerComp})` : source 
+          });
           if (tracker.zoneCauseStack.length > 30) {
             tracker.zoneCauseStack.splice(0, tracker.zoneCauseStack.length - 15);
           }

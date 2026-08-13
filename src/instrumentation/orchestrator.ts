@@ -202,6 +202,12 @@ function handleStartTracking(): void {
       dispatchToContent('ONPUSH_RESULT', { ...result });
     }
 
+    // Check for Hydration Mismatches captured by sentinel
+    const hydrationError = (window as any).__NGLENS_HYDRATION_ERROR__;
+    if (hydrationError) {
+      dispatchToContent('HYDRATION_MISMATCH', hydrationError);
+    }
+
     dispatchToContent('TRACKING_STARTED', {
       timestamp: performance.now(),
     });

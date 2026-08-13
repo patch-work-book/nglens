@@ -29,6 +29,7 @@ export class PanelState {
   readonly trackingError = signal<string | null>(null);
   readonly degradedMode = signal(false);
   readonly clearOnRouteChange = signal(false);
+  readonly lastScanResults = signal<any | null>(null);
 
   // Navigation
   readonly activeTab = signal<'overview' | 'rendering' | 'memory' | 'recommendations'>('overview');

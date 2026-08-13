@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
 import { copyFileSync, cpSync, existsSync, unlinkSync, rmSync } from 'node:fs';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       '@nglens/types': resolve(__dirname, 'src/types'),
@@ -14,11 +14,13 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: false,
-    minify: false, // Disable minification for Chrome Web Store compatibility
+    minify: mode === 'production' ? 'esbuild' : false,
+    sourcemap: mode !== 'production',
     rollupOptions: {
       input: {
         background: resolve(__dirname, 'src/background/background.ts'),
         content: resolve(__dirname, 'src/content/content.ts'),
+        'hydration-sentinel': resolve(__dirname, 'src/content/hydration-sentinel.ts'),
         'page-script': resolve(__dirname, 'src/content/page-script.ts'),
         devtools: resolve(__dirname, 'src/devtools/devtools.ts'),
         popup: resolve(__dirname, 'src/popup/popup.ts')
@@ -85,4 +87,4 @@ export default defineConfig({
       }
     }
   ]
-});
+}));

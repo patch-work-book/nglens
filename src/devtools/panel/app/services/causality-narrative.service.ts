@@ -35,6 +35,15 @@ export interface CausalityNarrative {
   why: string;                        // "Dashboard Bootstrap completed"
   timeline: CausalityTimelineEntry[]; // The causality chain with timestamps
   summary: string;                    // "Revenue Module triggered by Dashboard Bootstrap"
+  
+  /** Forensic metrics for Level 4 investigation */
+  forensicMetrics?: {
+    interactionToFinalPaint: number; // IFP in ms
+    asyncToRenderRatio: number;      // 0-100 (high = IO bound, low = CPU/Render bound)
+    criticalPathDepth: number;       // Number of hops in the main causality chain
+    signalGlitches: number;          // Number of redundant reactive cycles
+    bottleneckTrack: 'USER' | 'EXTERNAL' | 'LOGIC' | 'UI';
+  };
 }
 
 @Injectable({
@@ -46,12 +55,34 @@ export class CausalityNarrativeService {
    */
   generateNarrative(chain: CausalityChain): CausalityNarrative {
     const timeline = this.buildTimeline(chain);
+    
+    // Calculate Forensic Metrics
+    const totalDuration = chain.endTime - (chain.trigger?.startTime || chain.startTime);
+    const renderTime = (chain.renders || []).reduce((s, r) => s + (r.duration || 0), 0);
+    const asyncToRenderRatio = totalDuration > 0 ? Math.round(((totalDuration - renderTime) / totalDuration) * 100) : 100;
+    
+    // Detect Critical Path Depth (hops through different phases)
+    const phases = new Set(timeline.map(t => t.phase));
+    const criticalPathDepth = phases.size;
+
+    // Detect Signal Glitches (heuristic: same signal written > 1 time in one chain)
+    const signalWrites = chain.computations || [];
+    const signalGlitches = Math.max(0, signalWrites.length - new Set(signalWrites.map(s => s.title)).size);
+
+    const forensicMetrics: CausalityNarrative['forensicMetrics'] = {
+      interactionToFinalPaint: totalDuration,
+      asyncToRenderRatio,
+      criticalPathDepth,
+      signalGlitches,
+      bottleneckTrack: (renderTime / totalDuration > 0.5) ? 'UI' : (asyncToRenderRatio > 60 ? 'EXTERNAL' : 'LOGIC')
+    };
 
     return {
       title: this.generateTitle(chain),
       why: this.generateWhy(chain),
       timeline,
       summary: this.generateSummary(chain, timeline),
+      forensicMetrics,
     };
   }
 

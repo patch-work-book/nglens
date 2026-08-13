@@ -24,6 +24,14 @@ export interface RenderEvent {
   totalOutputListeners?: number;
   hasHighFrequencyZonePollution?: boolean;
   highFrequencyEvents?: string[];
+  /** Spatial metadata for "Blast Radius" heatmap */
+  spatialMetadata?: {
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+    selector: string;
+  };
 }
 
 export interface RenderCause {

@@ -88,6 +88,29 @@ export class ExecutionExplorerComponent {
     );
   }
 
+  readonly stableNarratives = computed(() => {
+    return Array.from(this.narrativeMap().values());
+  });
+
+  readonly selectedNarrative = computed(() => {
+    const narratives = this.narrativeMap();
+    const id = this.selectedNarrativeId();
+    
+    // If a specific narrative is selected, return it
+    if (id && narratives.has(id)) {
+      return narratives.get(id) || null;
+    }
+    
+    // Otherwise return the first one
+    const first = narratives.values().next().value || null;
+    return first;
+  });
+
+  selectNarrative(id: string): void {
+    const current = this.selectedNarrativeId();
+    this.selectedNarrativeId.set(current === id ? null : id);
+  }
+
   private rebuildNarratives(stories: ExecutionStory[]): void {
     const narratives = new Map<string, ExecutionNarrative>();
 
@@ -147,29 +170,6 @@ export class ExecutionExplorerComponent {
     });
 
     this.narrativeMap.set(narratives);
-  }
-
-  readonly stableNarratives = computed(() => {
-    return Array.from(this.narrativeMap().values());
-  });
-
-  readonly selectedNarrative = computed(() => {
-    const narratives = this.narrativeMap();
-    const id = this.selectedNarrativeId();
-    
-    // If a specific narrative is selected, return it
-    if (id && narratives.has(id)) {
-      return narratives.get(id) || null;
-    }
-    
-    // Otherwise return the first one
-    const first = narratives.values().next().value || null;
-    return first;
-  });
-
-  selectNarrative(id: string): void {
-    const current = this.selectedNarrativeId();
-    this.selectedNarrativeId.set(current === id ? null : id);
   }
 
   private extractTrigger(story: ExecutionStory | { steps?: any[] }): string {
