@@ -8,96 +8,89 @@ import { DevtoolsPortService } from '../../services/devtools-port.service';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="h-full flex flex-col bg-slate-900 text-slate-200">
+    <div class="sig-container">
       <!-- Header -->
-      <div class="p-4 border-b border-slate-700 flex justify-between items-center">
+      <div class="sig-header">
         <div>
-          <h2 class="text-lg font-semibold text-white">Signal Dependency Graph</h2>
-          <p class="text-xs text-slate-400">Visualize reactive chains and detect glitches in real-time.</p>
+          <h2 class="sig-header__title">Signal Dependency Graph</h2>
+          <p class="sig-header__tagline">Visualize reactive chains and detect glitches in real-time.</p>
         </div>
-        <div class="flex gap-2">
-          <button (click)="refreshGraph()" 
-            class="px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded transition-colors">
+        <div class="sig-header__actions">
+          <button (click)="refreshGraph()" class="sig-btn sig-btn--primary">
             Refresh Graph
           </button>
         </div>
       </div>
 
       <!-- Main Content -->
-      <div class="flex-1 overflow-hidden flex">
+      <div class="sig-main">
         <!-- Sidebar: Signal List -->
-        <div class="w-64 border-r border-slate-700 overflow-y-auto p-2 bg-slate-900/50">
-          <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-2">Active Signals</div>
+        <div class="sig-sidebar">
+          <div class="sig-sidebar__label">Active Signals</div>
           @for (s of signalsList(); track s.id) {
             <div (click)="selectedSignal.set(s.id)"
-              [class.bg-indigo-500/20]="selectedSignal() === s.id"
-              [class.border-indigo-500/50]="selectedSignal() === s.id"
-              class="p-2 mb-1 rounded border border-transparent hover:border-slate-600 cursor-pointer transition-all">
-              <div class="flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full" [class.bg-blue-400]="s.type === 'signal'" [class.bg-purple-400]="s.type === 'computed'"></span>
-                <span class="text-xs font-medium truncate">{{ s.label }}</span>
+              [class.sig-signal--selected]="selectedSignal() === s.id"
+              class="sig-signal">
+              <div class="sig-signal__content">
+                <span class="sig-signal__dot" 
+                  [class.sig-signal__dot--computed]="s.type === 'computed'"
+                  [class.sig-signal__dot--signal]="s.type === 'signal'"></span>
+                <span class="sig-signal__label">{{ s.label }}</span>
               </div>
-              <div class="text-[10px] text-slate-500 truncate ml-4">{{ s.ownerComponent }}</div>
+              <div class="sig-signal__owner">{{ s.ownerComponent }}</div>
             </div>
           }
         </div>
 
         <!-- Graph Visualization Area -->
-        <div class="flex-1 relative bg-slate-950/30">
-          <div class="w-full h-full flex items-center justify-center p-8 overflow-auto">
+        <div class="sig-graph">
+          <div class="sig-graph__content">
             @if (!selectedSignal()) {
-              <div class="text-slate-500 text-sm flex flex-col items-center gap-2">
-                <span class="text-2xl">⚡</span>
-                Select a signal to explore its dependency graph
+              <div class="sig-empty">
+                <span class="sig-empty__icon">⚡</span>
+                <span>Select a signal to explore its dependency graph</span>
               </div>
             } @else {
-              <div class="w-full h-full flex flex-col items-center justify-center gap-8">
-                <!-- Visual representation of the graph using CSS/HTML for simplicity -->
-                <div class="flex flex-col items-center gap-12 max-w-full">
-                   <!-- Producers -->
-                   @if (currentSignal()?.producers?.length) {
-                     <div class="flex flex-wrap justify-center gap-4">
-                       @for (pId of currentSignal()?.producers; track pId) {
-                         <div class="px-3 py-2 bg-slate-800 border border-slate-600 rounded shadow-lg text-[10px] max-w-[150px]">
-                           <div class="text-slate-500 uppercase font-bold mb-1">Producer</div>
-                           <div class="text-white truncate" [title]="pId">{{ pId }}</div>
-                         </div>
-                       }
-                     </div>
-                     <div class="h-8 w-px bg-slate-700 relative">
-                       <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[6px] border-t-slate-700"></div>
-                     </div>
-                   }
-                   
-                   <!-- The Node -->
-                   <div class="px-6 py-4 bg-indigo-600 border border-indigo-400 rounded-lg shadow-xl text-center min-w-[200px]">
-                     <div class="text-xs text-indigo-200 uppercase font-bold mb-1">{{ currentSignal()?.type }}</div>
-                     <div class="text-lg font-bold text-white">{{ currentSignal()?.label }}</div>
-                     <div class="text-xs text-indigo-100 mt-2 font-mono bg-indigo-900/50 rounded p-1">{{ currentSignal()?.value }}</div>
-                   </div>
-
-                   <!-- Consumers -->
-                   @if (currentSignal()?.consumers?.length) {
-                     <div class="h-8 w-px bg-slate-700 relative">
-                       <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[6px] border-t-slate-700"></div>
-                     </div>
-                     <div class="flex flex-wrap justify-center gap-4">
-                       @for (cId of currentSignal()?.consumers; track cId) {
-                         <div class="px-3 py-2 bg-slate-800 border border-slate-600 rounded shadow-lg text-[10px] max-w-[150px]">
-                           <div class="text-slate-500 uppercase font-bold mb-1">Consumer</div>
-                           <div class="text-white truncate" [title]="cId">{{ cId }}</div>
-                         </div>
-                       }
-                     </div>
-                   }
+              <div class="sig-viz">
+                <!-- Producers -->
+                @if (currentSignal()?.producers?.length) {
+                  <div class="sig-viz__section">
+                    @for (pId of currentSignal()?.producers; track pId) {
+                      <div class="sig-node sig-node--producer">
+                        <div class="sig-node__type">Producer</div>
+                        <div class="sig-node__label" [title]="pId">{{ pId }}</div>
+                      </div>
+                    }
+                  </div>
+                  <div class="sig-connector"></div>
+                }
+                
+                <!-- The Node -->
+                <div class="sig-node sig-node--current">
+                  <div class="sig-node__type">{{ currentSignal()?.type }}</div>
+                  <div class="sig-node__label">{{ currentSignal()?.label }}</div>
+                  <div class="sig-node__value">{{ currentSignal()?.value }}</div>
                 </div>
+
+                <!-- Consumers -->
+                @if (currentSignal()?.consumers?.length) {
+                  <div class="sig-connector"></div>
+                  <div class="sig-viz__section">
+                    @for (cId of currentSignal()?.consumers; track cId) {
+                      <div class="sig-node sig-node--consumer">
+                        <div class="sig-node__type">Consumer</div>
+                        <div class="sig-node__label" [title]="cId">{{ cId }}</div>
+                      </div>
+                    }
+                  </div>
+                }
               </div>
             }
           </div>
 
           <!-- Glitch Warning Badge -->
           @if (detectedGlitches().length > 0) {
-            <div class="absolute top-4 right-4 bg-red-500/20 border border-red-500/50 text-red-200 px-3 py-1.5 rounded-full text-[10px] font-bold animate-pulse">
+            <div class="sig-warning">
               ⚠️ {{ detectedGlitches().length }} Glitches Detected
             </div>
           }
@@ -106,7 +99,262 @@ import { DevtoolsPortService } from '../../services/devtools-port.service';
     </div>
   `,
   styles: [`
-    :host { display: block; height: 100%; }
+    .sig-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    .sig-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 16px;
+      border-bottom: 1px solid var(--border-primary);
+      gap: 16px;
+    }
+    .sig-header__title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .sig-header__tagline {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .sig-header__actions {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .sig-btn {
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+    .sig-btn--primary {
+      background: var(--color-info);
+      color: var(--text-primary);
+      border-color: var(--color-info);
+    }
+    .sig-btn--primary:hover {
+      opacity: 0.9;
+    }
+
+    .sig-main {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      gap: 0;
+    }
+
+    .sig-sidebar {
+      width: 240px;
+      border-right: 1px solid var(--border-primary);
+      overflow-y: auto;
+      padding: 8px;
+      background: var(--bg-secondary);
+      flex-shrink: 0;
+    }
+    .sig-sidebar__label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      padding: 0 8px;
+    }
+
+    .sig-signal {
+      padding: 8px;
+      margin-bottom: 4px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .sig-signal:hover {
+      border-color: var(--border-secondary);
+    }
+    .sig-signal--selected {
+      background: rgba(var(--color-info), 0.12);
+      border-color: rgba(var(--color-info), 0.3);
+    }
+    .sig-signal__content {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .sig-signal__dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .sig-signal__dot--signal { background: var(--color-info); }
+    .sig-signal__dot--computed { background: var(--color-render); }
+    .sig-signal__label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sig-signal__owner {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-left: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sig-graph {
+      flex: 1;
+      position: relative;
+      background: rgba(var(--bg-tertiary), 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+    }
+    .sig-graph__content {
+      width: 100%;
+      height: 100%;
+      padding: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sig-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+    .sig-empty__icon {
+      font-size: 32px;
+    }
+
+    .sig-viz {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 32px;
+      max-width: 100%;
+    }
+
+    .sig-viz__section {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .sig-connector {
+      width: 1px;
+      height: 32px;
+      background: var(--border-primary);
+      position: relative;
+    }
+    .sig-connector::after {
+      content: '';
+      position: absolute;
+      bottom: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 6px solid var(--border-primary);
+    }
+
+    .sig-node {
+      padding: 12px 16px;
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      min-width: 120px;
+      max-width: 150px;
+    }
+    .sig-node__type {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .sig-node__label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      word-break: break-word;
+      margin-bottom: 4px;
+    }
+    .sig-node__value {
+      font-size: 10px;
+      color: var(--text-secondary);
+      font-family: inherit;
+      background: var(--bg-secondary);
+      border-radius: 3px;
+      padding: 4px;
+    }
+    .sig-node--current {
+      background: rgba(var(--color-info), 0.12);
+      border-color: rgba(var(--color-info), 0.3);
+      min-width: 160px;
+    }
+    .sig-node--current .sig-node__type {
+      color: var(--color-info);
+    }
+    .sig-node--current .sig-node__label {
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .sig-node--producer,
+    .sig-node--consumer {
+      background: var(--bg-tertiary);
+    }
+
+    .sig-warning {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: rgba(var(--color-critical), 0.15);
+      border: 1px solid rgba(var(--color-critical), 0.3);
+      color: var(--color-red-light);
+      padding: 8px 12px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush
 })

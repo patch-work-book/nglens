@@ -9,4 +9,5 @@ export const routes: Routes = [
   { path: 'memory', loadComponent: () => import('./features/memory-analyzer/memory.component').then(m => m.MemoryComponent) },
   { path: 'recommendations', loadComponent: () => import('./features/recommendations-engine/recommendations.component').then(m => m.RecommendationsComponent) },
   { path: 'signals', loadComponent: () => import('./features/signals-inspector/signals.component').then(m => m.SignalsInspectorComponent) },
+  { path: 'insights', loadComponent: () => import('./features/recommendations-engine/recommendations.component').then(m => m.RecommendationsComponent) },
 ];

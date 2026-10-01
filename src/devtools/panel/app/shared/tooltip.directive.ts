@@ -36,8 +36,8 @@ export class TooltipDirective implements OnInit, OnDestroy {
     this.tooltipElement.style.cssText = `
       position: fixed;
       z-index: 10000;
-      background: #1f2937;
-      color: #f3f4f6;
+      background: var(--bg-tertiary, #1f2937);
+      color: var(--text-primary, #f3f4f6);
       padding: 8px 10px;
       border-radius: 4px;
       font-size: 10px;
@@ -45,7 +45,7 @@ export class TooltipDirective implements OnInit, OnDestroy {
       white-space: pre-wrap;
       word-break: break-word;
       box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 0, 0, 0.8);
-      border: 1px solid #4b5563;
+      border: 1px solid var(--border-secondary, #4b5563);
       max-height: 250px;
       overflow-y: auto;
       line-height: 1.4;

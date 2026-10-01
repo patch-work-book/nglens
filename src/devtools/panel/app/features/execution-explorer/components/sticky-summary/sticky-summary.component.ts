@@ -119,33 +119,33 @@ export interface StickyExecutionMetrics {
     }
 
     .chip-slow {
-      background-color: rgba(239, 68, 68, 0.1);
+      background-color: var(--color-red-bg-light);
       border-color: var(--color-slow);
       color: var(--color-slow);
     }
 
     .chip-slow:hover {
-      background-color: rgba(239, 68, 68, 0.2);
+      background-color: var(--color-red-bg-medium);
     }
 
     .chip-warning {
-      background-color: rgba(251, 191, 36, 0.1);
+      background-color: var(--color-yellow-bg-light);
       border-color: var(--color-warning);
       color: var(--color-warning);
     }
 
     .chip-warning:hover {
-      background-color: rgba(251, 191, 36, 0.2);
+      background-color: var(--color-yellow-bg-medium);
     }
 
     .chip-retry {
-      background-color: rgba(59, 130, 246, 0.1);
+      background-color: var(--color-blue-bg-lighter);
       border-color: var(--color-info);
       color: var(--color-info);
     }
 
     .chip-retry:hover {
-      background-color: rgba(59, 130, 246, 0.2);
+      background-color: var(--color-blue-bg-stronger);
     }
 
     .chip-secondary {

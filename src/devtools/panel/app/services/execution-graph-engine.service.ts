@@ -24,7 +24,7 @@
  * - Edges have confidence scores (explicit=1.0, timing-inferred=0.6)
  */
 
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import type { RuntimeEvent } from '@nglens/types/execution-intelligence';
 import type {
   GraphNode,

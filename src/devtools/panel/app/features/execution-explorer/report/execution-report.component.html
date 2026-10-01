@@ -10,26 +10,26 @@
       </div>
       <div class="ee-header__metrics">
         <div class="ee-metric">
-          <span class="ee-metric__value">{{ data.summary.totalApis }}</span>
+          <span class="ee-metric__value" title="HTTP requests observed in this execution.">{{ data.summary.totalApis }}</span>
           <span class="ee-metric__label">APIs</span>
         </div>
         <div class="ee-metric">
-          <span class="ee-metric__value">{{ data.summary.totalRenders }}</span>
+          <span class="ee-metric__value" title="Component render events observed in this execution.">{{ data.summary.totalRenders }}</span>
           <span class="ee-metric__label">Renders</span>
         </div>
         <div class="ee-metric">
-          <span class="ee-metric__value">{{ data.summary.totalSignals + data.summary.totalStoreUpdates }}</span>
+          <span class="ee-metric__value" title="Signal writes + store dispatches observed in this execution.">{{ data.summary.totalSignals + data.summary.totalStoreUpdates }}</span>
           <span class="ee-metric__label">State</span>
         </div>
         @if (data.summary.duplicateApiCount > 0) {
           <div class="ee-metric ee-metric--warn">
-            <span class="ee-metric__value">{{ data.summary.duplicateApiCount }}</span>
-            <span class="ee-metric__label">Dupes</span>
+            <span class="ee-metric__value" title="Requests to an identical URL repeated within 100ms.">{{ data.summary.duplicateApiCount }}</span>
+            <span class="ee-metric__label">Duplicate</span>
           </div>
         }
         <div class="ee-metric ee-metric--duration">
-          <span class="ee-metric__value">{{ formatTime(data.summary.totalDuration) }}</span>
-          <span class="ee-metric__label">Total</span>
+          <span class="ee-metric__value" title="Wall-clock span from the first to the last event in this execution (first event → last event). Not a sum of durations and not a critical-path total.">{{ formatTime(data.summary.totalDuration) }}</span>
+          <span class="ee-metric__label">Span</span>
         </div>
       </div>
     </header>
@@ -37,25 +37,76 @@
     <!-- ═══ NARRATIVE HEADLINE CARD ═══ -->
     @if (data.summary.primaryBottleneck) {
       <div class="ee-narrative">
-        <span class="ee-narrative__icon">🔍</span>
         <p class="ee-narrative__text">
           <strong>{{ data.summary.totalApis }} API calls</strong> and
-          <strong>{{ data.summary.totalRenders }} component renders</strong> in
-          <strong>{{ formatTime(data.summary.totalDuration) }}</strong>.
+          <strong>{{ data.summary.totalRenders }} component renders</strong> over a
+          <strong>{{ formatTime(data.summary.totalDuration) }}</strong> span.
           @if (data.summary.duplicateApiCount > 0) {
-            <span class="ee-narrative__highlight ee-narrative__highlight--warn">{{ data.summary.duplicateApiCount }} duplicate network calls detected.</span>
+            <span class="ee-narrative__highlight ee-narrative__highlight--warn">{{ data.summary.duplicateApiCount }} duplicate network calls observed.</span>
           }
-          Primary bottleneck: <span class="ee-narrative__highlight ee-narrative__highlight--error">{{ data.summary.primaryBottleneck }} ({{ formatTime(data.summary.bottleneckDuration) }})</span>.
+          Longest operation: <span class="ee-narrative__highlight ee-narrative__highlight--error">{{ data.summary.primaryBottleneck }} ({{ formatTime(data.summary.bottleneckDuration) }})</span>.
         </p>
       </div>
     }
+
+    <!-- ═══ VIEW TOGGLE: Story (follow) | Timeline (timing) ═══ -->
+    <div class="ee-viewtabs">
+      <button class="ee-viewtab" [class.active]="viewMode() === 'story'" (click)="setView('story')"
+              title="Follow the execution from trigger to outcome.">Story</button>
+      <button class="ee-viewtab" [class.active]="viewMode() === 'timeline'" (click)="setView('timeline')"
+              title="Timing and concurrency of the same events.">Timeline</button>
+      <button class="ee-viewtab" [class.active]="viewMode() === 'bottomup'" (click)="setView('bottomup')"
+              title="Components ranked by total renders in this execution.">Bottom-up</button>
+    </div>
+
+    <!-- ═══ BOTTOM-UP: components ranked by renders ═══ -->
+    @if (viewMode() === 'bottomup') {
+      <div class="ee-story-pane ee-bottomup">
+        @if (bottomUp().length > 0) {
+          <div class="ee-bottomup__head">Components by render count · this execution</div>
+          @for (row of bottomUp(); track row.id) {
+            <button class="ee-bottomup__row" (click)="inspectComponentByName(row.name)">
+              <span class="ee-bottomup__name" [title]="row.name">{{ row.name }}</span>
+              <span class="ee-bottomup__count">{{ row.count }}×</span>
+              <span class="ee-bottomup__go">Inspect →</span>
+            </button>
+          }
+          <p class="ee-bottomup__note">Render counts are observed. Cause is not determined here — open a component in Components to investigate why it rendered.</p>
+        } @else {
+          <div class="ei-empty"><p>No component renders in this execution.</p></div>
+        }
+      </div>
+    }
+
+    <!-- ═══ STORY VIEW (primary) — Impact Explorer ═══ -->
+    @if (viewMode() === 'story') {
+      <div class="ee-story-pane">
+        <app-execution-impact
+          [model]="storyModel()"
+          [impact]="executionImpact()"
+          [stats]="storyStats()"
+          [detail]="selectedDetail()"
+          [selectedId]="selectedStepId()"
+          [focusedIds]="focusedNodeIds()"
+          [focusActive]="focusActive()"
+          [focusHasRelationship]="focusHasRelationship()"
+          (select)="selectStoryNode($event)"
+          (selectById)="selectStoryNodeById($event)"
+          (inspectComponent)="inspectComponentByName($event)"
+          (jump)="onStoryJump($event)"
+          (focusChain)="onFocusChain()"
+          (clearFocus)="clearFocus()" />
+      </div>
+    }
+
+    @if (viewMode() === 'timeline') {
 
     <!-- ═══ FILTER & NOISE SUPPRESSION TOOLBAR ═══ -->
     <div class="ee-toolbar">
       <div class="ee-toolbar__left">
         <!-- Search Input -->
         <div class="ee-search">
-          <span class="ee-search__icon">🔎</span>
+          <span class="ee-search__icon">⌕</span>
           <input class="ee-search__input"
                  type="text"
                  placeholder="Filter APIs, Signals, Components..."
@@ -69,7 +120,8 @@
         <!-- Filter Chips -->
         <div class="ee-filter-chips">
           <button class="ee-chip" [class.active]="activeFilter() === 'all'" (click)="setFilter('all')">All Events</button>
-          <button class="ee-chip" [class.active]="activeFilter() === 'critical'" (click)="setFilter('critical')">Critical Path Only</button>
+          <button class="ee-chip" [class.active]="activeFilter() === 'critical'" (click)="setFilter('critical')"
+                  title="Slowest and longest-running items. This is a duration heuristic, not a proven dependency-based critical path.">Slow &amp; longest</button>
           <button class="ee-chip" [class.active]="activeFilter() === 'slow'" (click)="setFilter('slow')">Slow &gt;16ms</button>
           <button class="ee-chip" [class.active]="activeFilter() === 'duplicates'" (click)="setFilter('duplicates')">Duplicates</button>
         </div>
@@ -102,7 +154,7 @@
 
           <!-- Lane Header -->
           <div class="ee-lane__header">
-            <span class="ee-lane__icon">{{ lane.icon }}</span>
+            @if (lane.icon) { <span class="ee-lane__icon">{{ lane.icon }}</span> }
             <span class="ee-lane__label">{{ lane.label }}</span>
             <span class="ee-lane__count">{{ lane.totalItemCount }}</span>
           </div>
@@ -116,7 +168,7 @@
                 <div class="ee-group" [class.ee-group--expanded]="isGroupExpanded(entry.id)">
                   <button class="ee-group__header" (click)="toggleGroup(entry.id)">
                     <span class="ee-group__toggle">{{ isGroupExpanded(entry.id) ? '▼' : '▶' }}</span>
-                    <span class="ee-group__icon">{{ entry.icon }}</span>
+                    @if (entry.icon) { <span class="ee-group__icon">{{ entry.icon }}</span> }
                     <span class="ee-group__title">{{ entry.title }}</span>
                     <span class="ee-group__duration">{{ formatTime(entry.totalDuration) }}</span>
                     <!-- Group bar -->
@@ -145,8 +197,10 @@
                                  [class]="'ee-bar--' + item.category"
                                  [class.ee-bar--slow]="item.isSlow"
                                  [class.ee-bar--bottleneck]="item.isBottleneck"
+                                 [class.ee-bar--min-width]="item.isMinWidthConstrained"
                                  [style.left.%]="item.startPct"
-                                 [style.width.%]="Math.max(0.4, item.widthPct)">
+                                 [style.width.%]="Math.max(0.4, item.widthPct)"
+                                 [title]="item.isMinWidthConstrained ? 'Actual duration: ' + item.duration.toFixed(2) + 'ms (bar enlarged for visibility)' : ''">
                             </div>
                           </div>
                           <span class="ee-item__duration" [class.ee-item__duration--slow]="item.isSlow">{{ formatTime(item.duration) }}</span>
@@ -171,7 +225,7 @@
                       <span class="ee-item__dupe-badge">{{ entry.duplicateCount }}×</span>
                     }
                     @if (entry.isBottleneck) {
-                      <span class="ee-item__bottleneck-tag">⚠ BOTTLENECK</span>
+                      <span class="ee-item__bottleneck-tag" title="Longest single operation observed">LONGEST</span>
                     }
                   </span>
                   <div class="ee-item__bar-track">
@@ -179,8 +233,10 @@
                          [class]="'ee-bar--' + entry.category"
                          [class.ee-bar--slow]="entry.isSlow"
                          [class.ee-bar--bottleneck]="entry.isBottleneck"
+                         [class.ee-bar--min-width]="entry.isMinWidthConstrained"
                          [style.left.%]="entry.startPct"
-                         [style.width.%]="Math.max(0.4, entry.widthPct)">
+                         [style.width.%]="Math.max(0.4, entry.widthPct)"
+                         [title]="entry.isMinWidthConstrained ? 'Actual duration: ' + entry.duration.toFixed(2) + 'ms (bar enlarged for visibility)' : ''">
                     </div>
                   </div>
                   <span class="ee-item__duration" [class.ee-item__duration--slow]="entry.isSlow">{{ formatTime(entry.duration) }}</span>
@@ -195,35 +251,48 @@
         </div>
       }
     </div>
+    }
 
-    <!-- ═══ DETAIL INSPECTOR DRAWER ═══ -->
+    <!-- ═══ DETAIL INSPECTOR DRAWER (shared by Story + Timeline) ═══ -->
     <div class="ee-drawer" [class.ee-drawer--open]="selectedItem() !== null">
       @if (selectedItem(); as item) {
         <div class="ee-drawer__header">
           <div class="ee-drawer__title-row">
-            <span class="ee-drawer__category-icon">{{ getCategoryIcon(item.category) }}</span>
+            <span class="ee-drawer__category-tag" [class]="'ee-drawer__category-tag--' + item.category">{{ item.category | uppercase }}</span>
             <h3 class="ee-drawer__name">{{ item.title }}</h3>
             <button class="ee-drawer__close" (click)="clearSelection()">×</button>
           </div>
-          @if (getSourceFilePath(item); as filePath) {
-            <button class="ee-drawer__ide-link" (click)="openInVSCode(filePath)">Open in VS Code →</button>
-          }
+          <div class="ee-drawer__actions">
+            @if (item.category === 'render') {
+              <button class="ee-drawer__link" (click)="inspectInComponents(item)">Inspect in Components →</button>
+            }
+            @if (getSourceFilePath(item); as filePath) {
+              <button class="ee-drawer__ide-link" (click)="openInVSCode(filePath)">Open in VS Code →</button>
+            }
+          </div>
         </div>
 
         <section class="ee-drawer__section">
-          <h4 class="ee-drawer__section-title">Timing</h4>
+          <h4 class="ee-drawer__section-title">
+            Timing
+            <span class="ee-evidence ee-evidence--observed" title="Timing is measured directly by ngLens instrumentation.">Observed</span>
+          </h4>
           <div class="ee-drawer__timing-grid">
             <div class="ee-drawer__timing-item">
               <span class="ee-drawer__timing-label">Start</span>
-              <span class="ee-drawer__timing-value">{{ formatTime(item.startTime) }}</span>
+              <span class="ee-drawer__timing-value" title="Offset from the start of this execution.">+{{ formatTime(item.startTime) }}</span>
             </div>
             <div class="ee-drawer__timing-item">
               <span class="ee-drawer__timing-label">Duration</span>
-              <span class="ee-drawer__timing-value" [class.ee-text--slow]="item.isSlow">{{ formatTime(item.duration) }}</span>
+              @if (measuredDuration(item); as d) {
+                <span class="ee-drawer__timing-value" [class.ee-text--slow]="item.isSlow" title="Measured event duration.">{{ formatTime(d) }}</span>
+              } @else {
+                <span class="ee-drawer__timing-value" title="No measurable duration for this event (occurred at a single instant).">—</span>
+              }
             </div>
             <div class="ee-drawer__timing-item">
               <span class="ee-drawer__timing-label">End</span>
-              <span class="ee-drawer__timing-value">{{ formatTime(item.endTime) }}</span>
+              <span class="ee-drawer__timing-value" title="Offset from the start of this execution.">+{{ formatTime(itemEndOffset(item)) }}</span>
             </div>
             <div class="ee-drawer__timing-item">
               <span class="ee-drawer__timing-label">Category</span>
@@ -237,13 +306,13 @@
             <h4 class="ee-drawer__section-title">Flags</h4>
             <div class="ee-drawer__flags">
               @if (item.isBottleneck) {
-                <span class="ee-flag ee-flag--error">⚠ Primary Bottleneck</span>
+                <span class="ee-flag ee-flag--error">Longest operation</span>
               }
               @if (item.isSlow) {
-                <span class="ee-flag ee-flag--warn">🐢 Slow Operation</span>
+                <span class="ee-flag ee-flag--warn">Slow</span>
               }
               @if (item.isDuplicate) {
-                <span class="ee-flag ee-flag--warn">🔁 Duplicate ({{ item.duplicateCount }}×)</span>
+                <span class="ee-flag ee-flag--warn">Duplicate ({{ item.duplicateCount }}×)</span>
               }
             </div>
           </section>
@@ -251,7 +320,10 @@
 
         @if (item.stepData?.impact?.components?.names?.length > 0) {
           <section class="ee-drawer__section">
-            <h4 class="ee-drawer__section-title">Affected Components</h4>
+            <h4 class="ee-drawer__section-title">
+              Related components
+              <span class="ee-evidence ee-evidence--correlated" title="Components active in the same window / matched by name. Correlated with this step — not a proven causal edge.">Correlated</span>
+            </h4>
             <div class="ee-drawer__affected">
               @for (comp of item.stepData.impact.components.names; track $index) {
                 <span class="ee-drawer__affected-chip">{{ comp }}</span>
@@ -262,8 +334,16 @@
 
         @if (item.stepData?.rootCauseChain?.summary) {
           <section class="ee-drawer__section">
-            <h4 class="ee-drawer__section-title">Root Cause</h4>
+            <h4 class="ee-drawer__section-title">Context</h4>
             <p class="ee-drawer__root-cause">{{ item.stepData.rootCauseChain.summary }}</p>
+            <div class="ee-kvline">
+              <span class="ee-kvline__k">Evidence</span>
+              <span class="ee-kvline__v ee-evidence"
+                    [class.ee-evidence--correlated]="causeEvidence(item).level === 'correlated'"
+                    [class.ee-evidence--inferred]="causeEvidence(item).level === 'inferred'"
+                    [class.ee-evidence--unknown]="causeEvidence(item).level === 'unknown'"
+                    title="Reconstructed from event sequence and naming, not a directly captured causal edge.">{{ causeEvidence(item).label }}</span>
+            </div>
           </section>
         }
 
@@ -286,23 +366,27 @@
       }
     </div>
 
-    <!-- ═══ HIGH-DENSITY ISSUES ALERT BOX (Bottom) ═══ -->
+    <!-- ═══ ISSUES (compact, clickable → jumps to related item) ═══ -->
     @if (filteredResult().issues.length > 0) {
       <div class="ee-issues">
         <div class="ee-issues__header">
-          <span class="ee-issues__icon">⚠</span>
-          <span class="ee-issues__title">Detected Issues ({{ filteredResult().issues.length }})</span>
+          <span class="ee-issues__title">Issues</span>
+          <span class="ee-issues__count">{{ filteredResult().issues.length }}</span>
         </div>
         <div class="ee-issues__list">
           @for (issue of filteredResult().issues; track issue.id) {
-            <div class="ee-issue" [class]="'ee-issue--' + issue.severity">
+            <button class="ee-issue" [class]="'ee-issue--' + issue.severity"
+                    (click)="selectIssue(issue)"
+                    [title]="issue.relatedItemIds.length ? 'Show in timeline' : ''">
               <div class="ee-issue__top">
-                <span class="ee-issue__severity">{{ issue.severity === 'error' ? '🔴' : issue.severity === 'warning' ? '🟡' : '🔵' }}</span>
+                <span class="ee-issue__dot" [class]="'ee-issue__dot--' + issue.severity"></span>
                 <span class="ee-issue__title">{{ issue.title }}</span>
               </div>
               <p class="ee-issue__detail">{{ issue.detail }}</p>
-              <p class="ee-issue__suggestion">💡 {{ issue.suggestion }}</p>
-            </div>
+              @if (issue.suggestion) {
+                <p class="ee-issue__suggestion">Suggestion — {{ issue.suggestion }}</p>
+              }
+            </button>
           }
         </div>
       </div>
@@ -311,9 +395,8 @@
   } @else {
     <!-- ═══ EMPTY STATE ═══ -->
     <div class="ee-empty">
-      <div class="ee-empty__icon">👁️‍🗨️</div>
       <h3 class="ee-empty__title">Execution Explorer</h3>
-      <p class="ee-empty__text">Interact with your application to capture execution telemetry. API calls, state changes, and component renders will appear here as a grouped swimlane waterfall.</p>
+      <p class="ee-empty__text">Interact with your application to capture execution telemetry. API calls, state changes, and component renders appear here as a grouped runtime trace.</p>
     </div>
   }
 

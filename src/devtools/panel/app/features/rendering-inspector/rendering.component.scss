@@ -1,43 +1,66 @@
 // ═══════════════════════════════════════════════════════════
-// ngLens Render Inspector — Dark DevTools Diagnostic Workspace
+// ngLens Render Inspector — Full theme support via CSS custom properties
 // Optimized for Chrome DevTools panel contrast and density.
-//
-// Palette:
-//   Base:     #0F1419 (deepest), #151B23 (surface), #1C2432 (cards)
-//   Border:   #2D3748 (standard), #3D4A5C (hover/focus)
-//   Text:     #E8ECF1 (primary), #A0AEC0 (secondary), #718096 (muted)
-//   Accents:  #3B82F6 (blue), #10B981 (green), #F59E0B (amber), #EF4444 (red)
+// Now works with light/dark theme switching.
 // ═══════════════════════════════════════════════════════════
 
-:host { display: block; height: 100%; }
+:host {
+  display: block;
+  height: 100%;
+  // NOTE: Do NOT re-declare --ri-* here. CSS custom properties defined at
+  // :root / html[data-theme] already inherit into this component. A self-
+  // referential re-declaration (e.g. `--ri-border: var(--ri-border)`) resolves
+  // to an invalid/empty value in the encapsulated scope, which silently
+  // stripped every border/background/shadow that used --ri-*. That was the
+  // cause of the "flat, no boxes" rendering.
+}
 
-// ── Design Tokens ──
-$bg-deep:    #0F1419;
-$bg-surface: #151B23;
-$bg-card:    #1C2432;
-$bg-raised:  #232D3F;
-$border:     #2D3748;
-$border-hover: #3D4A5C;
-$border-focus: #3B82F6;
-
-$blue:   #3B82F6;
-$green:  #10B981;
-$amber:  #F59E0B;
-$red:    #EF4444;
-$purple: #A78BFA;
-$cyan:   #22D3EE;
-
-$text-bright:  #E8ECF1;
-$text-primary: #CBD5E1;
-$text-secondary: #A0AEC0;
-$text-muted:   #718096;
-
-$mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
-$sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+// ── Design Tokens (using CSS custom properties for dynamic theming) ──
+// Single font family across the whole inspector (no monospace). $mono is kept
+// as an alias pointing at the same sans stack so existing usages stay in one
+// consistent family.
+$sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+$mono: $sans;
 
 $radius-sm: 3px;
 $radius-md: 5px;
 $radius-lg: 7px;
+
+// CSS variable references for theme-aware colors
+// These resolve at runtime based on html[data-theme] attribute
+$bg-deep:      var(--ri-bg-deep);
+$bg-surface:   var(--ri-bg-surface);
+$bg-card:      var(--ri-bg-card);
+$bg-raised:    var(--ri-bg-raised);
+$border:       var(--ri-border);
+$border-hover: var(--ri-border-hover);
+$border-focus: var(--ri-border-focus);
+$panel-shadow: var(--ri-panel-shadow);
+
+$blue:         var(--ri-blue);
+$green:        var(--ri-green);
+$amber:        var(--ri-amber);
+$red:          var(--ri-red);
+$purple:       var(--ri-purple);
+$cyan:         var(--ri-cyan);
+
+$text-bright:      var(--ri-text-bright);
+$text-primary:     var(--ri-text-primary);
+$text-secondary:   var(--ri-text-secondary);
+$text-muted:       var(--ri-text-muted);
+
+// Accent colors for component causes and severity (theme-aware)
+$accent-blue:      var(--ri-accent-blue);
+$accent-green:     var(--ri-accent-green);
+$accent-red:       var(--ri-accent-red);
+$accent-amber:     var(--ri-accent-amber);
+$accent-purple:    var(--ri-accent-purple);
+$accent-cyan:      var(--ri-accent-cyan);
+$accent-pink:      var(--ri-accent-pink);
+$accent-orange:    var(--ri-accent-orange);
+$accent-indigo:    var(--ri-accent-indigo);
+$confidence-high:  var(--ri-accent-confidence-high);
+$confidence-medium: var(--ri-accent-confidence-medium);
 
 // ── Workspace Shell ──
 .ri-workspace {
@@ -132,7 +155,7 @@ $radius-lg: 7px;
   &:focus-visible { outline: 1px solid $border-focus; outline-offset: 1px; }
   &.active {
     background: $blue;
-    color: #fff;
+    color: $text-bright;
     font-weight: 700;
   }
 }
@@ -172,11 +195,15 @@ $radius-lg: 7px;
 // ══════════════════════════════
 .ri-action-bar {
   display: flex;
-  gap: 5px;
-  padding: 5px 10px;
-  height: 36px;
+  gap: 6px;
+  padding: 6px 12px;
+  height: 40px;
   align-items: center;
-  border-bottom: 1px solid $border;
+  // Heavier divider + shadow: this is the last bar of the top toolbar band,
+  // so it separates the whole header region from the three-column grid below.
+  border-bottom: 1px solid $border-hover;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.28);
+  z-index: 2;
   overflow-x: auto;
   flex-shrink: 0;
   background: $bg-surface;
@@ -186,6 +213,21 @@ $radius-lg: 7px;
   &::-webkit-scrollbar { height: 3px; }
   &::-webkit-scrollbar-track { background: transparent; }
   &::-webkit-scrollbar-thumb { background: $border; border-radius: 2px; }
+
+  &__label {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: $text-muted;
+    margin-right: 4px;
+    padding-right: 10px;
+    border-right: 1px solid $border;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+  }
 }
 
 .ri-action-chip {
@@ -245,6 +287,44 @@ $radius-lg: 7px;
   }
 }
 
+// ── View Toggle Button ──
+.ri-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid $border;
+  border-radius: $radius-md;
+  background: $bg-card;
+  color: $text-secondary;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+  white-space: nowrap;
+  margin-right: 8px;
+
+  &:hover {
+    border-color: $border-hover;
+    background: $bg-raised;
+    color: $text-primary;
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: $border-focus;
+    box-shadow: 0 0 0 2px rgba($blue, 0.2);
+  }
+
+  &.active {
+    border-color: $amber;
+    background: rgba($amber, 0.08);
+    color: $amber;
+    box-shadow: inset 0 0 0 1px rgba($amber, 0.2);
+  }
+}
+
 // ── Badges (compact monospace) ──
 .ri-badge {
   font-family: $mono;
@@ -256,14 +336,14 @@ $radius-lg: 7px;
 
   &--renders {
     background: rgba($blue, 0.12);
-    color: #7CB3F9;
+    color: $accent-blue;
   }
   &--duration {
     background: rgba($green, 0.1);
-    color: #6EE7B7;
+    color: $accent-green;
     &.slow {
       background: rgba($red, 0.12);
-      color: #FCA5A5;
+      color: $accent-red;
     }
   }
   &--flame {
@@ -481,7 +561,7 @@ $radius-lg: 7px;
   code {
     font-family: $mono;
     font-size: 10px;
-    color: #7CB3F9;
+    color: $accent-blue;
   }
 
   &__detail {
@@ -566,7 +646,7 @@ $radius-lg: 7px;
   &--exceeded {
     background: rgba($red, 0.08);
     border: 1px solid rgba($red, 0.25);
-    color: #FCA5A5;
+    color: $accent-red;
   }
 }
 
@@ -631,9 +711,9 @@ $radius-lg: 7px;
 .ri-flow--signal-write   { border-left: 2px solid $green; }
 .ri-flow--subject-emit   { border-left: 2px solid $purple; }
 .ri-flow--store-dispatch { border-left: 2px solid $red; }
-.ri-flow--store-select   { border-left: 2px solid #EC4899; }
-.ri-flow--facade-method  { border-left: 2px solid #F97316; }
-.ri-flow--websocket      { border-left: 2px solid #6366F1; }
+.ri-flow--store-select   { border-left: 2px solid $accent-pink; }
+.ri-flow--facade-method  { border-left: 2px solid $accent-orange; }
+.ri-flow--websocket      { border-left: 2px solid $accent-indigo; }
 
 // ══════════════════════════════
 // SUGGESTION BOX
@@ -781,26 +861,26 @@ $radius-lg: 7px;
 // Render count color classes
 .ri-count--high {
   background: rgba($red, 0.15);
-  color: #FCA5A5;
+  color: $accent-red;
 }
 
 .ri-count--medium {
   background: rgba($amber, 0.15);
-  color: #FCD34D;
+  color: $accent-amber;
 }
 
 .ri-count--low {
   background: rgba($blue, 0.1);
-  color: #7CB3F9;
+  color: $accent-blue;
 }
 
 // Duration color classes
 .ri-duration--high {
-  color: #FCA5A5;
+  color: $accent-red;
 }
 
 .ri-duration--medium {
-  color: #FCD34D;
+  color: $accent-amber;
 }
 
 .ri-duration--low {
@@ -808,11 +888,11 @@ $radius-lg: 7px;
 }
 
 // Cause type styling
-.ri-cause-type--signal    { background: rgba($green, 0.08); color: #6EE7B7; }
-.ri-cause-type--zone      { background: rgba($blue, 0.08); color: #7CB3F9; }
-.ri-cause-type--parent    { background: rgba($purple, 0.08); color: #C4B5FD; }
-.ri-cause-type--input     { background: rgba($cyan, 0.08); color: #67E8F9; }
-.ri-cause-type--manual-cd { background: rgba($amber, 0.08); color: #FCD34D; }
+.ri-cause-type--signal    { background: rgba($green, 0.08); color: $accent-green; }
+.ri-cause-type--zone      { background: rgba($blue, 0.08); color: $accent-blue; }
+.ri-cause-type--parent    { background: rgba($purple, 0.08); color: $accent-purple; }
+.ri-cause-type--input     { background: rgba($cyan, 0.08); color: $accent-cyan; }
+.ri-cause-type--manual-cd { background: rgba($amber, 0.08); color: $accent-amber; }
 .ri-cause-type--unknown   { background: rgba($text-muted, 0.08); color: $text-muted; }
 
 // Impact bar gradient
@@ -856,7 +936,7 @@ $radius-lg: 7px;
     border-radius: 2px;
     &:hover {
       background: rgba($blue, 0.1);
-      color: #7CB3F9;
+      color: $accent-blue;
     }
   }
 }
@@ -864,7 +944,1565 @@ $radius-lg: 7px;
 // ══════════════════════════════
 // SEVERITY COLOR UTILITIES
 // ══════════════════════════════
-.color-critical { color: #FCA5A5 !important; }
-.color-warning  { color: #FCD34D !important; }
-.color-success  { color: #6EE7B7 !important; }
-.color-info     { color: #7CB3F9 !important; }
+.color-critical { color: $accent-red !important; }
+.color-warning  { color: $accent-amber !important; }
+.color-success  { color: $accent-green !important; }
+.color-info     { color: $accent-blue !important; }
+
+// ═══════════════════════════════════════════════════════════
+// RENDER CAUSALITY VIEW
+// Built on observed data: render counts, cause attribution,
+// confidence levels, and observed causal chains.
+// ═══════════════════════════════════════════════════════════
+
+// Confidence color mapping (shared)
+.ri-conf--direct {
+  --conf-color: #{$green};
+}
+.ri-conf--inferred {
+  --conf-color: #{$amber};
+}
+.ri-conf--uncertain {
+  --conf-color: #{$text-muted};
+}
+
+.ri-causality {
+  height: 100%;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  &__note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    background: rgba($blue, 0.08);
+    border: 1px solid rgba($blue, 0.25);
+    border-radius: $radius-md;
+    font-size: 10.5px;
+    color: $text-secondary;
+    line-height: 1.5;
+
+    strong { color: $text-bright; font-weight: 600; }
+    code {
+      font-family: $mono;
+      font-size: 10px;
+      padding: 1px 4px;
+      background: rgba($amber, 0.15);
+      color: $amber;
+      border-radius: 3px;
+    }
+  }
+
+  &__note-icon {
+    color: $blue;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  &__summary {
+    display: flex;
+    gap: 10px;
+  }
+
+  &__metric {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px;
+    background: $bg-card;
+    border: 1px solid $border;
+    border-radius: $radius-md;
+  }
+
+  &__metric-value {
+    font-family: $mono;
+    font-size: 18px;
+    font-weight: 700;
+    color: $text-bright;
+
+    small { font-size: 10px; color: $text-muted; font-weight: 500; }
+  }
+
+  &__metric-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: $text-muted;
+  }
+
+  &__section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: $text-secondary;
+  }
+
+  &__title-hint {
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    color: $green;
+    background: rgba($green, 0.12);
+    padding: 1px 6px;
+    border-radius: 8px;
+    margin-left: 6px;
+  }
+}
+
+// ── Confidence distribution bar ──
+.ri-confidence-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: $bg-deep;
+
+  &__seg {
+    height: 100%;
+    background: var(--conf-color);
+    transition: width 0.3s ease;
+  }
+}
+
+.ri-confidence-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+
+  &__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: $text-secondary;
+  }
+}
+
+.ri-conf-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--conf-color);
+}
+
+// ── Cause breakdown list ──
+.ri-cause-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ri-cause-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "badge label count"
+    "bar bar pct";
+  align-items: center;
+  gap: 4px 8px;
+  padding: 7px 9px;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-md;
+
+  &__badge {
+    grid-area: badge;
+    font-size: 8.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--conf-color);
+    background: color-mix(in srgb, var(--conf-color) 15%, transparent);
+    white-space: nowrap;
+  }
+
+  &__label {
+    grid-area: label;
+    font-size: 11px;
+    color: $text-bright;
+    font-weight: 500;
+  }
+
+  &__count {
+    grid-area: count;
+    font-family: $mono;
+    font-size: 10px;
+    color: $text-muted;
+    white-space: nowrap;
+  }
+
+  &__bar {
+    grid-area: bar;
+    height: 5px;
+    background: $bg-deep;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  &__fill {
+    height: 100%;
+    background: var(--conf-color);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  &__pct {
+    grid-area: pct;
+    font-family: $mono;
+    font-size: 9.5px;
+    color: $text-secondary;
+    text-align: right;
+  }
+}
+
+// ── Causal chains ──
+.ri-chain-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ri-chain {
+  padding: 8px 10px;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-left: 3px solid $cyan;
+  border-radius: $radius-md;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+
+  &__trigger {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: $text-bright;
+  }
+
+  &__dup {
+    font-family: $mono;
+    font-size: 9px;
+    color: $amber;
+    background: rgba($amber, 0.15);
+    padding: 1px 5px;
+    border-radius: 8px;
+  }
+
+  &__effects {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-left: 6px;
+  }
+
+  &__effect {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: $purple;
+  }
+
+  &__impacted {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    padding-left: 6px;
+  }
+
+  &__arrow {
+    color: $text-muted;
+    font-size: 11px;
+  }
+
+  &__icon {
+    font-size: 11px;
+  }
+
+  &__comp {
+    font-family: $mono;
+    font-size: 10px;
+    color: $blue;
+    background: rgba($blue, 0.1);
+    border: 1px solid rgba($blue, 0.25);
+    border-radius: 3px;
+    padding: 2px 7px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+
+    &:hover {
+      background: rgba($blue, 0.2);
+    }
+  }
+}
+
+// ── Re-render offenders ──
+.ri-offender-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ri-offender {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-md;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    border-color: $border-hover;
+    background: $bg-raised;
+  }
+
+  &__count {
+    font-family: $mono;
+    font-size: 12px;
+    font-weight: 700;
+    color: $amber;
+    min-width: 36px;
+
+    &--hot { color: $red; }
+  }
+
+  &__name {
+    flex: 1;
+    font-size: 11px;
+    font-weight: 500;
+    color: $text-bright;
+    font-family: $mono;
+  }
+
+  &__cause {
+    font-size: 9.5px;
+    color: var(--conf-color);
+    background: color-mix(in srgb, var(--conf-color) 12%, transparent);
+    padding: 2px 7px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PHASE A — THREE-COLUMN COMPONENTS VIEW
+// ═══════════════════════════════════════════════════════════
+
+// Confidence tokens (shared with Why-It-Rendered badges)
+.ri-conf--direct   { --conf-color: #{$green}; }
+.ri-conf--inferred { --conf-color: #{$amber}; }
+.ri-conf--uncertain{ --conf-color: #{$text-muted}; }
+
+// ── Top Metric Bar ──
+.ri-metricbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 14px;
+  background: $bg-surface;
+  border-bottom: 1px solid $border;
+  flex-shrink: 0;
+
+  &__title {
+    min-width: 0;
+    h1 { margin: 0; font-size: 12px; font-weight: 700; color: $text-bright; white-space: nowrap; }
+    // Description hidden to keep the bar to a single compact line.
+    p  { display: none; }
+  }
+
+  &__cards {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+}
+
+// Compact single-line metric: "42 Total Renders" on one row.
+.ri-metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 10px;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-md;
+  white-space: nowrap;
+
+  &--warn { border-color: rgba($amber, 0.4); }
+
+  &__value {
+    font-family: $mono;
+    font-size: 13px;
+    font-weight: 700;
+    color: $text-bright;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+    small { font-size: 9px; color: $text-muted; font-weight: 500; }
+  }
+
+  &__label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: $text-muted;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+  }
+
+  &__est {
+    font-size: 8px;
+    color: $amber;
+    background: rgba($amber, 0.14);
+    padding: 0 3px;
+    border-radius: 2px;
+    text-transform: lowercase;
+    letter-spacing: 0;
+  }
+}
+
+.ri-live-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: $text-muted;
+  &--on { background: $green; box-shadow: 0 0 6px rgba($green, 0.6); }
+}
+
+// ── Verdict Strip ──
+.ri-verdict {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  font-size: 12px;
+  border-bottom: 1px solid $border;
+  flex-shrink: 0;
+
+  &--clean { background: rgba($green, 0.08); color: $text-primary; }
+  &--warn  { background: rgba($amber, 0.10); color: $text-primary; }
+  &--hot   { background: rgba($red, 0.10); color: $text-primary; }
+
+  &__icon { font-size: 13px; }
+  &__msg  { font-weight: 600; color: $text-bright; }
+  &__worst {
+    margin-left: auto;
+    font-size: 11px;
+    color: $text-secondary;
+    strong { color: $red; }
+  }
+}
+
+// Data-integrity self-audit chip (accuracy self-check)
+.ri-integrity {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 3px;
+  cursor: help;
+  margin-left: 10px;
+
+  &--ok    { color: $green; background: rgba($green, 0.12); }
+  &--drift { color: $amber; background: rgba($amber, 0.14); }
+}
+// When there's no "worst" chip, keep integrity pinned right.
+.ri-verdict__worst + .ri-integrity { margin-left: 10px; }
+.ri-verdict__msg + .ri-integrity { margin-left: auto; }
+
+// ── Three-Column Grid ──
+.ri-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 440px;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+  min-height: 0;
+  // Deep backdrop so the surface-colored panels visibly float above it.
+  background: $bg-deep;
+
+  @media (max-width: 1100px) {
+    grid-template-columns: 240px minmax(0, 1fr);
+    .ri-col--right { display: none; }
+  }
+}
+
+.ri-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+
+  &--left  { }
+  &--center{ }
+  &--right { }
+}
+
+.ri-panel {
+  background: $bg-surface;
+  border: 1px solid $border-hover;
+  border-radius: $radius-lg;
+  box-shadow: $panel-shadow;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 9px 12px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: $text-bright;
+    // Heavier divider under the header so the title strip reads as a header.
+    border-bottom: 1px solid $border-hover;
+    background: $bg-card;
+    flex-shrink: 0;
+    // Colored accent tick at the start of every panel header.
+    &::before {
+      content: '';
+      display: inline-block;
+      width: 3px;
+      height: 11px;
+      border-radius: 2px;
+      background: $blue;
+      margin-right: 2px;
+      flex-shrink: 0;
+    }
+  }
+
+  &__summary {
+    font-size: 9px;
+    font-weight: 600;
+    color: $text-muted;
+    font-family: $mono;
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+
+  &--tree { flex: 1; min-height: 0; }
+  &--hotspots { flex-shrink: 0; max-height: 40%; }
+  &--workspace { flex: 1; }
+  &--details { flex: 1; overflow-y: auto; }
+}
+
+.ri-tree-view { display: block; height: 100%; min-height: 0; overflow: hidden; }
+.ri-tree-pane__empty { padding: 20px; text-align: center; color: $text-muted; font-size: 11px; }
+
+// ── Render Hotspots ──
+.ri-hotspot-list {
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.ri-hotspot {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: $radius-sm;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+
+  &:hover { background: $bg-raised; }
+  &--selected { background: rgba($blue, 0.1); }
+
+  &__count {
+    font-family: $mono;
+    font-size: 11px;
+    font-weight: 700;
+    color: $amber;
+    min-width: 32px;
+    &--hot { color: $red; }
+  }
+  &__name {
+    flex: 1;
+    font-size: 11px;
+    color: $text-bright;
+    font-family: $mono;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  &__dur { font-family: $mono; font-size: 9px; color: $text-muted; }
+}
+
+// ── Center Workspace: tab strip + body ──
+.ri-panel--workspace { flex: 1; min-height: 0; }
+
+.ri-ws-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px 0;
+  border-bottom: 1px solid $border;
+  background: $bg-card;
+  flex-shrink: 0;
+}
+
+// Back-to-previous, pinned to the right of the workspace tab strip
+.ri-ws-back {
+  margin-left: auto;
+  margin-bottom: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 260px;
+  padding: 4px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: $blue;
+  background: rgba($blue, 0.08);
+  border: 1px solid rgba($blue, 0.3);
+  border-radius: $radius-md;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  &:hover { background: rgba($blue, 0.16); border-color: rgba($blue, 0.5); }
+}
+
+.ri-ws-tab {
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: $text-muted;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.12s, border-color 0.12s;
+
+  &:hover { color: $text-secondary; }
+  &.active { color: $text-bright; border-bottom-color: $blue; }
+}
+
+.ri-ws-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+
+  app-render-flow, app-activity-timeline { display: block; height: 100%; }
+}
+
+// ── Component Details (right) ──
+.ri-details__header {
+  padding: 12px;
+  border-bottom: 1px solid $border;
+}
+.ri-details__title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ri-details__name {
+  margin: 0; font-size: 13px; font-weight: 700; color: $text-bright;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1;
+}
+.ri-details__close {
+  background: none; border: none; color: $text-muted; font-size: 16px; cursor: pointer;
+  &:hover { color: $text-bright; }
+}
+.ri-details__ide-link {
+  margin-top: 6px;
+  background: none;
+  border: none;
+  color: $blue;
+  font-size: 10px;
+  font-family: $mono;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  &:hover { text-decoration: underline; }
+}
+
+.ri-details__section {
+  padding: 12px;
+  border-bottom: 1px solid $border;
+  &-title {
+    margin: 0 0 8px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: $text-secondary;
+  }
+}
+
+.ri-details__placeholder {
+  padding: 30px 20px;
+  text-align: center;
+  color: $text-muted;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+// ── Why It Rendered ──
+.ri-why-headline {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: $text-bright;
+  line-height: 1.5;
+}
+
+.ri-why-split {
+  margin-bottom: 10px;
+
+  &__bar {
+    display: flex;
+    height: 10px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: $bg-deep;
+  }
+  &__seg { height: 100%; }
+  &__seg--parent { background: $amber; }
+  &__seg--own    { background: $green; }
+
+  &__legend {
+    display: flex;
+    gap: 14px;
+    margin-top: 6px;
+    font-size: 10px;
+    color: $text-secondary;
+    span { display: inline-flex; align-items: center; gap: 5px; }
+  }
+}
+
+.ri-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.ri-dot--parent { background: $amber; }
+.ri-dot--own { background: $green; }
+
+.ri-why-list { display: flex; flex-direction: column; gap: 5px; }
+.ri-why-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-sm;
+
+  &__badge {
+    font-size: 8.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--conf-color);
+    background: color-mix(in srgb, var(--conf-color) 15%, transparent);
+    white-space: nowrap;
+  }
+  &__label { flex: 1; font-size: 11px; color: $text-bright; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  &__count { font-family: $mono; font-size: 10px; color: $text-muted; white-space: nowrap; }
+}
+
+// ── Metric grid (details) ──
+.ri-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.ri-metric-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-md;
+
+  &__value { font-family: $mono; font-size: 15px; font-weight: 700; color: $text-bright; }
+  &__label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: $text-muted; display: inline-flex; align-items: center; gap: 4px; }
+}
+
+.color-critical { color: $red !important; }
+.color-warning  { color: $amber !important; }
+
+.ri-binding-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-size: 10px;
+  color: $text-secondary;
+  strong { color: $text-bright; font-family: $mono; }
+}
+
+// ── Data flow list (details) ──
+.ri-flow-list { display: flex; flex-direction: column; gap: 4px; }
+.ri-flow-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: $bg-card;
+  border-radius: $radius-sm;
+  font-size: 10px;
+  &__icon { flex-shrink: 0; }
+  &__label { color: $text-secondary; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+// ── Insights ──
+.ri-insight {
+  padding: 8px 10px;
+  border-radius: $radius-md;
+  font-size: 11px;
+  line-height: 1.5;
+  color: $text-secondary;
+  margin-bottom: 6px;
+  border-left: 3px solid $border;
+  background: $bg-card;
+  strong { color: $text-bright; display: block; margin-bottom: 2px; }
+
+  &--high   { border-left-color: $red; background: rgba($red, 0.06); }
+  &--medium { border-left-color: $amber; background: rgba($amber, 0.06); }
+  &--ok     { border-left-color: $green; background: rgba($green, 0.06); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PHASE C — Details tabs + Diagnostics
+// ═══════════════════════════════════════════════════════════
+
+.ri-details__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 10px 0;
+  border-bottom: 1px solid $border;
+  background: $bg-card;
+}
+
+.ri-details__tab {
+  padding: 5px 12px;
+  font-size: 10.5px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: $text-muted;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.12s, border-color 0.12s;
+
+  &:hover { color: $text-secondary; }
+  &.active { color: $text-bright; border-bottom-color: $blue; }
+}
+
+// Honest-source / observed tags
+.ri-tag {
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: lowercase;
+  letter-spacing: 0;
+  padding: 1px 5px;
+  border-radius: 2px;
+  margin-left: 6px;
+  vertical-align: middle;
+
+  &--observed { color: $green; background: rgba($green, 0.14); }
+  &--guessed  { color: $amber; background: rgba($amber, 0.14); }
+}
+
+.ri-details__hint {
+  margin: 8px 0 0;
+  font-size: 9.5px;
+  color: $text-muted;
+  line-height: 1.5;
+}
+.ri-details__empty-hint {
+  margin: 0;
+  font-size: 10.5px;
+  color: $text-muted;
+  font-style: italic;
+}
+
+// ── Signals list ──
+.ri-sig-list { display: flex; flex-direction: column; gap: 4px; }
+.ri-sig-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-sm;
+
+  &__kind {
+    font-size: 8.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 5px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  &__name { font-family: $mono; font-size: 11px; color: $text-bright; flex-shrink: 0; }
+  &__value {
+    font-family: $mono; font-size: 10px; color: $text-secondary;
+    background: $bg-deep; padding: 1px 5px; border-radius: 2px;
+    margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%;
+  }
+}
+.ri-sig--signal   { color: $accent-green; background: color-mix(in srgb, var(--ri-green) 14%, transparent); }
+.ri-sig--computed { color: $accent-purple; background: color-mix(in srgb, var(--ri-purple) 14%, transparent); }
+.ri-sig--input    { color: $accent-cyan; background: color-mix(in srgb, var(--ri-cyan) 14%, transparent); }
+
+// ── Diagnostics metric grid ──
+.ri-diag-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.ri-diag-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-md;
+
+  &__value { font-family: $mono; font-size: 15px; font-weight: 700; color: $text-bright; }
+  &__label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: $text-muted; }
+}
+
+// ── High-frequency listeners ──
+.ri-hifreq {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: rgba($amber, 0.08);
+  border: 1px solid rgba($amber, 0.3);
+  border-radius: $radius-md;
+
+  &__label { font-size: 10px; font-weight: 600; color: $amber; }
+  &__chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  &__chip {
+    font-family: $mono; font-size: 9px; color: $amber;
+    background: rgba($amber, 0.15); padding: 2px 6px; border-radius: 3px;
+  }
+}
+
+// ── Source path ──
+.ri-source-path {
+  display: block;
+  font-family: $mono;
+  font-size: 10px;
+  color: $text-secondary;
+  background: $bg-deep;
+  padding: 6px 8px;
+  border-radius: $radius-sm;
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER ORIGIN + EVIDENCE + CONFIDENCE (trust model)
+// ═══════════════════════════════════════════════════════════
+
+// Confidence WORDS (never a %). Distinct from attribution share.
+.ri-cw--high   { color: $green; }
+.ri-cw--medium { color: $amber; }
+.ri-cw--low    { color: $text-muted; }
+
+// Origin dot colors
+.ri-origin--own-trigger        { background: $green; }
+.ri-origin--parent-propagation { background: $amber; }
+.ri-origin--external           { background: $cyan; }
+.ri-origin--unknown            { background: $text-muted; }
+
+.ri-origin-list { display: flex; flex-direction: column; gap: 5px; }
+
+.ri-origin {
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-md;
+  overflow: hidden;
+
+  &__row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 9px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    &:hover { background: $bg-raised; }
+  }
+
+  &__dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  &__label { flex: 1; font-size: 11px; font-weight: 600; color: $text-bright; }
+  &__count { font-family: $mono; font-size: 11px; font-weight: 700; color: $text-secondary; }
+  &__conf {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: color-mix(in srgb, currentColor 15%, transparent);
+  }
+  &__chevron {
+    font-size: 9px;
+    color: $text-muted;
+    transition: transform 0.12s ease;
+    &.open { transform: rotate(90deg); }
+  }
+}
+
+// Evidence ledger
+.ri-evidence {
+  padding: 8px 10px 10px;
+  border-top: 1px solid $border;
+  background: $bg-deep;
+
+  &__detail { margin: 0 0 8px; font-size: 10.5px; color: $text-secondary; line-height: 1.5; }
+  &__group { margin-bottom: 6px; }
+  &__heading {
+    display: block;
+    font-size: 8.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: $text-muted;
+    margin-bottom: 3px;
+  }
+  &__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 10.5px;
+    line-height: 1.5;
+    padding: 1px 0;
+    span { flex-shrink: 0; font-weight: 700; }
+    &--yes { color: $text-primary; span { color: $green; } }
+    &--no  { color: $text-muted; span { color: $amber; } }
+  }
+}
+
+// What to investigate / jump to culprit
+.ri-investigate {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: rgba($blue, 0.06);
+  border: 1px solid rgba($blue, 0.25);
+  border-radius: $radius-md;
+
+  &__label {
+    display: block;
+    font-size: 8.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: $text-muted;
+    margin-bottom: 5px;
+  }
+  &__jump {
+    background: none;
+    border: none;
+    color: $blue;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: $mono;
+    cursor: pointer;
+    padding: 0;
+    &:hover { text-decoration: underline; }
+  }
+}
+
+// ── Render Path (per-hop cost) ──
+.ri-path { display: flex; flex-direction: column; gap: 2px; }
+.ri-path__hop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: $radius-sm;
+  font-size: 10.5px;
+
+  &--selected { background: rgba($blue, 0.1); }
+  &--hotspot { background: rgba($red, 0.06); }
+}
+.ri-path__connector { color: $text-muted; font-size: 10px; width: 10px; flex-shrink: 0; }
+.ri-path__name {
+  background: none; border: none; padding: 0;
+  color: $text-bright; font-family: $mono; font-size: 10.5px;
+  cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  &:hover { color: $blue; text-decoration: underline; }
+}
+.ri-path__count { font-family: $mono; font-size: 9.5px; color: $text-muted; margin-left: auto; }
+.ri-path__cost { font-family: $mono; font-size: 9.5px; color: $text-secondary; }
+.ri-path__flag { font-size: 9px; color: $red; font-weight: 600; }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FLATTENED "DEVELOPER TOOL" PERSONALITY PASS
+// Quiet, dense, evidence-driven. Neutral palette + one accent; red/amber only
+// for real anomalies; muted gray for inferred/secondary. Sections + dividers
+// instead of cards; label/value rows instead of tiles; minimal badges.
+// (Appended last so these rules take precedence over the older card styles.)
+// ═══════════════════════════════════════════════════════════════════════════
+
+$accent: $accent-blue; // single accent (blue)
+
+// ── Top metric bar → primary header line ──
+.ri-metricbar {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 9px 14px;
+  background: $bg-surface;
+  border-bottom: 1px solid $border;
+  flex-shrink: 0;
+
+  &__title {
+    margin: 0; font-size: 12px; font-weight: 700; color: $text-bright; white-space: nowrap;
+    // Small accent tick before the title anchors it as the section header.
+    padding-left: 9px;
+    border-left: 3px solid $blue;
+  }
+  &__stats { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; font-size: 11px; color: $text-secondary; }
+}
+.ri-stat {
+  color: $text-secondary;
+  b { color: $text-bright; font-weight: 600; font-family: $mono; }
+  &--warn b { color: $amber; }
+  &--muted { color: $text-muted; b { color: $text-secondary; } }
+}
+.ri-stat__sep { color: $border-hover; }
+.ri-est {
+  font-size: 8px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: $text-muted; border: 1px solid $border; border-radius: 2px; padding: 0 3px; margin-left: 2px;
+}
+.ri-live-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: $text-muted; margin-right: 4px;
+  &--on { background: $green; }
+}
+.ri-dataquality { cursor: help; border-bottom: 1px dotted $border-hover; &--drift { color: $amber; } }
+
+// ── Verdict → one quiet line, no emoji/box ──
+.ri-verdict {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 5px 14px; font-size: 11px;
+  border-bottom: 1px solid $border; flex-shrink: 0;
+  background: $bg-surface;
+
+  &__msg { color: $text-secondary; }
+  &__worst { margin-left: auto; color: $text-muted; b { color: $text-primary; } }
+
+  // Color only when there's a real problem.
+  &--warn { .ri-verdict__msg { color: $amber; } }
+  &--hot  { .ri-verdict__msg { color: $red; } .ri-verdict__worst b { color: $red; } }
+}
+
+// ── Action chips → quieter, plain counts ──
+.ri-action-chip {
+  &__badges { display: none; } // legacy — removed
+  &__count {
+    font-family: $mono; font-size: 10px; color: $text-muted;
+    margin-left: 4px;
+  }
+  &.active .ri-action-chip__count { color: $accent; }
+  &.hot .ri-action-chip__label::after {
+    content: '•'; color: $amber; margin-left: 5px; // subtle worst indicator, not 🔥
+  }
+}
+
+// ── Hotspots → name + time rows, subtle worst marker ──
+.ri-hotspot {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  width: 100%; padding: 4px 10px; background: none; border: none; cursor: pointer;
+  text-align: left; color: $text-primary; border-radius: 0;
+  &:hover { background: var(--color-gray-bg-lighter); }
+  &--selected { background: rgba($accent, 0.08); }
+
+  &__name {
+    font-size: 11px; color: $text-primary; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    &--worst::before { content: '▸ '; color: $amber; }
+  }
+  &__meta { flex-shrink: 0; font-family: $mono; font-size: 10px; color: $text-muted; }
+}
+
+// ── Details panel: header + subhead ──
+.ri-details__header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 12px 2px;
+}
+.ri-details__name {
+  margin: 0; font-size: 13px; font-weight: 700; color: $text-bright;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ri-details__subhead {
+  padding: 0 12px 8px; font-family: $mono; font-size: 11px; color: $text-muted;
+  border-bottom: 1px solid $border;
+}
+.ri-details__close {
+  background: none; border: none; color: $text-muted; font-size: 15px; cursor: pointer; line-height: 1;
+  &:hover { color: $text-bright; }
+}
+
+// ── Sections separated by thin dividers (no cards) ──
+.ri-sec {
+  padding: 12px;
+  border-bottom: 1px solid $border;
+  &__title {
+    margin: 0 0 7px; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em; color: $text-muted;
+  }
+}
+.ri-why { margin: 0 0 8px; font-size: 12px; color: $text-bright; line-height: 1.5; font-weight: 600; }
+.ri-why__parent { margin: 8px 0 0; font-size: 11.5px; color: $text-secondary; line-height: 1.5; b { color: $text-bright; font-weight: 600; } }
+.ri-why__interp { margin: 6px 0 0; font-size: 11.5px; color: $text-muted; line-height: 1.5; font-style: italic; }
+
+// ── Label / value rows (the core flattened primitive) ──
+.ri-kv { display: flex; flex-direction: column; }
+.ri-kv__row {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 4px 0; width: 100%; background: none; border: none; text-align: left; font: inherit;
+  &--btn { cursor: pointer; border-radius: 3px; padding: 3px 4px; margin: 0 -4px;
+    &:hover { background: var(--color-gray-bg-lighter); } }
+}
+.ri-kv__k { color: $text-secondary; font-size: 11px; }
+.ri-kv__v {
+  margin-left: auto; font-family: $mono; font-size: 11px; color: $text-bright; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;
+}
+.ri-kv__badge { flex-shrink: 0; font-size: 10px; margin-left: 8px; }
+
+// Confidence as quiet colored TEXT (not pills).
+.ri-conf--high, .ri-conf--direct    { color: $confidence-high; }
+.ri-conf--medium, .ri-conf--inferred { color: $confidence-medium; }
+.ri-conf--low, .ri-conf--uncertain   { color: $text-muted; }
+
+.ri-muted { color: $text-muted; }
+.ri-muted-line { margin: 0; font-size: 11px; color: $text-muted; line-height: 1.6; }
+.ri-mono { font-family: $mono; }
+
+// ── Evidence disclosure (quiet, indented text) ──
+.ri-evidence {
+  margin: 2px 0 6px; padding: 6px 0 6px 14px; border-left: 1px solid $border;
+  &__detail { margin: 0 0 5px; font-size: 10.5px; color: $text-secondary; line-height: 1.5; }
+  &__item { font-size: 10.5px; line-height: 1.6; }
+  &__item--yes { color: $text-primary; }
+  &__item--no  { color: $text-muted; }
+}
+
+// ── Render path (debugger-style rows) ──
+.ri-path { display: flex; flex-direction: column; font-family: $mono; }
+.ri-path__hop {
+  display: flex; align-items: baseline; gap: 6px; padding: 2px 0;
+  background: none; border: none; text-align: left; width: 100%; cursor: pointer; color: $text-primary; font: inherit;
+  &:hover .ri-path__name { color: $accent; }
+  &--selected { .ri-path__name { font-weight: 700; color: $text-bright; } }
+  &--hotspot  { .ri-path__meta { color: $amber; } }
+}
+.ri-path__connector { color: $border-hover; width: 12px; flex-shrink: 0; }
+.ri-path__name { color: $text-primary; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ri-path__meta { margin-left: auto; flex-shrink: 0; font-size: 10px; color: $text-muted; }
+
+// ── Next / jump action ──
+.ri-next {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: $accent; font-size: 12px; font-family: $mono;
+  &:hover { text-decoration: underline; }
+}
+
+// ── Notes (only shown when meaningful) ──
+.ri-note {
+  margin: 0; font-size: 11px; color: $text-secondary; line-height: 1.5;
+  &--warn { color: $amber; }
+}
+
+// ── Source path ──
+.ri-source-path {
+  display: block; font-family: $mono; font-size: 10.5px; color: $text-secondary;
+  word-break: break-all; margin-bottom: 6px;
+}
+
+.ri-details__placeholder { padding: 30px 16px; text-align: center; color: $text-muted; font-size: 12px; line-height: 1.5; }
+
+// Panel headers a touch quieter
+.ri-panel__header {
+  text-transform: none;
+  &__summary, .ri-panel__summary { }
+}
+.ri-panel__summary { font-family: $mono; font-size: 9px; color: $text-muted; }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REDESIGN (v2) — consistent semantic color coding, page header, cards,
+// render-story diagram + sequence, structured why-list, related activity.
+// Semantic colors resolve from --sem-* so the SAME concept is the SAME color
+// in the tree, flow diagram, why-list, related activity, and badges.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Semantic color helpers (text/icon color) ──
+.ri-sem--parent  { color: var(--sem-parent); }
+.ri-sem--child   { color: var(--sem-child); }
+.ri-sem--self    { color: var(--sem-self); }
+.ri-sem--signal  { color: var(--sem-signal); }
+.ri-sem--input   { color: var(--sem-input); }
+.ri-sem--store   { color: var(--sem-store); }
+.ri-sem--rxjs    { color: var(--sem-rxjs); }
+.ri-sem--sibling { color: var(--sem-sibling); }
+.ri-sem--unknown { color: var(--sem-unknown); }
+
+// ── Semantic soft-fill helpers (badge/dot/tag background + matching text) ──
+@mixin sem-bg($color, $bg) {
+  background: $bg;
+  color: $color;
+}
+.ri-sem-bg--parent  { @include sem-bg(var(--sem-parent),  var(--sem-parent-bg)); }
+.ri-sem-bg--child   { @include sem-bg(var(--sem-child),   var(--sem-child-bg)); }
+.ri-sem-bg--self    { @include sem-bg(var(--sem-self),    var(--sem-self-bg)); }
+.ri-sem-bg--signal  { @include sem-bg(var(--sem-signal),  var(--sem-signal-bg)); }
+.ri-sem-bg--input   { @include sem-bg(var(--sem-input),   var(--sem-input-bg)); }
+.ri-sem-bg--store   { @include sem-bg(var(--sem-store),   var(--sem-store-bg)); }
+.ri-sem-bg--rxjs    { @include sem-bg(var(--sem-rxjs),    var(--sem-rxjs-bg)); }
+.ri-sem-bg--sibling { @include sem-bg(var(--sem-sibling), var(--sem-sibling-bg)); }
+.ri-sem-bg--unknown { @include sem-bg(var(--sem-unknown), var(--sem-unknown-bg)); }
+
+// Confidence badges
+.ri-conf-bg--high   { @include sem-bg(var(--sem-conf-high),   var(--sem-conf-high-bg)); }
+.ri-conf-bg--medium { @include sem-bg(var(--sem-conf-medium), var(--sem-conf-medium-bg)); }
+.ri-conf-bg--low    { @include sem-bg(var(--sem-conf-low),    var(--sem-conf-low-bg)); }
+
+// Semantic dots (small round indicators for related-activity + sequence nums)
+.ri-sem-dot--parent  { background: var(--sem-parent); color: #fff; }
+.ri-sem-dot--child   { background: var(--sem-child); color: #fff; }
+.ri-sem-dot--self    { background: var(--sem-self); color: #fff; }
+.ri-sem-dot--signal  { background: var(--sem-signal); color: #fff; }
+.ri-sem-dot--sibling { background: var(--sem-sibling); color: #fff; }
+.ri-sem-dot--input   { background: var(--sem-input); color: #fff; }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LAYOUT (v5) — polished three-column, single font, boxed sections with
+// padding + radius, matching the approved mock. Consistent spacing scale.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Page header + stats strip ──
+.ri-pagehead {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 12px 16px; background: $bg-surface; border-bottom: 1px solid $border; flex-shrink: 0;
+
+  &__lead { min-width: 0; }
+  &__title { margin: 0; font-size: 16px; font-weight: 700; color: $text-bright; }
+  &__sub { margin: 3px 0 0; font-size: 11px; color: $text-muted; }
+}
+.ri-statstrip { display: flex; gap: 8px; flex-shrink: 0; }
+.ri-statcell {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-width: 66px; padding: 6px 12px;
+  background: $bg-card; border: 1px solid $border-hover; border-radius: $radius-md;
+
+  &__value { font-size: 15px; font-weight: 700; color: $text-bright; line-height: 1.1;
+    small { font-size: 9px; color: $text-muted; font-weight: 600; margin-left: 1px; } }
+  &__label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.05em; color: $text-muted; font-weight: 600; white-space: nowrap; }
+  &--warn .ri-statcell__value { color: $accent-amber; }
+  &__badge { font-size: 10px; font-weight: 700; padding: 1px 9px; border-radius: 10px; background: var(--sem-conf-high-bg); color: var(--sem-conf-high);
+    &--drift { background: var(--sem-conf-medium-bg); color: var(--sem-conf-medium); } }
+}
+
+// ── Three-column grid ──
+.ri-grid3 {
+  flex: 1; display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 300px;
+  gap: 12px; padding: 12px; overflow: hidden; min-height: 0; background: $bg-deep;
+
+  @media (max-width: 1080px) { grid-template-columns: 260px minmax(0, 1fr); .ri-col--right { display: none; } }
+  @media (max-width: 720px)  { grid-template-columns: 1fr; .ri-col--center, .ri-col--right { display: none; } }
+}
+.ri-col { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: hidden; }
+
+// ── Card: the universal boxed section ──
+.ri-card {
+  display: flex; flex-direction: column; min-height: 0;
+  background: $bg-surface; border: 1px solid $border-hover; border-radius: $radius-lg;
+  box-shadow: $panel-shadow; overflow: hidden;
+
+  &__head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0;
+    padding: 10px 13px; background: $bg-card; border-bottom: 1px solid $border;
+  }
+  &__title { font-size: 11px; font-weight: 700; color: $text-bright; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  &__meta  { font-size: 9px; color: $text-muted; font-weight: 600; }
+  &__body  { padding: 8px; overflow-y: auto; min-height: 0; }
+
+  &--tree { flex: 1; }
+  &--related { flex-shrink: 0; }
+  &--story, &--details { flex: 1; }
+}
+
+// ── Left: related activity / offenders rows ──
+.ri-rel {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 7px 8px; border-radius: $radius-sm; background: none; border: none; text-align: left;
+  &[disabled] { opacity: 0.5; }
+  &--btn, &:not([disabled]):hover { cursor: pointer; }
+  &:not([disabled]):hover { background: var(--color-gray-bg-lighter); }
+
+  &__dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+  &__label { flex: 1; font-size: 11px; color: $text-primary; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  &__val { font-size: 10px; color: $text-muted; flex-shrink: 0; }
+}
+
+// ── Tabs (shared by center + right) ──
+.ri-tabs { display: flex; gap: 2px; padding: 7px 10px 0; border-bottom: 1px solid $border; flex-shrink: 0; background: $bg-surface; }
+.ri-tab {
+  padding: 6px 12px; font-size: 11px; font-weight: 600; border: none; background: transparent;
+  color: $text-muted; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap;
+  &:hover { color: $text-secondary; }
+  &.active { color: $text-bright; border-bottom-color: $blue; }
+}
+
+// ── Center: story title bar ──
+.ri-story__titlebar {
+  display: flex; align-items: center; gap: 8px; padding: 11px 13px; flex-shrink: 0;
+  background: $bg-card; border-bottom: 1px solid $border;
+  .ri-story__icon { font-size: 14px; }
+  .ri-story__name { flex: 1; font-size: 13px; font-weight: 700; color: $text-bright; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ri-story__badge { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 10px; background: var(--sem-self-bg); color: var(--sem-self); }
+  .ri-story__path { background: none; border: none; cursor: pointer; color: $text-muted; font-size: 12px; &:hover { color: $text-bright; } }
+}
+.ri-story__body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px;
+  app-activity-timeline { display: block; height: 100%; } }
+.ri-story__why { margin: 0 0 12px; font-size: 12px; color: $text-secondary; line-height: 1.5;
+  b { color: $text-bright; font-weight: 700; margin-right: 4px; } }
+.ri-story__whytext { color: $text-secondary; }
+
+// Compact flow diagram
+.ri-flow { display: flex; flex-direction: column; align-items: stretch; }
+.ri-flow__arrow { text-align: center; font-size: 12px; line-height: 1; margin: 3px 0; opacity: 0.75; }
+.ri-flow__more { text-align: center; font-size: 10px; color: $text-muted; padding: 5px; }
+.ri-fnode {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left;
+  padding: 9px 11px; border-radius: $radius-md; background: $bg-raised; border: 1px solid $border-hover;
+  cursor: pointer; transition: border-color 0.12s, box-shadow 0.12s;
+  &:hover { border-color: $border-focus; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ri-blue) 30%, transparent); }
+  &--parent { border-left: 3px solid var(--sem-parent); }
+  &--child  { border-left: 3px solid var(--sem-child); }
+  &--self   { border-color: var(--sem-self); background: var(--sem-self-bg); cursor: default; border-left: 3px solid var(--sem-self); }
+
+  &__name { font-size: 11px; font-weight: 600; color: $text-bright; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  &__meta { font-size: 9.5px; flex-shrink: 0; }
+}
+
+// Render sequence — collapsible
+.ri-seq2 {
+  margin-top: 14px; border: 1px solid $border; border-radius: $radius-md; overflow: hidden;
+  summary { padding: 8px 11px; font-size: 10.5px; font-weight: 700; color: $text-secondary; cursor: pointer; user-select: none; background: $bg-card;
+    display: flex; align-items: center; justify-content: space-between;
+    &:hover { color: $text-bright; } }
+  &[open] summary { border-bottom: 1px solid $border; }
+  &__count { font-size: 9px; color: $text-muted; font-weight: 600; }
+  &__body { padding: 8px 11px; }
+  &__row { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--color-border-subtle); &:last-child { border-bottom: none; } }
+  &__num { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
+  &__text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  &__label { font-size: 11px; font-weight: 600; color: $text-bright; }
+  &__detail { font-size: 10px; color: $text-muted; }
+  &__time { flex-shrink: 0; font-size: 10px; color: $text-secondary; }
+}
+
+// Center empty state
+.ri-story__empty { padding: 30px 20px; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.ri-story__emptyq { margin: 0; font-size: 13px; font-weight: 600; color: $text-secondary; }
+.ri-verdict-banner {
+  display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: $radius-md;
+  font-size: 12px; font-weight: 600; color: $text-bright;
+  background: $bg-card; border: 1px solid $border-hover; border-left: 3px solid var(--sem-conf-high);
+  &.is-warn, &.is-hot { border-left-color: var(--sem-conf-medium); }
+  &__icon { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; background: var(--sem-conf-high-bg); color: var(--sem-conf-high); }
+  &.is-warn &__icon, &.is-hot &__icon { background: var(--sem-conf-medium-bg); color: var(--sem-conf-medium); }
+}
+
+// Metric grid (CD / Performance tabs + diagnostics)
+.ri-metricgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: $border-hover; border: 1px solid $border-hover; border-radius: $radius-sm; overflow: hidden;
+  &--2 { grid-template-columns: 1fr 1fr; } }
+.ri-mcell { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; background: $bg-raised;
+  &__k { font-size: 9px; text-transform: uppercase; letter-spacing: 0.03em; color: $text-muted; font-weight: 600; }
+  &__v { font-size: 15px; font-weight: 700; color: $text-bright; } }
+
+// ── Right: details ──
+.ri-card__head--details { .ri-details__close { background: none; border: none; color: $text-muted; font-size: 16px; line-height: 1; cursor: pointer; &:hover { color: $text-bright; } } }
+.ri-details__body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.ri-details__placeholder { padding: 30px 20px; text-align: center; color: $text-muted; font-size: 12px; }
+
+.ri-overview2 { display: flex; align-items: center; gap: 10px; padding: 10px; background: $bg-raised; border: 1px solid $border-hover; border-radius: $radius-md;
+  &__icon { font-size: 17px; }
+  &__body { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  &__title { font-size: 11.5px; font-weight: 700; color: $text-bright; }
+  &__meta { font-size: 9.5px; color: $text-muted; } }
+.ri-badge2 { flex-shrink: 0; font-size: 9px; font-weight: 700; padding: 3px 9px; border-radius: 11px; }
+
+.ri-dsec { display: flex; flex-direction: column; gap: 8px;
+  &__label { display: flex; align-items: center; gap: 5px; margin: 0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: $text-muted; }
+  &--next { padding: 10px; background: var(--sem-self-bg); border: 1px solid color-mix(in srgb, var(--sem-self) 30%, transparent); border-radius: $radius-md; } }
+
+// Why list
+.ri-whyl { display: flex; flex-direction: column; gap: 1px; }
+.ri-whyl__row { display: flex; align-items: center; gap: 9px; padding: 6px 2px; border-bottom: 1px solid var(--color-border-subtle);
+  &:last-child { border-bottom: none; } &.is-muted { opacity: 0.5; } }
+.ri-whyl__icon { width: 15px; text-align: center; font-size: 12px; flex-shrink: 0; }
+.ri-whyl__label { flex: 1; font-size: 11px; color: $text-primary; }
+.ri-whyl__count { font-size: 11px; font-weight: 700; color: $text-bright; }
+.ri-whyl__badge { font-size: 8.5px; font-weight: 700; padding: 1px 7px; border-radius: 10px; }
+.ri-whyl__na { font-size: 10px; color: $text-muted; font-style: italic; }
+
+// Evidence
+.ri-ev { display: flex; align-items: flex-start; gap: 8px; }
+.ri-ev__badge { flex-shrink: 0; font-size: 8.5px; font-weight: 700; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
+.ri-ev__text { margin: 0; font-size: 10.5px; color: $text-secondary; line-height: 1.45; }
+
+// What changed
+.ri-changed3 { display: flex; flex-direction: column; gap: 3px; }
+.ri-changed3__row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--color-border-subtle); &:last-child { border-bottom: none; }
+  &__k { font-size: 11px; color: $text-secondary; .k { color: $text-muted; font-size: 9px; margin-left: 3px; } }
+  &__v { margin-left: auto; font-size: 10.5px; color: var(--sem-signal); max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+
+// CTA + helpers
+.ri-cta { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; font-size: 11px; font-weight: 600;
+  background: $blue; color: #fff; border: none; border-radius: $radius-md; cursor: pointer; &:hover { filter: brightness(1.1); } }
+.ri-hinticon { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; border-radius: 50%; font-size: 9px; cursor: help; background: var(--color-gray-bg-lighter); color: $text-secondary; font-weight: 700; }
+.ri-source-path { display: block; margin: 2px 0; font-size: 10.5px; color: $accent-blue; word-break: break-all; }
+
+

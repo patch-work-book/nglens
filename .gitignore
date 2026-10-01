@@ -64,3 +64,8 @@ docs
 
 # Text files
 *.txt
+
+# Playwright e2e
+test-results/
+playwright-report/
+e2e/dist/

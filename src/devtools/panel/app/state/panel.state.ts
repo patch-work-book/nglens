@@ -1,4 +1,4 @@
-import { Injectable, signal, computed, inject } from '@angular/core';
+import { Injectable, signal, computed } from '@angular/core';
 import type { RenderEvent, RenderCause, FlowEvent } from '../../../../types/render-events';
 import type { LeakEvent } from '../../../../types/leak-events';
 import type { TrackByIssue, OnPushScore } from '../../../../types/recommendation-events';
@@ -26,13 +26,30 @@ export class PanelState {
 
   // Tracking
   readonly isTracking = signal(false);
+  /** Wall-clock ms when capturing started (null when not tracking). Real. */
+  readonly trackingStartedAt = signal<number | null>(null);
+
+  /**
+   * Single authoritative place to flip tracking state so the real capture-start
+   * timestamp stays in sync from every path (toolbar, TRACKING_STARTED message,
+   * auto-start, reconnect resume). Avoids an injection-context effect so the
+   * state remains constructible in plain unit tests.
+   */
+  setTracking(on: boolean): void {
+    this.isTracking.set(on);
+    if (on) {
+      if (this.trackingStartedAt() === null) this.trackingStartedAt.set(Date.now());
+    } else {
+      this.trackingStartedAt.set(null);
+    }
+  }
   readonly trackingError = signal<string | null>(null);
   readonly degradedMode = signal(false);
   readonly clearOnRouteChange = signal(false);
   readonly lastScanResults = signal<any | null>(null);
 
   // Navigation
-  readonly activeTab = signal<'overview' | 'rendering' | 'memory' | 'recommendations'>('overview');
+  readonly activeTab = signal<'overview' | 'rendering' | 'memory' | 'recommendations' | 'signals' | 'execution'>('overview');
   readonly selectedComponent = signal<string | null>(null);
   readonly selectedIssue = signal<Issue | null>(null);
 
@@ -241,6 +258,7 @@ export class PanelState {
   clearAll(): void {
     this.connectionState.set('disconnected');
     this.isTracking.set(false);
+    this.trackingStartedAt.set(null);
     this.trackingError.set(null);
     this.degradedMode.set(false);
     this.activeTab.set('overview');

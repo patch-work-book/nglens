@@ -123,16 +123,6 @@ ngOnInit() {
 };
 
 /**
- * Detected leak metadata
- */
-interface LeakMetadata {
-  type: 'subscription' | 'timer' | 'event-listener';
-  count: number;
-  methods?: string[];
-  eventTypes?: string[];
-}
-
-/**
  * SubscriptionLeakDetector identifies memory leaks from unmanaged subscriptions,
  * timers, and event listeners in Angular components.
  */

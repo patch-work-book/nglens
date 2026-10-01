@@ -70,8 +70,8 @@ export interface GlanceMetrics {
         flex-direction: column;
         gap: 12px;
         padding: 12px;
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        border: 1px solid #0f4c75;
+        background: linear-gradient(135deg, var(--ri-bg-deep) 0%, var(--ri-bg-card) 100%);
+        border: 1px solid var(--ri-bg-raised);
         border-radius: 8px;
       }
       .glance-header {
@@ -81,7 +81,7 @@ export interface GlanceMetrics {
         font-size: 12px;
       }
       .action-trigger {
-        color: #64b5f6;
+        color: var(--ri-accent-blue);
         font-weight: 600;
       }
       .health-badge {
@@ -91,16 +91,16 @@ export interface GlanceMetrics {
         font-weight: 600;
       }
       .health-green {
-        background: #1b5e20;
-        color: #4caf50;
+        background: color-mix(in srgb, var(--ri-green) 20%, transparent);
+        color: var(--ri-accent-green);
       }
       .health-yellow {
-        background: #f57f17;
-        color: #fff;
+        background: color-mix(in srgb, var(--ri-amber) 20%, transparent);
+        color: var(--ri-accent-amber);
       }
       .health-red {
-        background: #b71c1c;
-        color: #ff5252;
+        background: color-mix(in srgb, var(--ri-red) 20%, transparent);
+        color: var(--ri-accent-red);
       }
       .metric-cards {
         display: grid;
@@ -112,45 +112,45 @@ export interface GlanceMetrics {
         flex-direction: column;
         gap: 4px;
         padding: 12px;
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(100, 181, 246, 0.2);
+        background: color-mix(in srgb, var(--ri-text-bright) 5%, transparent);
+        border: 1px solid color-mix(in srgb, var(--ri-blue) 20%, transparent);
         border-radius: 6px;
         text-align: center;
       }
       .metric-value {
         font-size: 20px;
         font-weight: 700;
-        color: #64b5f6;
+        color: var(--ri-accent-blue);
       }
       .unit {
         font-size: 12px;
-        color: #90caf9;
+        color: var(--ri-accent-blue);
         font-weight: 400;
       }
       .metric-label {
         font-size: 11px;
-        color: #b0bec5;
+        color: var(--ri-text-primary);
         font-weight: 600;
         text-transform: uppercase;
       }
       .metric-detail {
         font-size: 10px;
-        color: #78909c;
+        color: var(--ri-text-secondary);
       }
       .metric-detail.exceeded {
-        color: #ffb74d;
+        color: var(--ri-accent-amber);
       }
       .metric-detail.ok {
-        color: #81c784;
+        color: var(--ri-accent-green);
       }
       .audit-trail {
         margin-top: 8px;
         padding: 8px;
         background: rgba(0, 0, 0, 0.3);
         border-radius: 4px;
-        border: 1px solid rgba(100, 181, 246, 0.1);
+        border: 1px solid color-mix(in srgb, var(--ri-blue) 10%, transparent);
         font-size: 10px;
-        color: #90caf9;
+        color: var(--ri-accent-blue);
         cursor: pointer;
       }
       .audit-trail summary {
@@ -164,7 +164,7 @@ export interface GlanceMetrics {
       }
       .audit-item {
         padding: 4px;
-        border-left: 2px solid #64b5f6;
+        border-left: 2px solid var(--ri-accent-blue);
         padding-left: 8px;
       }
     `,

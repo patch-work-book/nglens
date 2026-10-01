@@ -71,10 +71,10 @@ export class EventDispatcherService {
         break;
       case 'TRACKING_STARTED':
         this.state.trackingError.set(null);
-        this.state.isTracking.set(true);
+        this.state.setTracking(true);
         break;
       case 'TRACKING_STOPPED':
-        this.state.isTracking.set(false);
+        this.state.setTracking(false);
         break;
       case 'ERROR':
         this.handleError(message.payload as { message?: string; error?: string });
@@ -105,7 +105,7 @@ export class EventDispatcherService {
     this.state.connectionState.set('connected');
 
     if (shouldResumeTracking) {
-      this.state.isTracking.set(true);
+      this.state.setTracking(true);
       // Use setTimeout to ensure connection is re-established after clearAll
       setTimeout(() => {
         this.portService?.send({
@@ -119,7 +119,7 @@ export class EventDispatcherService {
       try {
         chrome.storage.local.get('auto_start_scan', (result) => {
           if (result && result['auto_start_scan'] === true) {
-            this.state.isTracking.set(true);
+            this.state.setTracking(true);
             // Delay START_TRACKING to ensure port is ready
             setTimeout(() => {
               this.portService?.send({

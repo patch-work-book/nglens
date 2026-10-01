@@ -32,14 +32,6 @@ import {
   FRAME_BUDGET_MS,
 } from '../utils/constants';
 
-/**
- * Represents a detected layout operation for thrashing analysis.
- */
-interface LayoutOperation {
-  type: 'read' | 'write';
-  component: string;
-  elementSelector: string;
-}
 
 /**
  * DOM Inspector analyzer — detects DOM rendering bottlenecks via point-in-time scan.

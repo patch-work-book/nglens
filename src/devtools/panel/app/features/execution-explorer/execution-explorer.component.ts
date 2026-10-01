@@ -13,7 +13,6 @@
  */
 import { Component, inject, signal, computed, effect, ChangeDetectionStrategy, DestroyRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { ExecutionStory } from '@nglens/types/execution-intelligence';
 import type { ExecutionNarrative } from '@nglens/types/execution-narrative';
 import type { CausalityChain } from '../../services/causality-chain-detector.service';
@@ -71,21 +70,21 @@ export class ExecutionExplorerComponent {
   constructor() {
     // ✅ OPTIMIZED: Use Angular effect to reactively watch stories instead of polling
     // This eliminates the 200ms setInterval and responds immediately to changes
-    effect(
-      () => {
-        const stories = this.executionIntelligence.executionStories();
-        
-        // Rebuild whenever stories change (not just count)
-        // This ensures live updates when events arrive within same interaction
-        clearTimeout(this.buildTimer);
-        
-        // Debounce the rebuild by 100ms to batch rapid event arrivals
-        this.buildTimer = setTimeout(() => {
-          this.rebuildNarratives(stories);
-        }, 100);
-      },
-      { allowSignalWrites: true }
-    );
+    // Watch stories reactively (no polling). The effect only schedules a
+    // debounced rebuild via setTimeout — no synchronous signal writes — so the
+    // (now-removed in Angular 22) allowSignalWrites option is unnecessary.
+    effect(() => {
+      const stories = this.executionIntelligence.executionStories();
+
+      // Rebuild whenever stories change (not just count) so live updates land
+      // even when events arrive within the same interaction.
+      clearTimeout(this.buildTimer);
+
+      // Debounce the rebuild by 100ms to batch rapid event arrivals.
+      this.buildTimer = setTimeout(() => {
+        this.rebuildNarratives(stories);
+      }, 100);
+    });
   }
 
   readonly stableNarratives = computed(() => {

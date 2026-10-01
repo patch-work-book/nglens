@@ -2,68 +2,345 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════════
+   THEME VARIABLES — Single source of truth for all colors.
+   Change values here to update both themes globally.
+   ═══════════════════════════════════════════════════════ */
+
+/* Dark theme (default) */
+:root {
+  --color-critical: #EF5350;
+  --color-warning: #FFA726;
+  --color-info: #64B5F6;
+  --color-success: #66BB6A;
+
+  --bg-primary: #0F1419;
+  --bg-secondary: #1A1F2E;
+  --bg-tertiary: #2A2F3F;
+  --bg-accent: #1E3A8A;
+  --bg-muted: #4B5563;
+
+  --text-primary: #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-tertiary: #94A3B8;
+  --text-muted: #64748B;
+
+  --border-primary: #374151;
+  --border-secondary: #4B5563;
+  --border-muted: #1F2937;
+
+  --color-api: #60A5FA;
+  --color-render: #C4B5FD;
+  --color-store: #FBBF24;
+  --color-signal: #6EE7B7;
+
+  /* Component-specific text colors */
+  --color-text-light: rgb(229, 231, 235);
+  --color-text-light-medium: rgb(209, 213, 219);
+  --color-text-medium: rgb(156, 163, 175);
+  --color-text-dark: rgb(107, 114, 128);
+  --color-red-light: rgb(254, 202, 202);
+  --color-cyan: rgb(165, 243, 252);
+  --color-green: rgb(134, 239, 172);
+  --color-indigo-light: rgb(165, 180, 252);
+  --color-yellow: rgb(253, 224, 71);
+
+  /* Border colors */
+  --color-border-subtle: rgba(156, 163, 175, 0.15);
+
+  /* Semantic backgrounds with opacity */
+  --color-blue-bg-light: rgba(59, 130, 246, 0.08);
+  --color-blue-bg-lighter: rgba(59, 130, 246, 0.10);
+  --color-blue-bg-medium: rgba(59, 130, 246, 0.12);
+  --color-blue-bg-stronger: rgba(59, 130, 246, 0.2);
+  --color-blue-shadow: rgba(59, 130, 246, 0.3);
+
+  --color-indigo-bg-lighter: rgba(99, 102, 241, 0.08);
+  --color-indigo-bg-medium: rgba(99, 102, 241, 0.12);
+  --color-indigo-border: rgba(99, 102, 241, 0.2);
+
+  --color-gray-bg-medium: rgba(107, 114, 128, 0.15);
+  --color-gray-bg-lighter: rgba(148, 163, 184, 0.06);
+  --color-gray-bg-light: rgba(149, 163, 184, 0.2);
+
+  /* Interactive states and nested-detail backgrounds (theme-aware) */
+  --color-row-hover: rgba(255, 255, 255, 0.04);
+  --color-nested-bg: rgba(30, 41, 59, 0.4);
+  --color-nested-border: rgba(55, 65, 81, 0.4);
+
+  --color-red-bg-light: rgba(239, 68, 68, 0.1);
+  --color-red-bg-medium: rgba(239, 68, 68, 0.15);
+  --color-red-bg-stronger: rgba(239, 68, 68, 0.2);
+
+  --color-green-border: rgba(16, 185, 129, 0.35);
+  --color-green-bg: rgba(34, 197, 94, 0.2);
+
+  --color-cyan-bg: rgba(94, 234, 212, 0.2);
+  --color-purple-bg: rgba(139, 92, 246, 0.2);
+
+  --color-orange-border: rgba(245, 158, 11, 0.30);
+  --color-yellow-bg-light: rgba(251, 191, 36, 0.1);
+  --color-yellow-bg-medium: rgba(251, 191, 36, 0.2);
+
+  /* Rendering Inspector specific colors */
+  /* Layered for depth: deep backdrop, distinctly lighter panels floating on
+     top, with a clearly visible border + shadow so each column and section
+     reads as its own card (subtle bg steps alone are not enough contrast). */
+  --ri-bg-deep: #090C11;
+  --ri-bg-surface: #171F2B;
+  --ri-bg-card: #212C3A;
+  --ri-bg-raised: #2C3849;
+  --ri-border: #38465A;
+  --ri-border-hover: #4E5F77;
+  --ri-border-focus: #3B82F6;
+  --ri-text-bright: #E8ECF1;
+  --ri-text-primary: #CBD5E1;
+  --ri-text-secondary: #A0AEC0;
+  --ri-text-muted: #718096;
+  --ri-blue: #3B82F6;
+  --ri-green: #10B981;
+  --ri-amber: #F59E0B;
+  --ri-red: #EF4444;
+  --ri-purple: #A78BFA;
+  --ri-cyan: #22D3EE;
+  
+  /* Rendering Inspector accent colors for component causes and severity */
+  --ri-accent-blue: #7CB3F9;
+  --ri-accent-green: #6EE7B7;
+  --ri-accent-red: #FCA5A5;
+  --ri-accent-amber: #FCD34D;
+  --ri-accent-purple: #C4B5FD;
+  --ri-accent-cyan: #67E8F9;
+  --ri-accent-pink: #EC4899;
+  --ri-accent-orange: #F97316;
+  --ri-accent-indigo: #6366F1;
+  --ri-accent-confidence-high: #86B89A;
+  --ri-accent-confidence-medium: #C9A26B;
+  /* Panel elevation — subtle dark shadow so cards float above the backdrop */
+  --ri-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.30);
+
+  /* ═══ SEMANTIC CONCEPT COLORS (dark) ═══
+     One canonical color per concept so the SAME concept is the SAME color
+     everywhere — tree pills, flow-diagram nodes, why-list icons, related
+     activity dots, evidence/confidence badges. Reference these, never the raw
+     accent, for anything concept-related. */
+  --sem-parent: #A78BFA;      /* parent propagation — purple */
+  --sem-child: #34D399;       /* child components — green */
+  --sem-self: #60A5FA;        /* the selected component itself — blue */
+  --sem-signal: #FBBF24;      /* signal changes — amber */
+  --sem-input: #38BDF8;       /* input changes — sky */
+  --sem-store: #FB923C;       /* store / NgRx — orange */
+  --sem-rxjs: #22D3EE;        /* RxJS / observable — cyan */
+  --sem-sibling: #C084FC;     /* siblings same cycle — violet */
+  --sem-unknown: #94A3B8;     /* unattributed — slate */
+
+  /* Confidence levels (badge text/fill) */
+  --sem-conf-high: #34D399;   /* high — green */
+  --sem-conf-medium: #FBBF24; /* medium — amber */
+  --sem-conf-low: #94A3B8;    /* low — slate */
+
+  /* Soft translucent fills for the above (badges/chips/node backgrounds).
+     color-mix keeps them theme-consistent. */
+  --sem-parent-bg: color-mix(in srgb, var(--sem-parent) 16%, transparent);
+  --sem-child-bg: color-mix(in srgb, var(--sem-child) 16%, transparent);
+  --sem-self-bg: color-mix(in srgb, var(--sem-self) 16%, transparent);
+  --sem-signal-bg: color-mix(in srgb, var(--sem-signal) 16%, transparent);
+  --sem-input-bg: color-mix(in srgb, var(--sem-input) 16%, transparent);
+  --sem-store-bg: color-mix(in srgb, var(--sem-store) 16%, transparent);
+  --sem-rxjs-bg: color-mix(in srgb, var(--sem-rxjs) 16%, transparent);
+  --sem-sibling-bg: color-mix(in srgb, var(--sem-sibling) 16%, transparent);
+  --sem-unknown-bg: color-mix(in srgb, var(--sem-unknown) 16%, transparent);
+  --sem-conf-high-bg: color-mix(in srgb, var(--sem-conf-high) 18%, transparent);
+  --sem-conf-medium-bg: color-mix(in srgb, var(--sem-conf-medium) 18%, transparent);
+  --sem-conf-low-bg: color-mix(in srgb, var(--sem-conf-low) 18%, transparent);
+
+  /* ── Phase 1/2 design-token aliases (theme-aware color tokens) ── */
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-tertiary: var(--bg-tertiary);
+  --color-bg-quaternary: var(--bg-muted);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-border-default: var(--border-primary);
+  --color-error: var(--color-critical);
+  --color-slow: var(--color-critical);
+  --color-primary: var(--color-info);
+  --color-primary-hover: #3B82F6;
+  /* --color-light: RGB triplet for use inside rgba(var(--color-light), a) */
+  --color-light: 226, 232, 240;
+
+  /* ── Non-color design tokens (theme-independent) ── */
+  --font-family-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --font-size-xs: 9px;
+  --font-size-sm: 10px;
+  --font-size-md: 11px;
+  --font-size-base: 12px;
+  --font-size-lg: 14px;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --spacing-tight: 4px;
+  --spacing-compact: 6px;
+  --spacing-standard: 10px;
+  --spacing-generous: 16px;
+  --border-radius-small: 3px;
+  --border-radius-medium: 5px;
+  --border-radius-full: 9999px;
+  --transition-fast: 0.1s ease;
+  --transition-normal: 0.2s ease;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Light theme */
+html[data-theme="light"] {
+  --color-critical: #DC2626;
+  --color-warning: #D97706;
+  --color-info: #2563EB;
+  --color-success: #059669;
+
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F8FAFC;
+  --bg-tertiary: #F1F5F9;
+  --bg-accent: #EFF6FF;
+  --bg-muted: #E2E8F0;
+
+  --text-primary: #0F172A;
+  --text-secondary: #334155;
+  --text-tertiary: #64748B;
+  --text-muted: #94A3B8;
+
+  --border-primary: #CBD5E1;
+  --border-secondary: #94A3B8;
+  --border-muted: #E2E8F0;
+
+  --color-api: #1D4ED8;
+  --color-render: #7C3AED;
+  --color-store: #D97706;
+  --color-signal: #059669;
+
+  /* Component-specific text colors for light theme */
+  --color-text-light: rgb(15, 23, 42);
+  --color-text-light-medium: rgb(51, 65, 85);
+  --color-text-medium: rgb(100, 116, 139);
+  --color-text-dark: rgb(148, 163, 184);
+  --color-red-light: rgb(220, 38, 38);
+  --color-cyan: rgb(34, 211, 238);
+  --color-green: rgb(34, 197, 94);
+  --color-indigo-light: rgb(79, 70, 229);
+  --color-yellow: rgb(202, 138, 4);
+
+  /* Border colors - light theme */
+  --color-border-subtle: rgba(203, 213, 225, 0.3);
+
+  /* Semantic backgrounds with opacity - light theme */
+  --color-blue-bg-light: rgba(30, 144, 255, 0.06);
+  --color-blue-bg-lighter: rgba(30, 144, 255, 0.08);
+  --color-blue-bg-medium: rgba(30, 144, 255, 0.10);
+    --color-blue-bg-stronger: rgba(30, 144, 255, 0.15);
+    --color-blue-shadow: rgba(30, 144, 255, 0.2);
+
+    --color-indigo-bg-lighter: rgba(79, 70, 229, 0.06);
+    --color-indigo-bg-medium: rgba(79, 70, 229, 0.08);
+    --color-indigo-border: rgba(79, 70, 229, 0.15);
+
+    --color-gray-bg-medium: rgba(148, 163, 184, 0.08);
+    --color-gray-bg-lighter: rgba(203, 213, 225, 0.04);
+    --color-gray-bg-light: rgba(203, 213, 225, 0.10);
+
+    /* Interactive states and nested-detail backgrounds - light theme */
+    --color-row-hover: rgba(15, 23, 42, 0.04);
+    --color-nested-bg: rgba(226, 232, 240, 0.5);
+    --color-nested-border: rgba(148, 163, 184, 0.35);
+
+    --color-red-bg-light: rgba(220, 38, 38, 0.06);
+    --color-red-bg-medium: rgba(220, 38, 38, 0.10);
+    --color-red-bg-stronger: rgba(220, 38, 38, 0.15);
+
+    --color-green-border: rgba(34, 197, 94, 0.25);
+    --color-green-bg: rgba(34, 197, 94, 0.12);
+
+    --color-cyan-bg: rgba(34, 211, 238, 0.12);
+    --color-purple-bg: rgba(168, 85, 247, 0.12);
+
+    --color-orange-border: rgba(217, 119, 6, 0.20);
+    --color-yellow-bg-light: rgba(202, 138, 4, 0.06);
+    --color-yellow-bg-medium: rgba(202, 138, 4, 0.12);
+
+    /* Rendering Inspector specific colors - light theme */
+    /* Layered for contrast: grey backdrop, white panels on top, grey strips.
+       Panels (surface) must stand out against the deep backdrop shown in the
+       grid gap, otherwise the three columns visually merge into one sheet. */
+    --ri-bg-deep: #E9EEF3;
+    --ri-bg-surface: #FFFFFF;
+    --ri-bg-card: #F3F5F9;
+    --ri-bg-raised: #E8EDF3;
+    --ri-border: #D6DDE7;
+    --ri-border-hover: #B2BCCB;
+    --ri-border-focus: #2563EB;
+    --ri-text-bright: #0F172A;
+    --ri-text-primary: #334155;
+    --ri-text-secondary: #64748B;
+    --ri-text-muted: #94A3B8;
+    --ri-blue: #2563EB;
+    --ri-green: #059669;
+    --ri-amber: #D97706;
+    --ri-red: #DC2626;
+    --ri-purple: #7C3AED;
+    --ri-cyan: #0891B2;
+    
+    /* Rendering Inspector accent colors for light theme */
+    --ri-accent-blue: #1D4ED8;
+    --ri-accent-green: #047857;
+    --ri-accent-red: #B91C1C;
+    --ri-accent-amber: #B45309;
+    --ri-accent-purple: #6D28D9;
+    --ri-accent-cyan: #0E7490;
+    --ri-accent-pink: #BE185D;
+    --ri-accent-orange: #C2410C;
+    --ri-accent-indigo: #3730A3;
+    --ri-accent-confidence-high: #047857;
+    --ri-accent-confidence-medium: #92400E;
+    /* Panel elevation — soft shadow gives cards clear separation on light bg */
+    --ri-panel-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.08);
+
+    /* ═══ SEMANTIC CONCEPT COLORS (light) ═══ saturated for light-bg contrast */
+    --sem-parent: #7C3AED;
+    --sem-child: #059669;
+    --sem-self: #2563EB;
+    --sem-signal: #B45309;
+    --sem-input: #0369A1;
+    --sem-store: #C2410C;
+    --sem-rxjs: #0E7490;
+    --sem-sibling: #9333EA;
+    --sem-unknown: #64748B;
+
+    --sem-conf-high: #059669;
+    --sem-conf-medium: #B45309;
+    --sem-conf-low: #64748B;
+
+    --sem-parent-bg: color-mix(in srgb, var(--sem-parent) 12%, transparent);
+    --sem-child-bg: color-mix(in srgb, var(--sem-child) 12%, transparent);
+    --sem-self-bg: color-mix(in srgb, var(--sem-self) 12%, transparent);
+    --sem-signal-bg: color-mix(in srgb, var(--sem-signal) 12%, transparent);
+    --sem-input-bg: color-mix(in srgb, var(--sem-input) 12%, transparent);
+    --sem-store-bg: color-mix(in srgb, var(--sem-store) 12%, transparent);
+    --sem-rxjs-bg: color-mix(in srgb, var(--sem-rxjs) 12%, transparent);
+    --sem-sibling-bg: color-mix(in srgb, var(--sem-sibling) 12%, transparent);
+    --sem-unknown-bg: color-mix(in srgb, var(--sem-unknown) 12%, transparent);
+    --sem-conf-high-bg: color-mix(in srgb, var(--sem-conf-high) 14%, transparent);
+    --sem-conf-medium-bg: color-mix(in srgb, var(--sem-conf-medium) 14%, transparent);
+    --sem-conf-low-bg: color-mix(in srgb, var(--sem-conf-low) 14%, transparent);
+
+    /* ── Phase 1/2 design-token overrides — light theme literals ── */
+    --color-primary-hover: #2563EB;
+    /* RGB triplet (slate-800) so rgba(var(--color-light), a) reads on light bg */
+    --color-light: 15, 23, 42;
+}
+
 @layer base {
-  /* ═══════════════════════════════════════════════════════
-     THEME VARIABLES — Single source of truth for all colors.
-     Change values here to update both themes globally.
-     ═══════════════════════════════════════════════════════ */
-
-  /* Dark theme (default) */
-  :root {
-    --color-critical: #EF5350;
-    --color-warning: #FFA726;
-    --color-info: #64B5F6;
-    --color-success: #66BB6A;
-
-    --bg-primary: #0F1419;
-    --bg-secondary: #1A1F2E;
-    --bg-tertiary: #2A2F3F;
-    --bg-accent: #1E3A8A;
-    --bg-muted: #4B5563;
-
-    --text-primary: #F8FAFC;
-    --text-secondary: #CBD5E1;
-    --text-tertiary: #94A3B8;
-    --text-muted: #64748B;
-
-    --border-primary: #374151;
-    --border-secondary: #4B5563;
-    --border-muted: #1F2937;
-
-    --color-api: #60A5FA;
-    --color-render: #C4B5FD;
-    --color-store: #FBBF24;
-    --color-signal: #6EE7B7;
-  }
-
-  /* Light theme */
-  html[data-theme="light"] {
-    --color-critical: #DC2626;
-    --color-warning: #D97706;
-    --color-info: #2563EB;
-    --color-success: #059669;
-
-    --bg-primary: #FFFFFF;
-    --bg-secondary: #F8FAFC;
-    --bg-tertiary: #F1F5F9;
-    --bg-accent: #EFF6FF;
-    --bg-muted: #E2E8F0;
-
-    --text-primary: #0F172A;
-    --text-secondary: #334155;
-    --text-tertiary: #64748B;
-    --text-muted: #94A3B8;
-
-    --border-primary: #CBD5E1;
-    --border-secondary: #94A3B8;
-    --border-muted: #E2E8F0;
-
-    --color-api: #1D4ED8;
-    --color-render: #7C3AED;
-    --color-store: #D97706;
-    --color-signal: #059669;
-  }
-
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: var(--bg-primary);
@@ -374,6 +651,27 @@ html[data-theme="light"] .border-orange-500\/40 { border-color: #FDBA74 !importa
 
 /* Pink borders */
 html[data-theme="light"] .border-pink-500\/40 { border-color: #F9A8D4 !important; }
+
+/* ── Solid colored borders (no opacity) — accent bars on cards/panels ── */
+html[data-theme="light"] .border-blue-400   { border-color: #60A5FA !important; }
+html[data-theme="light"] .border-blue-500   { border-color: #3B82F6 !important; }
+html[data-theme="light"] .border-green-500  { border-color: #22C55E !important; }
+html[data-theme="light"] .border-red-400    { border-color: #F87171 !important; }
+html[data-theme="light"] .border-red-500    { border-color: #EF4444 !important; }
+html[data-theme="light"] .border-amber-400  { border-color: #FBBF24 !important; }
+html[data-theme="light"] .border-yellow-500 { border-color: #EAB308 !important; }
+html[data-theme="light"] .border-purple-500 { border-color: #A855F7 !important; }
+html[data-theme="light"] .border-orange-500 { border-color: #F97316 !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   SOLID COLORED BACKGROUNDS (no opacity) — saturated indicator dots
+   and legend swatches. Kept saturated but tuned for light theme.
+   ═══════════════════════════════════════════════════════════════ */
+html[data-theme="light"] .bg-blue-500   { background-color: #3B82F6 !important; }
+html[data-theme="light"] .bg-blue-600   { background-color: #2563EB !important; }
+html[data-theme="light"] .bg-red-500    { background-color: #EF4444 !important; }
+html[data-theme="light"] .bg-amber-500  { background-color: #F59E0B !important; }
+html[data-theme="light"] .bg-indigo-600 { background-color: #4F46E5 !important; }
 
 /* ═══════════════════════════════════════════════════════════════
    HOVER COLORED — Light theme

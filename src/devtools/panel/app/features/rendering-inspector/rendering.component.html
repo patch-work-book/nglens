@@ -1,239 +1,383 @@
 <div class="ri-workspace">
 
-  <!-- ═══ HEADER BAR ═══ -->
-  <header class="ri-header">
-    <div class="ri-header__left">
-      <span class="ri-header__stat">{{ state.renderEvents().length }}<small>renders</small></span>
-      <span class="ri-header__divider"></span>
-      <span class="ri-header__stat">{{ deduplicatedComponentCount() }}<small>components</small></span>
-    </div>
-    <div class="ri-header__right">
-    </div>
-  </header>
-
   @if (state.renderEvents().length === 0) {
     <!-- ═══ EMPTY STATE ═══ -->
     <div class="ri-empty">
-      <h2>No Renders Captured</h2>
-      <p>Interact with your Angular application to start capturing render events.</p>
+      <h2>No renders captured</h2>
+      <p>Interact with the app to start capturing render events.</p>
       <div class="ri-empty__hints">
-        <span>Click buttons</span>
-        <span>Type in inputs</span>
-        <span>Navigate routes</span>
+        <span>Click</span>
+        <span>Type</span>
+        <span>Navigate</span>
       </div>
     </div>
   } @else {
-    <!-- ═══ INTERACTION ACTION BAR (Top Strip) ═══ -->
+
+    <!-- ═══ PAGE HEADER + STATS STRIP ═══ -->
+    @if (metricBar(); as mb) {
+      <header class="ri-pagehead">
+        <div class="ri-pagehead__lead">
+          <h1 class="ri-pagehead__title">Component Rendering</h1>
+          <p class="ri-pagehead__sub">Understand why components render and how they are related.</p>
+        </div>
+        <div class="ri-statstrip">
+          <div class="ri-statcell"><span class="ri-statcell__value">{{ mb.totalRenders }}</span><span class="ri-statcell__label">Renders</span></div>
+          <div class="ri-statcell"><span class="ri-statcell__value">{{ mb.components }}</span><span class="ri-statcell__label">Components</span></div>
+          <div class="ri-statcell" [title]="estTotalTooltip"><span class="ri-statcell__value">~{{ mb.totalRenderTime | number:'1.0-0' }}<small>ms</small></span><span class="ri-statcell__label">Span</span></div>
+          <div class="ri-statcell" [class.ri-statcell--warn]="mb.wasted > 0"><span class="ri-statcell__value">{{ mb.wasted }}</span><span class="ri-statcell__label">Repeat</span></div>
+          @if (renderReconciliation(); as rec) {
+            <div class="ri-statcell ri-statcell--quality" [title]="rec.ok ? 'Numbers reconcile. Timing is estimated.' : 'Data quality: drift. ' + rec.originDetail">
+              <span class="ri-statcell__badge" [class.ri-statcell__badge--drift]="!rec.ok">{{ rec.ok ? 'Good' : 'Drift' }}</span>
+              <span class="ri-statcell__label">Data quality</span>
+            </div>
+          }
+        </div>
+      </header>
+    }
+
+    <!-- ═══ INTERACTION BAR ═══ -->
     <div class="ri-action-bar">
+      <span class="ri-action-bar__label">Interactions</span>
       @for (action of stableActionReplays(); track action.id) {
         <button class="ri-action-chip"
                 [class.active]="selectedActionId() === action.id"
-                [class.hot]="action.frameBudgetExceeded || action.totalRenders >= 5"
-                (click)="selectAction(action.id)">
-          <span class="ri-action-chip__icon" [innerHTML]="getSafeActionIcon(action.trigger)"></span>
+                [class.hot]="isActionConcern(action)"
+                (click)="selectAction(action.id)"
+                [title]="isActionConcern(action) ? actionConcernReason(action) : getSemanticLabel(action)">
+          <span class="ri-action-chip__icon" [innerHTML]="getSafeActionIcon(action)"></span>
           <span class="ri-action-chip__label">{{ getSemanticLabel(action) }}</span>
-          <span class="ri-action-chip__badges">
-            <span class="ri-badge ri-badge--renders">{{ action.totalRenders }}R</span>
-            <span class="ri-badge ri-badge--duration" [class.slow]="action.duration > 16.67">{{ action.duration | number:'1.0-0' }}ms</span>
-            @if (action.frameBudgetExceeded || action.totalRenders >= 5) {
-              <span class="ri-badge ri-badge--flame">🔥</span>
-            }
-          </span>
+          <span class="ri-action-chip__count">{{ meaningfulRenderCount(action) }}</span>
         </button>
       }
     </div>
 
-    <!-- ═══ MAIN CONTENT: DUAL PANE ═══ -->
-    <div class="ri-main">
+    <!-- ═══ THREE-COLUMN LAYOUT ═══ -->
+    <div class="ri-grid3">
 
-      <!-- LEFT PANE: Component Cascade Tree -->
-      <div class="ri-tree-pane">
-        @if (getSelectedAction(); as action) {
-          <app-render-tree-view
-            [tree]="action.tree"
-            [actionDuration]="action.duration"
-            [flowEntries]="action.flowEntries"
-            [hotspotName]="getHotspot(action)?.name || null"
-            (componentSelected)="onComponentSelected($event)"
-            (componentHovered)="onComponentHovered($event)"
-            class="ri-tree-view" />
-        } @else {
-          <div class="ri-tree-pane__empty">
-            <p>Select an interaction above to inspect the render cascade</p>
+      <!-- ── LEFT: Components tree + Related activity ── -->
+      <aside class="ri-col ri-col--left">
+        <div class="ri-card ri-card--tree">
+          <div class="ri-card__head">
+            <span class="ri-card__title">Components</span>
+            @if (treeSummary(); as ts) {
+              <span class="ri-card__meta" title="Total component renders in this action.">{{ ts.renders }} · {{ ts.components }}</span>
+            }
+          </div>
+          @if (getSelectedAction(); as action) {
+            <app-render-tree-view
+              [tree]="action.tree"
+              [actionDuration]="action.duration"
+              [flowEntries]="[]"
+              [hotspotName]="getHotspot(action)?.name || null"
+              [autoExpandPath]="worstOffenderPath()"
+              [selectedName]="selectedComponentName()"
+              (componentSelected)="onComponentSelected($event)"
+              (componentHovered)="onComponentHovered($event)"
+              class="ri-tree-view" />
+          } @else {
+            <div class="ri-tree-pane__empty"><p>Select an interaction to inspect</p></div>
+          }
+        </div>
+
+        <!-- Related activity -->
+        @if (selectedComponentName()) {
+          @if (relatedActivity(); as rel) {
+            <div class="ri-card ri-card--related">
+              <div class="ri-card__head"><span class="ri-card__title">Related activity</span></div>
+              <div class="ri-card__body">
+                <button class="ri-rel" [disabled]="!rel.parentName" (click)="rel.parentName && inspectParent()"
+                        [title]="rel.parentName ? 'Inspect parent ' + rel.parentName : 'No parent in this action'">
+                  <span class="ri-rel__dot ri-sem-dot--parent"></span>
+                  <span class="ri-rel__label">Parent components</span>
+                  <span class="ri-rel__val">{{ rel.parentRenders }} render{{ rel.parentRenders === 1 ? '' : 's' }}</span>
+                </button>
+                <div class="ri-rel">
+                  <span class="ri-rel__dot ri-sem-dot--child"></span>
+                  <span class="ri-rel__label">Child components</span>
+                  <span class="ri-rel__val">{{ rel.childRenders }} render{{ rel.childRenders === 1 ? '' : 's' }}</span>
+                </div>
+                <div class="ri-rel">
+                  <span class="ri-rel__dot ri-sem-dot--sibling"></span>
+                  <span class="ri-rel__label">Siblings (same cycle)</span>
+                  <span class="ri-rel__val">{{ rel.siblings }}</span>
+                </div>
+                <div class="ri-rel">
+                  <span class="ri-rel__dot ri-sem-dot--signal"></span>
+                  <span class="ri-rel__label">Connected via signals</span>
+                  <span class="ri-rel__val">{{ rel.signalLinks }}</span>
+                </div>
+              </div>
+            </div>
+          }
+        } @else if (renderHotspots().length > 0) {
+          <div class="ri-card ri-card--related">
+            <div class="ri-card__head"><span class="ri-card__title">Top offenders</span></div>
+            <div class="ri-card__body">
+              @for (h of renderHotspots(); track h.rawName; let first = $first) {
+                <button class="ri-rel ri-rel--btn" [title]="causeTooltipFor(h.node)"
+                        (click)="onComponentSelected({ componentName: h.rawName, displayName: h.name, count: h.count, totalDuration: h.totalDuration, cause: h.node.cause, causeBreakdown: h.node.causeBreakdown, parentRenders: h.node.parentRenders, ownRenders: h.node.ownRenders, children: h.node.children, reasons: h.node.reasons })">
+                  <span class="ri-rel__dot" [class.ri-sem-dot--signal]="!first" [class.ri-sem-dot--parent]="first"></span>
+                  <span class="ri-rel__label">{{ h.name }}</span>
+                  <span class="ri-rel__val" [class]="getRenderCountClass(h.count)">{{ h.count }}×</span>
+                </button>
+              }
+            </div>
           </div>
         }
-      </div>
+      </aside>
 
-      <!-- RIGHT PANE: Causality & Root Cause Drawer -->
-      <div class="ri-drawer" [class.open]="selectedComponentName() !== null">
-        @if (selectedComponentMetrics(); as m) {
-          <!-- Drawer Header -->
-          <div class="ri-drawer__header">
-            <div class="ri-drawer__title-row">
-              <h3 class="ri-drawer__name">{{ selectedComponentName() }}</h3>
-              <button class="ri-drawer__close" (click)="selectedComponentName.set(null)">×</button>
-            </div>
-            @if (getComponentFilePath(selectedComponentName()!); as filePath) {
-              <button class="ri-drawer__ide-link" (click)="openInVSCode(filePath)">
-                Open in VS Code →
-              </button>
-            }
-          </div>
-
-          <!-- Primary Cause Section -->
-          <section class="ri-drawer__section">
-            <h4 class="ri-drawer__section-title">Primary Cause</h4>
-            <div class="ri-cause-bar">
-              @for (segment of getCauseDistribution(); track segment.type) {
-                <div class="ri-cause-bar__segment"
-                     [style.width.%]="segment.pct"
-                     [class]="'ri-cause--' + segment.type"
-                     [title]="segment.label + ': ' + segment.pct + '%'">
-                </div>
+      <!-- ── CENTER: Render Story ── -->
+      <section class="ri-col ri-col--center">
+        <div class="ri-card ri-card--story">
+          @if (selectedComponentName(); as sel) {
+            <!-- Title bar -->
+            <div class="ri-story__titlebar">
+              <span class="ri-story__icon ri-sem--self">▦</span>
+              <span class="ri-story__name" [title]="sel">{{ sel }}</span>
+              <span class="ri-story__badge">Selected</span>
+              @if (getComponentFilePath(sel); as fp) {
+                <button class="ri-story__path" (click)="openInVSCode(fp)" [title]="'Open ' + fp + ' (path guessed from the class name)'">↗</button>
               }
             </div>
-            <div class="ri-cause-legend">
-              @for (segment of getCauseDistribution(); track segment.type) {
-                <span class="ri-cause-legend__item">
-                  <span class="ri-cause-legend__dot" [class]="'ri-cause--' + segment.type"></span>
-                  {{ segment.label }} {{ segment.pct }}%
-                </span>
-              }
-            </div>
-            <div class="ri-cause-source">
-              <span class="ri-cause-source__label">Trigger:</span>
-              <code>{{ m.causeLabel }}</code>
-              @if (m.causeSource) {
-                <code class="ri-cause-source__detail">{{ m.causeSource }}</code>
-              }
-            </div>
-          </section>
 
-          <!-- Performance Metrics Grid -->
-          <section class="ri-drawer__section">
-            <h4 class="ri-drawer__section-title">Performance</h4>
-            <div class="ri-metrics-grid">
-              <div class="ri-metric-card">
-                <span class="ri-metric-card__value" [class]="getRenderCountClass(m.renderCount)">{{ m.renderCount }}×</span>
-                <span class="ri-metric-card__label">Renders</span>
-              </div>
-              <div class="ri-metric-card">
-                <span class="ri-metric-card__value" [class]="getDurationClass(m.totalDuration)">{{ m.totalDuration | number:'1.0-0' }}ms</span>
-                <span class="ri-metric-card__label">Total Time</span>
-              </div>
-              <div class="ri-metric-card">
-                <span class="ri-metric-card__value">{{ m.averageDuration }}ms</span>
-                <span class="ri-metric-card__label">Avg/Render</span>
-              </div>
-              <div class="ri-metric-card">
-                <span class="ri-metric-card__value" [class]="getCdMerClass(getComponentCdMer())">{{ getComponentCdMer() | number:'1.1-1' }}%</span>
-                <span class="ri-metric-card__label">CD-MER</span>
-              </div>
+            <!-- Tabs -->
+            <div class="ri-tabs">
+              <button class="ri-tab" [class.active]="activeWorkspaceTab() === 'flow'" (click)="activeWorkspaceTab.set('flow')">Render Story</button>
+              <button class="ri-tab" [class.active]="activeWorkspaceTab() === 'timeline'" (click)="activeWorkspaceTab.set('timeline')">Timeline</button>
+              <button class="ri-tab" [class.active]="activeWorkspaceTab() === 'cd'" (click)="activeWorkspaceTab.set('cd')">Change Detection</button>
+              <button class="ri-tab" [class.active]="activeWorkspaceTab() === 'perf'" (click)="activeWorkspaceTab.set('perf')">Performance</button>
             </div>
 
-            <!-- CD-MER Gauge -->
-            <div class="ri-cdmer-gauge">
-              <div class="ri-cdmer-gauge__bar">
-                <div class="ri-cdmer-gauge__fill" [style.width.%]="getComponentCdMer()" [class]="getCdMerClass(getComponentCdMer())"></div>
-              </div>
-              <span class="ri-cdmer-gauge__label" [class]="getCdMerClass(getComponentCdMer())">
-                @if (getComponentCdMer() < 25) { Critical 🔴 }
-                @else if (getComponentCdMer() < 60) { Warning 🟡 }
-                @else { Healthy 🟢 }
-              </span>
-            </div>
+            <div class="ri-story__body">
+              @switch (activeWorkspaceTab()) {
+                @case ('flow') {
+                  <!-- One-line why -->
+                  <p class="ri-story__why">
+                    <b>Why did it render?</b>
+                    @if (verdict(); as v) { <span class="ri-story__whytext">{{ v.text }}</span> }
+                  </p>
 
-            <!-- Frame Budget -->
-            @if (m.totalDuration > 16.67) {
-              <div class="ri-frame-budget ri-frame-budget--exceeded">
-                Frame budget exceeded: {{ (m.totalDuration / 16.67) | number:'1.1-1' }} frames consumed
-              </div>
-            }
+                  <!-- Compact flow diagram -->
+                  @if (flowDiagram(); as fd) {
+                    <div class="ri-flow">
+                      @if (fd.parent) {
+                        <button class="ri-fnode ri-fnode--parent" (click)="inspectParent()"
+                                [title]="'Parent — rendered ' + fd.parent.count + '× in the same cycle. Click to inspect.'">
+                          <span class="ri-fnode__name">{{ fd.parent.name }}</span>
+                          <span class="ri-fnode__meta ri-sem--parent">{{ fd.parent.count }}× · same cycle</span>
+                        </button>
+                        <span class="ri-flow__arrow ri-sem--parent">↓</span>
+                      }
+                      <div class="ri-fnode ri-fnode--self" [title]="causeTooltipFor(selectedComponentData())">
+                        <span class="ri-fnode__name">{{ fd.self.name }}</span>
+                        <span class="ri-fnode__meta ri-sem--self">{{ fd.self.count }}× · <span [title]="estTooltip">~{{ fd.self.totalDuration / Math.max(1, fd.self.count) | number:'1.0-0' }}ms</span></span>
+                      </div>
+                      @if (fd.children.length > 0) {
+                        <span class="ri-flow__arrow ri-sem--child">↓</span>
+                        @for (child of fd.children.slice(0, 4); track child.rawName) {
+                          <button class="ri-fnode ri-fnode--child"
+                                  (click)="onComponentSelected({ componentName: child.rawName, displayName: child.name, count: child.count, totalDuration: child.totalDuration, cause: child.node.cause, causeBreakdown: child.node.causeBreakdown, parentRenders: child.node.parentRenders, ownRenders: child.node.ownRenders, children: child.node.children, reasons: child.node.reasons })">
+                            <span class="ri-fnode__name">{{ child.name }}</span>
+                            <span class="ri-fnode__meta ri-sem--child">{{ child.count }} · <span [title]="estTooltip">~{{ child.totalDuration | number:'1.0-0' }}ms</span></span>
+                          </button>
+                        }
+                        @if (fd.childrenTotal > 4) {
+                          <div class="ri-flow__more">+{{ fd.childrenTotal - 4 }} more children</div>
+                        }
+                      }
+                    </div>
+                  }
 
-            <!-- Template Bindings & Listeners -->
-            <div class="ri-binding-row">
-              <span>Template Bindings: <strong>{{ getComponentBindings() }}</strong></span>
-              <span>Output Listeners: <strong>{{ getComponentListeners() }}</strong></span>
-            </div>
-          </section>
-
-          <!-- Triggering Data Flows -->
-          <section class="ri-drawer__section">
-            <h4 class="ri-drawer__section-title">Data Flows</h4>
-            @if (getSelectedComponentFlows().length > 0) {
-              <div class="ri-flow-list">
-                @for (flow of getSelectedComponentFlows(); track flow.id) {
-                  <div class="ri-flow-item" [class]="'ri-flow--' + flow.type">
-                    <span class="ri-flow-item__icon">{{ flowTypeIcon(flow.type) }}</span>
-                    <span class="ri-flow-item__label">{{ flow.label }}</span>
-                    @if (flow.value) {
-                      <code class="ri-flow-item__value">{{ flow.value | slice:0:40 }}</code>
-                    }
+                  <!-- Render sequence — collapsed by default -->
+                  @if (renderSequence().length > 0) {
+                    <details class="ri-seq2">
+                      <summary>Render sequence <span class="ri-seq2__count">{{ renderSequence().length }} steps</span></summary>
+                      <div class="ri-seq2__body">
+                        @for (step of renderSequence(); track step.n) {
+                          <div class="ri-seq2__row">
+                            <span class="ri-seq2__num" [class]="'ri-sem-dot--' + step.sem">{{ step.n }}</span>
+                            <div class="ri-seq2__text">
+                              <span class="ri-seq2__label">{{ step.label }}</span>
+                              <span class="ri-seq2__detail">{{ step.detail }}</span>
+                            </div>
+                            <span class="ri-seq2__time" [title]="estTooltip">~{{ step.offsetMs }}ms</span>
+                          </div>
+                        }
+                      </div>
+                    </details>
+                  }
+                }
+                @case ('timeline') {
+                  @if (getSelectedAction(); as action) {
+                    <app-activity-timeline [timeline]="action.timeline" [flowEntries]="action.flowEntries" [actionStart]="action.timestamp" />
+                  }
+                }
+                @case ('cd') {
+                  <div class="ri-metricgrid">
+                    <div class="ri-mcell"><span class="ri-mcell__k" [title]="cdAttributionTooltip">CD attribution</span><span class="ri-mcell__v" [class]="getCdMerClass(getComponentCdMer())">{{ getComponentCdMer() === null ? '—' : (getComponentCdMer() | number:'1.0-0') + '%' }}</span></div>
+                    <div class="ri-mcell"><span class="ri-mcell__k">ngDoCheck cycles</span><span class="ri-mcell__v">{{ getComponentCdCycles() }}</span></div>
+                    <div class="ri-mcell"><span class="ri-mcell__k">Template bindings</span><span class="ri-mcell__v">{{ getComponentBindings() }}</span></div>
+                    <div class="ri-mcell"><span class="ri-mcell__k">Output listeners</span><span class="ri-mcell__v">{{ getComponentListeners() }}</span></div>
+                  </div>
+                  @if (getComponentHighFreqListeners().length > 0) {
+                    <p class="ri-note ri-note--warn">High-frequency listeners: {{ getComponentHighFreqListeners().join(', ') }}</p>
+                  }
+                }
+                @case ('perf') {
+                  <div class="ri-metricgrid">
+                    <div class="ri-mcell"><span class="ri-mcell__k">Render count</span><span class="ri-mcell__v" [class]="getRenderCountClass(selectedComponentMetrics()!.renderCount)">{{ selectedComponentMetrics()!.renderCount }}</span></div>
+                    <div class="ri-mcell"><span class="ri-mcell__k">Total <span class="ri-est">est</span></span><span class="ri-mcell__v" [title]="estTooltip">~{{ selectedComponentMetrics()!.totalDuration | number:'1.0-0' }}ms</span></div>
+                    <div class="ri-mcell"><span class="ri-mcell__k">Avg / render <span class="ri-est">est</span></span><span class="ri-mcell__v" [title]="estTooltip">~{{ selectedComponentMetrics()!.averageDuration }}ms</span></div>
+                    <div class="ri-mcell"><span class="ri-mcell__k">Children</span><span class="ri-mcell__v">{{ selectedComponentMetrics()!.childrenCount }}</span></div>
                   </div>
                 }
-              </div>
-            } @else {
-              <p class="ri-drawer__empty-hint">No data flow events associated with this component</p>
-            }
-          </section>
+              }
+            </div>
+          } @else {
+            <!-- Nothing selected: guide to pick a component -->
+            <div class="ri-story__empty">
+              <p class="ri-story__emptyq">Select a component to see its render story.</p>
+              @if (renderVerdict(); as v) {
+                <div class="ri-verdict-banner" [class]="'is-' + v.status">
+                  <span class="ri-verdict-banner__icon">{{ v.status === 'clean' ? '✓' : '!' }}</span>
+                  <span>{{ v.message }}</span>
+                </div>
+              }
+              <p class="ri-muted-line">Pick the worst offender on the left to start.</p>
+            </div>
+          }
+        </div>
+      </section>
 
-          <!-- Affected Children (Full Cascade Tree) -->
-          @if (m.childrenCount > 0) {
-            <section class="ri-drawer__section">
-              <h4 class="ri-drawer__section-title">Cascade ({{ m.childrenCount }} children)</h4>
-              <div class="ri-cascade-tree">
-                @for (child of m.children | slice:0:10; track $index) {
-                  <div class="ri-cascade-row"
-                       [style.padding-left.px]="$any(child).depth * 12 + 8"
-                       [class.ri-cascade-row--high]="($any(child).count >= 5 || $any(child).totalDuration > 50)"
-                       [class.ri-cascade-row--medium]="($any(child).count >= 2 || $any(child).totalDuration > 16)">
-                    
-                    <!-- Cascade Icon/Connector -->
-                    <span class="ri-cascade-row__connector">→</span>
-                    
-                    <!-- Child Component Name -->
-                    <span class="ri-cascade-row__name">{{ displayName($any(child).componentName) }}</span>
-                    
-                    <!-- Render Count Pill -->
-                    <span class="ri-cascade-row__count" [class]="'ri-count--' + ($any(child).count >= 5 ? 'high' : $any(child).count >= 2 ? 'medium' : 'low')">
-                      {{ $any(child).count }}×
-                    </span>
-                    
-                    <!-- Duration Badge -->
-                    <span class="ri-cascade-row__duration" [class]="'ri-duration--' + ($any(child).totalDuration > 50 ? 'high' : $any(child).totalDuration > 16 ? 'medium' : 'low')">
-                      {{ $any(child).totalDuration | number:'1.0-0' }}ms
-                    </span>
-                    
-                    <!-- Cause Badge -->
-                    @if ($any(child).cause) {
-                      <span class="ri-cascade-row__cause" [class]="'ri-cause-type--' + $any(child).cause.type">
-                        {{ getCauseBadgeText($any(child).cause) }}
-                      </span>
+      <!-- ── RIGHT: Summary / Diagnostics / Code ── -->
+      <aside class="ri-col ri-col--right">
+        <div class="ri-card ri-card--details">
+          @if (selectedComponentMetrics(); as m) {
+            <div class="ri-card__head ri-card__head--details">
+              <span class="ri-card__title" [title]="selectedComponentName()">{{ selectedComponentName() }}</span>
+              <button class="ri-details__close" (click)="clearSelection()" title="Close">×</button>
+            </div>
+
+            <div class="ri-tabs">
+              <button class="ri-tab" [class.active]="activeDetailsTab() === 'summary'" (click)="activeDetailsTab.set('summary')">Summary</button>
+              <button class="ri-tab" [class.active]="activeDetailsTab() === 'diagnostics'" (click)="activeDetailsTab.set('diagnostics')">Diagnostics</button>
+              <button class="ri-tab" [class.active]="activeDetailsTab() === 'code'" (click)="activeDetailsTab.set('code')">Code</button>
+            </div>
+
+            <div class="ri-details__body">
+              @switch (activeDetailsTab()) {
+                @case ('summary') {
+                  <!-- Overview -->
+                  <div class="ri-overview2">
+                    <span class="ri-overview2__icon ri-sem--self">▦</span>
+                    <div class="ri-overview2__body">
+                      <span class="ri-overview2__title">Overview</span>
+                      <span class="ri-overview2__meta">{{ m.renderCount }} render{{ m.renderCount === 1 ? '' : 's' }} · <span [title]="estTooltip">~{{ m.totalDuration | number:'1.0-0' }}ms total</span></span>
+                    </div>
+                    @if (overallConfidence(); as c) {
+                      <span class="ri-badge2" [class]="'ri-conf-bg--' + c.level" title="How sure we are of the cause, based on the evidence observed.">{{ c.label }} conf.</span>
                     }
-                    
-                    <!-- Impact Bar (visual indicator of total impact) -->
-                    <div class="ri-cascade-row__impact-bar"
-                         [style.width.%]="($any(child).count * $any(child).totalDuration) / 100"
-                         [class]="'ri-impact--' + ($any(child).count >= 5 ? 'high' : $any(child).count >= 2 ? 'medium' : 'low')">
+                  </div>
+
+                  <!-- Why did it render -->
+                  <div class="ri-dsec">
+                    <p class="ri-dsec__label">Why did it render?</p>
+                    <div class="ri-whyl">
+                      @for (w of whyRows(); track w.key) {
+                        <div class="ri-whyl__row" [class.is-muted]="!w.observed">
+                          <span class="ri-whyl__icon" [class]="'ri-sem--' + w.sem">{{ w.icon }}</span>
+                          <span class="ri-whyl__label">{{ w.label }}</span>
+                          @if (w.observed) {
+                            <span class="ri-whyl__count">{{ w.count }}×</span>
+                            <span class="ri-whyl__badge" [class]="'ri-conf-bg--' + w.confidence">{{ w.confidenceLabel }}</span>
+                          } @else {
+                            <span class="ri-whyl__na">Not observed</span>
+                          }
+                        </div>
+                      }
+                    </div>
+                  </div>
+
+                  <!-- Evidence -->
+                  @if (renderOrigin(); as ro) {
+                    @if (ro.dominant; as dom) {
+                      <div class="ri-dsec">
+                        <p class="ri-dsec__label">Evidence</p>
+                        <div class="ri-ev">
+                          <span class="ri-ev__badge" [class]="'ri-sem-bg--' + (dom.key === 'own-trigger' ? 'self' : dom.key === 'parent-propagation' ? 'parent' : 'rxjs')">{{ dom.key === 'own-trigger' ? 'Observed' : 'Correlated' }}</span>
+                          <p class="ri-ev__text">{{ dom.detail }}</p>
+                        </div>
+                      </div>
+                    }
+                  }
+
+                  <!-- What changed -->
+                  <div class="ri-dsec">
+                    <p class="ri-dsec__label">What changed?</p>
+                    @if (getComponentSignals().length > 0) {
+                      <div class="ri-changed3">
+                        @for (sig of getComponentSignals(); track sig.name + sig.kind) {
+                          <div class="ri-changed3__row" [title]="sig.name + ' (' + sig.kind + ') = ' + sig.value">
+                            <span class="ri-changed3__k">{{ sig.name }} <span class="k">{{ sig.kind }}</span></span>
+                            <span class="ri-changed3__v">{{ sig.value | slice:0:40 }}</span>
+                          </div>
+                        }
+                      </div>
+                    } @else {
+                      <p class="ri-muted-line">No direct input change observed. No signal change observed.</p>
+                    }
+                  </div>
+
+                  <!-- Next steps -->
+                  @if (relatedActivity().parentName; as parentName) {
+                    <div class="ri-dsec ri-dsec--next">
+                      <p class="ri-dsec__label"><span class="ri-hinticon" title="Suggested next action based on the dominant cause.">💡</span> Next steps</p>
+                      <p class="ri-muted-line">Parent activity is the strongest observed relationship. Inspect the parent to understand why it re-rendered.</p>
+                      <button class="ri-cta" (click)="inspectParent()">Inspect parent component →</button>
+                    </div>
+                  }
+                }
+                @case ('diagnostics') {
+                  <div class="ri-dsec">
+                    <p class="ri-dsec__label">Signals &amp; state <span class="ri-muted">observed</span></p>
+                    @if (getComponentSignals().length > 0) {
+                      <div class="ri-changed3">
+                        @for (sig of getComponentSignals(); track sig.name + sig.kind) {
+                          <div class="ri-changed3__row"><span class="ri-changed3__k">{{ sig.name }} <span class="k">{{ sig.kind }}</span></span><span class="ri-changed3__v">{{ sig.value | slice:0:40 }}</span></div>
+                        }
+                      </div>
+                    } @else { <p class="ri-muted-line">No signal or state writes observed.</p> }
+                  </div>
+                  <div class="ri-dsec">
+                    <p class="ri-dsec__label">Template &amp; change detection <span class="ri-muted">observed</span></p>
+                    <div class="ri-metricgrid ri-metricgrid--2">
+                      <div class="ri-mcell"><span class="ri-mcell__k">Bindings</span><span class="ri-mcell__v">{{ getComponentBindings() }}</span></div>
+                      <div class="ri-mcell"><span class="ri-mcell__k">Listeners</span><span class="ri-mcell__v">{{ getComponentListeners() }}</span></div>
+                      <div class="ri-mcell"><span class="ri-mcell__k">ngDoCheck</span><span class="ri-mcell__v">{{ getComponentCdCycles() }}</span></div>
+                      <div class="ri-mcell"><span class="ri-mcell__k" [title]="cdAttributionTooltip">CD attr.</span><span class="ri-mcell__v" [class]="getCdMerClass(getComponentCdMer())">{{ getComponentCdMer() === null ? '—' : (getComponentCdMer() | number:'1.0-0') + '%' }}</span></div>
                     </div>
                   </div>
                 }
-                @if (m.children.length > 10) {
-                  <div class="ri-cascade-more">
-                    <span class="ri-cascade-more__label">+{{ m.children.length - 10 }} more children</span>
-                    <button class="ri-cascade-more__button" (click)="expandCascadeAll()">Show all</button>
+                @case ('code') {
+                  <div class="ri-dsec">
+                    <p class="ri-dsec__label">Source <span class="ri-muted">guessed</span></p>
+                    @if (getComponentFilePath(selectedComponentName()!); as filePath) {
+                      <code class="ri-source-path">{{ filePath }}</code>
+                      <button class="ri-cta" (click)="openInVSCode(filePath)">Open in editor →</button>
+                      <p class="ri-muted-line">Path derived from the component name — may not match your layout.</p>
+                    }
                   </div>
                 }
-              </div>
-            </section>
+              }
+            </div>
+          } @else {
+            <div class="ri-details__placeholder">
+              <p>Select a component to see why it rendered.</p>
+            </div>
           }
-        } @else {
-          <!-- No component selected -->
-          <div class="ri-drawer__placeholder">
-            <p>Select a component from the tree to inspect its render cause and performance diagnostics</p>
-          </div>
-        }
-      </div>
+        </div>
+      </aside>
+
     </div>
   }
 </div>

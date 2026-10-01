@@ -26,7 +26,6 @@
 
 import { Injectable } from '@angular/core';
 import type { CausalityChain } from './causality-chain-detector.service';
-import type { ExecutionStep } from '../../../../types/execution-intelligence';
 
 interface IntentAnalysis {
   operation: string;      // "Load", "Update", "Delete", "Validate", "Search"

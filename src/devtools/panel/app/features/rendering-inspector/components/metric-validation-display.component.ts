@@ -66,8 +66,8 @@ export interface ValidationData {
         flex-direction: column;
         gap: 12px;
         padding: 12px;
-        background: linear-gradient(135deg, rgba(100, 181, 246, 0.05), rgba(15, 76, 117, 0.1));
-        border: 1px solid rgba(100, 181, 246, 0.2);
+        background: linear-gradient(135deg, color-mix(in srgb, var(--ri-blue) 5%, transparent), color-mix(in srgb, var(--ri-bg-raised) 10%, transparent));
+        border: 1px solid color-mix(in srgb, var(--ri-blue) 20%, transparent);
         border-radius: 6px;
         font-size: 12px;
       }
@@ -85,21 +85,21 @@ export interface ValidationData {
         flex: 1;
       }
       .status-valid {
-        background: rgba(76, 175, 80, 0.2);
-        color: #81c784;
-        border: 1px solid #4caf50;
+        background: color-mix(in srgb, var(--ri-green) 20%, transparent);
+        color: var(--ri-accent-green);
+        border: 1px solid var(--ri-accent-green);
       }
       .status-invalid {
-        background: rgba(255, 82, 82, 0.2);
-        color: #ff5252;
-        border: 1px solid #f44336;
+        background: color-mix(in srgb, var(--ri-red) 20%, transparent);
+        color: var(--ri-accent-red);
+        border: 1px solid var(--ri-accent-red);
       }
       .confidence-badge {
         padding: 6px 12px;
         border-radius: 4px;
-        background: rgba(100, 181, 246, 0.1);
-        border: 1px solid rgba(100, 181, 246, 0.3);
-        color: #64b5f6;
+        background: color-mix(in srgb, var(--ri-blue) 10%, transparent);
+        border: 1px solid color-mix(in srgb, var(--ri-blue) 30%, transparent);
+        color: var(--ri-accent-blue);
         font-weight: 600;
         font-size: 11px;
       }
@@ -117,8 +117,8 @@ export interface ValidationData {
         font-size: 11px;
       }
       .summary-section.success {
-        background: rgba(76, 175, 80, 0.15);
-        color: #81c784;
+        background: color-mix(in srgb, var(--ri-green) 15%, transparent);
+        color: var(--ri-accent-green);
       }
       .section-icon {
         font-size: 12px;
@@ -130,7 +130,7 @@ export interface ValidationData {
         font-size: 11px;
       }
       .quality-label {
-        color: #90caf9;
+        color: var(--ri-accent-blue);
         flex-shrink: 0;
         min-width: 80px;
       }
@@ -140,15 +140,15 @@ export interface ValidationData {
         background: rgba(0, 0, 0, 0.3);
         border-radius: 3px;
         overflow: hidden;
-        border: 1px solid rgba(100, 181, 246, 0.2);
+        border: 1px solid color-mix(in srgb, var(--ri-blue) 20%, transparent);
       }
       .quality-fill {
         height: 100%;
-        background: linear-gradient(90deg, #81c784, #4caf50);
+        background: linear-gradient(90deg, var(--ri-accent-green), var(--ri-accent-green));
         transition: width 0.3s ease;
       }
       .quality-score {
-        color: #64b5f6;
+        color: var(--ri-accent-blue);
         font-weight: 600;
         min-width: 40px;
         text-align: right;
@@ -160,11 +160,11 @@ export interface ValidationData {
         padding: 8px;
         background: rgba(0, 0, 0, 0.2);
         border-radius: 3px;
-        border: 1px solid rgba(100, 181, 246, 0.1);
+        border: 1px solid color-mix(in srgb, var(--ri-blue) 10%, transparent);
         cursor: pointer;
         user-select: none;
         font-weight: 600;
-        color: #90caf9;
+        color: var(--ri-accent-blue);
         font-size: 11px;
       }
       .audit-section summary:hover {
@@ -186,9 +186,9 @@ export interface ValidationData {
         width: 20px;
         height: 20px;
         border-radius: 50%;
-        background: rgba(100, 181, 246, 0.2);
-        border: 1px solid #64b5f6;
-        color: #64b5f6;
+        background: color-mix(in srgb, var(--ri-blue) 20%, transparent);
+        border: 1px solid var(--ri-accent-blue);
+        color: var(--ri-accent-blue);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -202,11 +202,11 @@ export interface ValidationData {
         gap: 2px;
       }
       .step-description {
-        color: #e0e0e0;
+        color: var(--ri-text-bright);
         font-size: 11px;
       }
       .step-value {
-        color: #64b5f6;
+        color: var(--ri-accent-blue);
         font-size: 10px;
         background: rgba(0, 0, 0, 0.3);
         padding: 4px 6px;

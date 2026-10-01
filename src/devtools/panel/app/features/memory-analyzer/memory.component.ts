@@ -1,5 +1,4 @@
 import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
-import { NgClass } from '@angular/common';
 import { PanelState } from '../../state/panel.state';
 import { ExecutionIntelligenceService } from '../../services/execution-intelligence.service';
 import { displayName } from '../../utils/display-name';
@@ -32,7 +31,7 @@ interface DestroyedComponent {
   selector: 'app-memory',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass],
+  imports: [],
   templateUrl: './memory.component.html',
   styleUrl: './memory.component.scss',
 })

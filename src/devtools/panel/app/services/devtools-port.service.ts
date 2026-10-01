@@ -33,7 +33,7 @@ export class DevtoolsPortService {
     try {
       chrome.storage.local.get('auto_start_scan', (result) => {
         if (result && result['auto_start_scan'] === true) {
-          this.state.isTracking.set(true);
+          this.state.setTracking(true);
           // Use short delay to ensure message queue is ready
           setTimeout(() => {
             this.send({

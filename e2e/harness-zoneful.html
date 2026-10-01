@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ngLens E2E Accuracy Harness (zoneful)</title>
+</head>
+<body>
+  <app-root></app-root>
+
+  <!-- Tracker wiring first (defines window.__gtRender + window.__nglensE2E) -->
+  <script type="module" src="./harness-entry.ts"></script>
+  <!-- Real Angular app — ZONEFUL (zone.js) change detection -->
+  <script type="module" src="./harness-app-zoneful.ts"></script>
+</body>
+</html>

@@ -1,39 +1,15 @@
 // ═══════════════════════════════════════════════════════════
 // ngLens Execution Explorer — High-Density Grouped Swimlane
-// Dark DevTools theme optimized for Chrome panel contrast.
-//
-// Palette:
-//   Base:     #0F1419 (deepest), #151B23 (surface), #1C2432 (cards)
-//   Border:   #2D3748 (standard), #3D4A5C (hover/focus)
-//   Text:     #E8ECF1 (primary), #A0AEC0 (secondary), #718096 (muted)
-//   Lanes:    #3B82F6 (api), #A78BFA (render), #10B981 (signal), #F59E0B (store), #22D3EE (interaction)
+// Theme-aware design using CSS variables that respond to light/dark mode.
 // ═══════════════════════════════════════════════════════════
 
 :host { display: block; height: 100%; }
 
-// ── Design Tokens ──
-$bg-deep:    #0F1419;
-$bg-surface: #151B23;
-$bg-card:    #1C2432;
-$bg-raised:  #232D3F;
-$border:     #2D3748;
-$border-hover: #3D4A5C;
-$border-focus: #3B82F6;
-
-$blue:   #3B82F6;
-$green:  #10B981;
-$amber:  #F59E0B;
-$red:    #EF4444;
-$purple: #A78BFA;
-$cyan:   #22D3EE;
-
-$text-bright:  #E8ECF1;
-$text-primary: #CBD5E1;
-$text-secondary: #A0AEC0;
-$text-muted:   #718096;
-
-$mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
-$sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+// ── Design Tokens (CSS Variables) ──
+// These use the theme system defined in styles.css
+// Dark theme is default, light theme activates via html[data-theme="light"]
+$sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+$mono: $sans;
 
 $radius-sm: 3px;
 $radius-md: 5px;
@@ -46,8 +22,8 @@ $radius-lg: 7px;
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: $bg-deep;
-  color: $text-primary;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   font-family: $sans;
   font-size: 11px;
   -webkit-font-smoothing: antialiased;
@@ -62,8 +38,8 @@ $radius-lg: 7px;
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  border-bottom: 1px solid $border;
-  background: $bg-surface;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
   flex-shrink: 0;
 
   &__left {
@@ -77,13 +53,13 @@ $radius-lg: 7px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: $cyan;
+    color: var(--color-api);
   }
 
   &__trigger {
     font-size: 11px;
     font-weight: 600;
-    color: $text-bright;
+    color: var(--text-primary);
     max-width: 220px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -107,7 +83,7 @@ $radius-lg: 7px;
     font-family: $mono;
     font-size: 12px;
     font-weight: 700;
-    color: $text-bright;
+    color: var(--text-primary);
     line-height: 1;
   }
 
@@ -116,11 +92,11 @@ $radius-lg: 7px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: $text-muted;
+    color: var(--text-muted);
   }
 
-  &--warn .ee-metric__value { color: $amber; }
-  &--duration .ee-metric__value { color: $cyan; }
+  &--warn .ee-metric__value { color: var(--color-store); }
+  &--duration .ee-metric__value { color: var(--color-api); }
 }
 
 // ══════════════════════════════
@@ -131,8 +107,8 @@ $radius-lg: 7px;
   align-items: flex-start;
   gap: 8px;
   padding: 8px 12px;
-  background: rgba($blue, 0.04);
-  border-bottom: 1px solid rgba($blue, 0.12);
+  background: rgba(var(--color-api), 0.04);
+  border-bottom: 1px solid rgba(var(--color-api), 0.12);
   flex-shrink: 0;
 
   &__icon {
@@ -143,21 +119,85 @@ $radius-lg: 7px;
 
   &__text {
     font-size: 10px;
-    color: $text-secondary;
+    color: var(--text-secondary);
     line-height: 1.5;
     margin: 0;
 
     strong {
-      color: $text-bright;
+      color: var(--text-primary);
       font-weight: 700;
     }
   }
 
   &__highlight {
     font-weight: 700;
-    &--warn { color: $amber; }
-    &--error { color: #FCA5A5; }
+    &--warn { color: var(--color-store); }
+    &--error { color: var(--color-critical); }
   }
+}
+
+// ══════════════════════════════
+// VIEW TABS (Story | Timeline)
+// ══════════════════════════════
+.ee-viewtabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 12px 0;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+
+  &__spacer { flex: 1; }
+
+  .ee-density-toggle { margin-bottom: 4px; }
+}
+.ee-viewtab {
+  padding: 5px 12px;
+  border: none;
+  background: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+
+  &:hover { color: var(--text-secondary); }
+  &.active { color: var(--text-primary); border-bottom-color: var(--color-api); }
+}
+
+.ee-story-pane {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--border-primary), 0.7) transparent;
+  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb { background: rgba(var(--border-primary), 0.7); border-radius: 2px; }
+}
+
+// ── Bottom-up (components by render count) ──
+.ee-bottomup {
+  padding: 12px 16px;
+  &__head {
+    font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-muted); margin-bottom: 8px;
+  }
+  &__row {
+    display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
+    background: none; border: none; border-bottom: 1px solid rgba(var(--border-primary), 0.5);
+    cursor: pointer; color: inherit; font: inherit; padding: 6px 4px;
+    &:hover { background: rgba(var(--color-api), 0.04); }
+  }
+  &__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); font-size: 11px; }
+  &__count { flex-shrink: 0; font-family: $mono; font-size: 10px; color: var(--text-secondary); min-width: 34px; text-align: right; }
+  &__go { flex-shrink: 0; font-size: 9px; color: var(--color-api); opacity: 0; }
+  &__row:hover &__go { opacity: 1; }
+  &__note { margin: 10px 0 0; font-size: 9.5px; color: var(--text-muted); line-height: 1.5; }
 }
 
 // ══════════════════════════════
@@ -168,8 +208,8 @@ $radius-lg: 7px;
   align-items: center;
   justify-content: space-between;
   padding: 6px 12px;
-  border-bottom: 1px solid $border;
-  background: $bg-surface;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
   flex-shrink: 0;
   gap: 8px;
 
@@ -192,15 +232,15 @@ $radius-lg: 7px;
   align-items: center;
   gap: 4px;
   padding: 3px 8px;
-  background: $bg-card;
-  border: 1px solid $border;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
   border-radius: $radius-md;
   min-width: 160px;
   max-width: 220px;
 
   &:focus-within {
-    border-color: $border-focus;
-    box-shadow: 0 0 0 2px rgba($blue, 0.15);
+    border-color: var(--border-primary)-focus;
+    box-shadow: 0 0 0 2px rgba(var(--color-api), 0.15);
   }
 
   &__icon {
@@ -213,12 +253,12 @@ $radius-lg: 7px;
     background: none;
     outline: none;
     font-size: 10px;
-    color: $text-primary;
+    color: var(--text-primary);
     width: 100%;
     font-family: $sans;
 
     &::placeholder {
-      color: $text-muted;
+      color: var(--text-muted);
       font-size: 9px;
     }
   }
@@ -226,12 +266,12 @@ $radius-lg: 7px;
   &__clear {
     border: none;
     background: none;
-    color: $text-muted;
+    color: var(--text-muted);
     font-size: 13px;
     cursor: pointer;
     padding: 0 2px;
     line-height: 1;
-    &:hover { color: $text-bright; }
+    &:hover { color: var(--text-primary); }
   }
 }
 
@@ -244,32 +284,32 @@ $radius-lg: 7px;
 
 .ee-chip {
   padding: 3px 8px;
-  border: 1px solid $border;
+  border: 1px solid var(--border-primary);
   border-radius: $radius-md;
-  background: $bg-card;
+  background: var(--bg-tertiary);
   font-size: 9px;
   font-weight: 600;
-  color: $text-secondary;
+  color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
   transition: border-color 0.12s, background 0.12s, color 0.12s;
 
   &:hover {
-    border-color: $border-hover;
-    color: $text-primary;
+    border-color: var(--border-primary)-hover;
+    color: var(--text-primary);
   }
 
   &.active {
-    border-color: $blue;
-    background: rgba($blue, 0.1);
-    color: #7CB3F9;
+    border-color: var(--color-api);
+    background: rgba(var(--color-api), 0.1);
+    color: var(--color-api);
   }
 }
 
 // ── Density Toggle ──
 .ee-density-toggle {
   display: flex;
-  border: 1px solid $border;
+  border: 1px solid var(--border-primary);
   border-radius: $radius-md;
   overflow: hidden;
 }
@@ -277,21 +317,21 @@ $radius-lg: 7px;
 .ee-density-btn {
   padding: 3px 8px;
   border: none;
-  background: $bg-card;
+  background: var(--bg-tertiary);
   font-size: 9px;
   font-weight: 600;
-  color: $text-muted;
+  color: var(--text-muted);
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 
-  &:hover { color: $text-primary; background: $bg-raised; }
+  &:hover { color: var(--text-primary); background: var(--bg-accent); }
 
   &.active {
-    background: rgba($blue, 0.12);
-    color: #7CB3F9;
+    background: rgba(var(--color-api), 0.12);
+    color: var(--color-api);
   }
 
-  & + & { border-left: 1px solid $border; }
+  & + & { border-left: 1px solid var(--border-primary); }
 }
 
 // ══════════════════════════════
@@ -305,10 +345,10 @@ $radius-lg: 7px;
   min-height: 0;
 
   scrollbar-width: thin;
-  scrollbar-color: rgba($border, 0.7) transparent;
+  scrollbar-color: rgba(var(--border-primary), 0.7) transparent;
   &::-webkit-scrollbar { width: 4px; }
   &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: rgba($border, 0.7); border-radius: 2px; }
+  &::-webkit-scrollbar-thumb { background: rgba(var(--border-primary), 0.7); border-radius: 2px; }
 }
 
 // ── Timeline Ruler ──
@@ -316,8 +356,8 @@ $radius-lg: 7px;
   display: flex;
   justify-content: space-between;
   padding: 4px 12px 4px 140px;
-  border-bottom: 1px solid rgba($border, 0.5);
-  background: $bg-surface;
+  border-bottom: 1px solid rgba(var(--border-primary), 0.5);
+  background: var(--bg-secondary);
   position: sticky;
   top: 0;
   z-index: 5;
@@ -325,7 +365,7 @@ $radius-lg: 7px;
   &__label {
     font-family: $mono;
     font-size: 8px;
-    color: $text-muted;
+    color: var(--text-muted);
     font-weight: 600;
   }
 }
@@ -334,15 +374,15 @@ $radius-lg: 7px;
 // LANE
 // ══════════════════════════════
 .ee-lane {
-  border-bottom: 1px solid rgba($border, 0.5);
+  border-bottom: 1px solid rgba(var(--border-primary), 0.5);
 
   &__header {
     display: flex;
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    background: rgba($bg-card, 0.5);
-    border-bottom: 1px solid rgba($border, 0.3);
+    background: rgba(var(--bg-tertiary), 0.5);
+    border-bottom: 1px solid rgba(var(--border-primary), 0.3);
     position: sticky;
     top: 22px;
     z-index: 4;
@@ -358,7 +398,7 @@ $radius-lg: 7px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: $text-muted;
+    color: var(--text-muted);
   }
 
   &__count {
@@ -367,8 +407,8 @@ $radius-lg: 7px;
     font-weight: 700;
     padding: 1px 4px;
     border-radius: 2px;
-    background: rgba($border, 0.4);
-    color: $text-secondary;
+    background: rgba(var(--border-primary), 0.4);
+    color: var(--text-secondary);
   }
 
   &__body {
@@ -378,16 +418,16 @@ $radius-lg: 7px;
   &__empty {
     padding: 8px 12px 8px 140px;
     font-size: 9px;
-    color: $text-muted;
+    color: var(--text-muted);
     font-style: italic;
   }
 
   // Lane category accent colors
-  &--api .ee-lane__label { color: $blue; }
-  &--render .ee-lane__label { color: $purple; }
-  &--signal .ee-lane__label { color: $green; }
-  &--store .ee-lane__label { color: $amber; }
-  &--interaction .ee-lane__label { color: $cyan; }
+  &--api .ee-lane__label { color: var(--color-api); }
+  &--render .ee-lane__label { color: var(--color-render); }
+  &--signal .ee-lane__label { color: var(--color-signal); }
+  &--store .ee-lane__label { color: var(--color-store); }
+  &--interaction .ee-lane__label { color: var(--color-api); }
 }
 
 // ══════════════════════════════
@@ -401,24 +441,24 @@ $radius-lg: 7px;
   cursor: pointer;
   transition: background 0.1s;
 
-  &:hover { background: rgba($blue, 0.04); }
+  &:hover { background: rgba(var(--color-api), 0.04); }
 
-  &--slow { background: rgba($amber, 0.03); }
-  &--slow:hover { background: rgba($amber, 0.06); }
+  &--slow { background: rgba(var(--color-store), 0.03); }
+  &--slow:hover { background: rgba(var(--color-store), 0.06); }
 
   &--bottleneck {
-    background: rgba($red, 0.05);
-    border-left: 2px solid $red;
+    background: rgba(var(--color-critical), 0.05);
+    border-left: 2px solid var(--color-critical);
   }
-  &--bottleneck:hover { background: rgba($red, 0.08); }
+  &--bottleneck:hover { background: rgba(var(--color-critical), 0.08); }
 
-  &--duplicate .ee-item__name { color: $amber; }
+  &--duplicate .ee-item__name { color: var(--color-store); }
 
   &__name {
     width: 128px;
     flex-shrink: 0;
     font-size: 10px;
-    color: $text-secondary;
+    color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -433,8 +473,8 @@ $radius-lg: 7px;
     font-weight: 700;
     padding: 0px 3px;
     border-radius: 2px;
-    background: rgba($amber, 0.15);
-    color: #FCD34D;
+    background: rgba(var(--color-store), 0.15);
+    color: var(--color-store);
   }
 
   &__bottleneck-tag {
@@ -442,7 +482,7 @@ $radius-lg: 7px;
     margin-left: 4px;
     font-size: 7px;
     font-weight: 800;
-    color: $red;
+    color: var(--color-critical);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     animation: pulse-tag 1.5s ease-in-out infinite;
@@ -452,11 +492,11 @@ $radius-lg: 7px;
     flex: 1;
     height: 14px;
     position: relative;
-    background: rgba($border, 0.3);
+    background: rgba(var(--border-primary), 0.3);
     border-radius: 2px;
     margin: 0 8px;
     // Vertical grid at 25% intervals
-    background-image: linear-gradient(90deg, rgba($border, 0.2) 1px, transparent 1px);
+    background-image: linear-gradient(90deg, rgba(var(--border-primary), 0.2) 1px, transparent 1px);
     background-size: 25% 100%;
     background-position: 25% 0;
   }
@@ -476,42 +516,47 @@ $radius-lg: 7px;
     text-align: right;
     font-family: $mono;
     font-size: 9px;
-    color: $text-muted;
+    color: var(--text-muted);
     font-weight: 600;
 
-    &--slow { color: #FCA5A5; }
+    &--slow { color: var(--color-critical); }
   }
 }
 
 // ── Bar Colors per Category ──
 .ee-bar {
   &--api {
-    background: rgba($blue, 0.8);
-    box-shadow: 0 0 3px rgba($blue, 0.3);
+    background: rgba(var(--color-api), 0.8);
+    box-shadow: 0 0 3px rgba(var(--color-api), 0.3);
   }
   &--render {
-    background: rgba($purple, 0.8);
-    box-shadow: 0 0 3px rgba($purple, 0.3);
+    background: rgba(var(--color-render), 0.8);
+    box-shadow: 0 0 3px rgba(var(--color-render), 0.3);
   }
   &--signal {
-    background: rgba($green, 0.8);
-    box-shadow: 0 0 3px rgba($green, 0.3);
+    background: rgba(var(--color-signal), 0.8);
+    box-shadow: 0 0 3px rgba(var(--color-signal), 0.3);
   }
   &--store {
-    background: rgba($amber, 0.8);
-    box-shadow: 0 0 3px rgba($amber, 0.3);
+    background: rgba(var(--color-store), 0.8);
+    box-shadow: 0 0 3px rgba(var(--color-store), 0.3);
   }
   &--interaction {
-    background: rgba($cyan, 0.8);
-    box-shadow: 0 0 3px rgba($cyan, 0.3);
+    background: rgba(var(--color-api), 0.8);
+    box-shadow: 0 0 3px rgba(var(--color-api), 0.3);
   }
   &--slow {
-    background: rgba($red, 0.85) !important;
-    box-shadow: 0 0 4px rgba($red, 0.4) !important;
+    background: rgba(var(--color-critical), 0.85) !important;
+    box-shadow: 0 0 4px rgba(var(--color-critical), 0.4) !important;
   }
   &--bottleneck {
-    background: $red !important;
-    box-shadow: 0 0 6px rgba($red, 0.5) !important;
+    background: var(--color-critical) !important;
+    box-shadow: 0 0 6px rgba(var(--color-critical), 0.5) !important;
+  }
+  &--min-width {
+    // Indicate that this bar's width is enlarged for visibility of very small durations
+    opacity: 0.7;
+    border: 1px dashed rgba(var(--text-muted), 0.5);
   }
 }
 
@@ -519,7 +564,7 @@ $radius-lg: 7px;
 // BATCH GROUP NODE (Collapsible)
 // ══════════════════════════════
 .ee-group {
-  border-bottom: 1px solid rgba($border, 0.2);
+  border-bottom: 1px solid rgba(var(--border-primary), 0.2);
 
   &__header {
     display: flex;
@@ -528,18 +573,18 @@ $radius-lg: 7px;
     height: 26px;
     cursor: pointer;
     border: none;
-    background: rgba($bg-card, 0.6);
+    background: rgba(var(--bg-tertiary), 0.6);
     width: 100%;
     text-align: left;
     transition: background 0.1s;
     position: relative;
 
-    &:hover { background: rgba($blue, 0.05); }
+    &:hover { background: rgba(var(--color-api), 0.05); }
   }
 
   &__toggle {
     font-size: 7px;
-    color: $text-muted;
+    color: var(--text-muted);
     width: 12px;
     flex-shrink: 0;
   }
@@ -553,7 +598,7 @@ $radius-lg: 7px;
   &__title {
     font-size: 10px;
     font-weight: 700;
-    color: $text-primary;
+    color: var(--text-primary);
     flex-shrink: 0;
     margin-right: auto;
   }
@@ -561,7 +606,7 @@ $radius-lg: 7px;
   &__duration {
     font-family: $mono;
     font-size: 9px;
-    color: $text-muted;
+    color: var(--text-muted);
     font-weight: 600;
     margin-right: 8px;
     flex-shrink: 0;
@@ -573,22 +618,22 @@ $radius-lg: 7px;
     transform: translateY(-50%);
     height: 6px;
     border-radius: 3px;
-    background: rgba($blue, 0.25);
-    border: 1px solid rgba($blue, 0.3);
+    background: rgba(var(--color-api), 0.25);
+    border: 1px solid rgba(var(--color-api), 0.3);
     pointer-events: none;
     // positioned via left/width in template
   }
 
   &__children {
     padding-left: 16px;
-    border-left: 2px solid rgba($blue, 0.15);
+    border-left: 2px solid rgba(var(--color-api), 0.15);
     margin-left: 12px;
     animation: slide-down 0.15s ease;
   }
 
   &--expanded > .ee-group__header {
-    background: rgba($blue, 0.04);
-    border-bottom: 1px solid rgba($border, 0.3);
+    background: rgba(var(--color-api), 0.04);
+    border-bottom: 1px solid rgba(var(--border-primary), 0.3);
   }
 }
 
@@ -601,8 +646,8 @@ $radius-lg: 7px;
   right: -320px;
   width: 320px;
   height: 100%;
-  background: $bg-surface;
-  border-left: 1px solid $border;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-primary);
   overflow-y: auto;
   transition: right 0.2s ease;
   z-index: 20;
@@ -610,14 +655,14 @@ $radius-lg: 7px;
   flex-direction: column;
 
   scrollbar-width: thin;
-  scrollbar-color: rgba($border, 0.7) transparent;
+  scrollbar-color: rgba(var(--border-primary), 0.7) transparent;
 
   &--open { right: 0; }
 
   &__header {
     padding: 10px 12px 8px;
-    border-bottom: 1px solid $border;
-    background: $bg-card;
+    border-bottom: 1px solid var(--border-primary);
+    background: var(--bg-tertiary);
     flex-shrink: 0;
   }
 
@@ -627,15 +672,29 @@ $radius-lg: 7px;
     gap: 6px;
   }
 
-  &__category-icon {
-    font-size: 14px;
+  &__category-tag {
     flex-shrink: 0;
+    font-family: $mono;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 2px 5px;
+    border-radius: $radius-sm;
+    background: rgba(var(--border-primary), 0.5);
+    color: var(--text-secondary);
+    line-height: 1.4;
+
+    &--api { color: var(--color-api); background: rgba(var(--color-api), 0.12); }
+    &--render { color: var(--color-render); background: rgba(var(--color-render), 0.12); }
+    &--signal { color: var(--color-signal); background: rgba(var(--color-signal), 0.12); }
+    &--store { color: var(--color-store); background: rgba(var(--color-store), 0.12); }
+    &--interaction { color: var(--color-api); background: rgba(var(--color-api), 0.12); }
   }
 
   &__name {
     font-size: 12px;
     font-weight: 700;
-    color: $text-bright;
+    color: var(--text-primary);
     margin: 0;
     word-break: break-word;
     line-height: 1.3;
@@ -645,20 +704,26 @@ $radius-lg: 7px;
   &__close {
     font-size: 16px;
     line-height: 1;
-    color: $text-muted;
+    color: var(--text-muted);
     cursor: pointer;
     border: none;
     background: none;
     padding: 2px 4px;
     border-radius: $radius-sm;
-    &:hover { color: $text-bright; background: rgba($border, 0.4); }
+    &:hover { color: var(--text-primary); background: rgba(var(--border-primary), 0.4); }
   }
 
+  &__actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 5px;
+  }
+
+  &__link,
   &__ide-link {
     display: inline-block;
-    margin-top: 4px;
     font-size: 9px;
-    color: $blue;
+    color: var(--color-api);
     border: none;
     background: none;
     cursor: pointer;
@@ -669,10 +734,10 @@ $radius-lg: 7px;
 
   &__section {
     padding: 10px 12px;
-    border-bottom: 1px solid $border;
+    border-bottom: 1px solid var(--border-primary);
 
     &--alert {
-      background: rgba($amber, 0.03);
+      background: rgba(var(--color-store), 0.03);
     }
   }
 
@@ -681,7 +746,7 @@ $radius-lg: 7px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: $text-muted;
+    color: var(--text-muted);
     margin: 0 0 6px 0;
   }
 
@@ -693,8 +758,8 @@ $radius-lg: 7px;
 
   &__timing-item {
     padding: 5px 7px;
-    background: $bg-card;
-    border: 1px solid $border;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-primary);
     border-radius: $radius-sm;
   }
 
@@ -704,7 +769,7 @@ $radius-lg: 7px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: $text-muted;
+    color: var(--text-muted);
     margin-bottom: 2px;
   }
 
@@ -713,11 +778,11 @@ $radius-lg: 7px;
     font-family: $mono;
     font-size: 11px;
     font-weight: 700;
-    color: $text-bright;
+    color: var(--text-primary);
 
     &--category {
       font-size: 9px;
-      color: $cyan;
+      color: var(--color-api);
       font-weight: 800;
     }
   }
@@ -736,17 +801,17 @@ $radius-lg: 7px;
 
   &__affected-chip {
     padding: 2px 6px;
-    background: rgba($purple, 0.1);
-    border: 1px solid rgba($purple, 0.2);
+    background: rgba(var(--color-render), 0.1);
+    border: 1px solid rgba(var(--color-render), 0.2);
     border-radius: $radius-sm;
     font-size: 9px;
-    color: #C4B5FD;
+    color: var(--color-render);
     font-weight: 600;
   }
 
   &__root-cause {
     font-size: 10px;
-    color: $text-secondary;
+    color: var(--text-secondary);
     line-height: 1.5;
     margin: 0;
   }
@@ -758,7 +823,52 @@ $radius-lg: 7px;
   }
 }
 
-.ee-text--slow { color: #FCA5A5 !important; }
+.ee-text--slow { color: var(--color-critical) !important; }
+
+// Context/Evidence key-value line in the drawer.
+.ee-kvline {
+  display: flex; align-items: baseline; gap: 8px; margin-top: 6px;
+  &__k { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+  &__v { font-size: 10px; }
+}
+
+// ── Evidence tier badges (spec §9: distinct treatment per level) ──
+// Observed = solid/confident (green). Correlated = amber outline.
+// Inferred = muted dashed outline. Unknown = plain muted text. These must
+// read as DIFFERENT strengths, never interchangeable.
+.ee-evidence {
+  margin-left: 6px;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: $radius-sm;
+  vertical-align: middle;
+
+  &--observed {
+    color: var(--color-signal);
+    background: rgba(var(--color-signal), 0.12);
+    border: 1px solid rgba(var(--color-signal), 0.35);
+  }
+  &--correlated {
+    color: var(--color-store);
+    background: rgba(var(--color-store), 0.08);
+    border: 1px solid rgba(var(--color-store), 0.3);
+  }
+  &--inferred {
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px dashed rgba(var(--text-secondary), 0.5);
+  }
+  &--unknown {
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    font-style: italic;
+    font-weight: 600;
+  }
+}
 
 .ee-flag {
   font-size: 9px;
@@ -767,15 +877,15 @@ $radius-lg: 7px;
   border-radius: $radius-sm;
 
   &--error {
-    background: rgba($red, 0.1);
-    color: #FCA5A5;
-    border: 1px solid rgba($red, 0.25);
+    background: rgba(var(--color-critical), 0.1);
+    color: var(--color-critical);
+    border: 1px solid rgba(var(--color-critical), 0.25);
   }
 
   &--warn {
-    background: rgba($amber, 0.1);
-    color: #FCD34D;
-    border: 1px solid rgba($amber, 0.2);
+    background: rgba(var(--color-store), 0.1);
+    color: var(--color-store);
+    border: 1px solid rgba(var(--color-store), 0.2);
   }
 }
 
@@ -786,38 +896,34 @@ $radius-lg: 7px;
   padding: 2px 6px;
   border-radius: 2px;
 
-  &--added { color: #6EE7B7; background: rgba($green, 0.08); }
-  &--modified { color: #FCD34D; background: rgba($amber, 0.08); }
-  &--removed { color: #FCA5A5; background: rgba($red, 0.08); }
+  &--added { color: var(--color-signal); background: rgba(var(--color-signal), 0.08); }
+  &--modified { color: var(--color-store); background: rgba(var(--color-store), 0.08); }
+  &--removed { color: var(--color-critical); background: rgba(var(--color-critical), 0.08); }
 }
 
 // ══════════════════════════════
 // ISSUES ALERT BOX (Bottom)
 // ══════════════════════════════
 .ee-issues {
-  border-top: 1px solid $border;
-  background: $bg-surface;
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
   flex-shrink: 0;
   max-height: 160px;
   overflow-y: auto;
 
   scrollbar-width: thin;
-  scrollbar-color: rgba($border, 0.7) transparent;
+  scrollbar-color: rgba(var(--border-primary), 0.7) transparent;
 
   &__header {
     display: flex;
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    background: rgba($amber, 0.04);
-    border-bottom: 1px solid rgba($amber, 0.12);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-primary);
     position: sticky;
     top: 0;
     z-index: 2;
-  }
-
-  &__icon {
-    font-size: 11px;
   }
 
   &__title {
@@ -825,7 +931,17 @@ $radius-lg: 7px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: $amber;
+    color: var(--text-muted);
+  }
+
+  &__count {
+    font-family: $mono;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 0 5px;
+    border-radius: 2px;
+    background: rgba(var(--border-primary), 0.5);
+    color: var(--text-secondary);
   }
 
   &__list {
@@ -837,14 +953,21 @@ $radius-lg: 7px;
 }
 
 .ee-issue {
+  display: block;
+  width: 100%;
+  text-align: left;
   padding: 6px 10px;
   border-radius: $radius-sm;
-  border: 1px solid rgba($border, 0.5);
-  background: $bg-card;
+  border: 1px solid rgba(var(--border-primary), 0.5);
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
 
-  &--error { border-left: 2px solid $red; }
-  &--warning { border-left: 2px solid $amber; }
-  &--info { border-left: 2px solid $blue; }
+  &:hover { border-color: var(--border-primary)-hover; background: var(--bg-accent); }
+
+  &--error { border-left: 2px solid var(--color-critical); }
+  &--warning { border-left: 2px solid var(--color-store); }
+  &--info { border-left: 2px solid var(--color-api); }
 
   &__top {
     display: flex;
@@ -853,15 +976,21 @@ $radius-lg: 7px;
     margin-bottom: 3px;
   }
 
-  &__severity {
-    font-size: 10px;
+  &__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
     flex-shrink: 0;
+
+    &--error { background: var(--color-critical); }
+    &--warning { background: var(--color-store); }
+    &--info { background: var(--color-api); }
   }
 
   &__title {
     font-size: 10px;
     font-weight: 700;
-    color: $text-bright;
+    color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -869,14 +998,14 @@ $radius-lg: 7px;
 
   &__detail {
     font-size: 9px;
-    color: $text-secondary;
+    color: var(--text-secondary);
     margin: 0 0 2px;
     line-height: 1.4;
   }
 
   &__suggestion {
     font-size: 9px;
-    color: $text-muted;
+    color: var(--text-muted);
     margin: 0;
     line-height: 1.4;
   }
@@ -905,13 +1034,13 @@ $radius-lg: 7px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    color: $text-secondary;
+    color: var(--text-secondary);
     margin: 0 0 6px;
   }
 
   &__text {
     font-size: 10px;
-    color: $text-muted;
+    color: var(--text-muted);
     max-width: 280px;
     line-height: 1.5;
     margin: 0;

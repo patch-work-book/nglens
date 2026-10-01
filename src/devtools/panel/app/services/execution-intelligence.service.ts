@@ -148,6 +148,19 @@ export class ExecutionIntelligenceService {
   }
 
   /**
+   * Look up a normalized runtime event by id (read-only accessor for the
+   * Story view, which needs the first event of a step to show its real metric).
+   */
+  getEvent(eventId: string): RuntimeEvent | undefined {
+    return this.eventMap.get(eventId);
+  }
+
+  /** The full normalized event map (read-only view for derived UI models). */
+  getEventMap(): ReadonlyMap<string, RuntimeEvent> {
+    return this.eventMap;
+  }
+
+  /**
    * Get the graph engine (for direct query access by downstream services).
    */
   getGraphEngine(): ExecutionGraphEngineService {

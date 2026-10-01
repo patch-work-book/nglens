@@ -1,8 +1,9 @@
-import { Component, computed, inject, ChangeDetectionStrategy, signal, effect } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { Component, computed, inject, ChangeDetectionStrategy, signal } from '@angular/core';
+import { Router, NavigationEnd } from '@angular/router';
 import { PanelState } from '../../state/panel.state';
 import { CommandService } from '../../services/command.service';
 import { ThemeService } from '../../services/theme.service';
+import { filter } from 'rxjs';
 
 @Component({
   selector: 'app-toolbar',
@@ -20,13 +21,17 @@ export class ToolbarComponent {
   readonly activeRoute = signal<string>('overview');
 
   constructor() {
-    effect(() => {
-      // Track route changes to update activeRoute signal
-      const urlSegments = this.router.url.split('/').filter(s => s);
-      if (urlSegments.length > 0) {
-        this.activeRoute.set(urlSegments[0]);
-      }
-    });
+    // Track route changes via router events (more reliable than reading router.url in an effect).
+    this.router.events
+      .pipe(filter(event => event instanceof NavigationEnd))
+      .subscribe((event: any) => {
+        const urlSegments = event.url.split('/').filter((s: string) => s);
+        if (urlSegments.length > 0) {
+          this.activeRoute.set(urlSegments[0]);
+        } else {
+          this.activeRoute.set('overview');
+        }
+      });
   }
 
   readonly isTracking = this.state.isTracking;
@@ -68,11 +73,11 @@ export class ToolbarComponent {
     const currentlyTracking = this.state.isTracking();
     if (currentlyTracking) {
       this.commandService.stopTracking();
-      this.state.isTracking.set(false);
+      this.state.setTracking(false);
     } else {
       this.state.trackingError.set(null);
       this.commandService.startTracking();
-      this.state.isTracking.set(true);
+      this.state.setTracking(true);
     }
   }
 

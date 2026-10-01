@@ -84,15 +84,15 @@ export interface QueuedInvestigation {
         flex-direction: column;
         gap: 10px;
         padding: 12px;
-        background: linear-gradient(135deg, rgba(100, 181, 246, 0.05), rgba(15, 76, 117, 0.1));
-        border: 1px solid rgba(100, 181, 246, 0.3);
+        background: linear-gradient(135deg, color-mix(in srgb, var(--ri-blue) 5%, transparent), color-mix(in srgb, var(--ri-bg-raised) 10%, transparent));
+        border: 1px solid color-mix(in srgb, var(--ri-blue) 30%, transparent);
         border-radius: 6px;
         cursor: pointer;
         transition: all 0.2s ease;
       }
       .queue-card:hover {
-        background: linear-gradient(135deg, rgba(100, 181, 246, 0.1), rgba(15, 76, 117, 0.15));
-        border-color: rgba(100, 181, 246, 0.5);
+        background: linear-gradient(135deg, color-mix(in srgb, var(--ri-blue) 10%, transparent), color-mix(in srgb, var(--ri-bg-raised) 15%, transparent));
+        border-color: color-mix(in srgb, var(--ri-blue) 50%, transparent);
         transform: translateY(-2px);
       }
       .card-header {
@@ -111,14 +111,14 @@ export interface QueuedInvestigation {
       .title {
         font-size: 13px;
         font-weight: 600;
-        color: #e0e0e0;
+        color: var(--ri-text-bright);
       }
       .rank-badge {
         font-size: 11px;
         font-weight: 700;
         padding: 2px 6px;
         border-radius: 3px;
-        background: #ff6b6b;
+        background: var(--ri-accent-red);
         color: white;
       }
       .gain-score-section {
@@ -128,7 +128,7 @@ export interface QueuedInvestigation {
       }
       .bar-label {
         font-size: 10px;
-        color: #90caf9;
+        color: var(--ri-accent-blue);
         text-transform: uppercase;
       }
       .gain-bar-container {
@@ -137,11 +137,11 @@ export interface QueuedInvestigation {
         background: rgba(0, 0, 0, 0.3);
         border-radius: 3px;
         overflow: hidden;
-        border: 1px solid rgba(100, 181, 246, 0.2);
+        border: 1px solid color-mix(in srgb, var(--ri-blue) 20%, transparent);
       }
       .gain-bar {
         height: 100%;
-        background: linear-gradient(90deg, #64b5f6, #42a5f5);
+        background: linear-gradient(90deg, var(--ri-accent-blue), var(--ri-accent-blue));
         transition: width 0.3s ease;
       }
       .gain-value {
@@ -169,12 +169,12 @@ export interface QueuedInvestigation {
         text-align: center;
       }
       .metric-label {
-        color: #78909c;
+        color: var(--ri-text-secondary);
         font-size: 9px;
         text-transform: uppercase;
       }
       .metric-value {
-        color: #64b5f6;
+        color: var(--ri-accent-blue);
         font-weight: 600;
       }
       .impact-section {
@@ -195,7 +195,7 @@ export interface QueuedInvestigation {
         font-size: 12px;
       }
       .impact-text {
-        color: #b0bec5;
+        color: var(--ri-text-primary);
         flex: 1;
       }
       .audit-trail {
@@ -203,9 +203,9 @@ export interface QueuedInvestigation {
         padding: 6px;
         background: rgba(0, 0, 0, 0.2);
         border-radius: 3px;
-        border: 1px solid rgba(100, 181, 246, 0.1);
+        border: 1px solid color-mix(in srgb, var(--ri-blue) 10%, transparent);
         font-size: 9px;
-        color: #90caf9;
+        color: var(--ri-accent-blue);
         cursor: pointer;
       }
       .audit-trail summary {
@@ -220,12 +220,12 @@ export interface QueuedInvestigation {
       }
       .audit-item {
         padding: 3px 4px;
-        border-left: 2px solid #64b5f6;
+        border-left: 2px solid var(--ri-accent-blue);
         padding-left: 6px;
       }
       .cta {
         font-size: 9px;
-        color: #64b5f6;
+        color: var(--ri-accent-blue);
         text-align: center;
         opacity: 0.7;
       }

@@ -1,581 +1,316 @@
-import { Component, inject, computed, signal, effect, ChangeDetectionStrategy } from '@angular/core';
-import { NgClass, NgStyle } from '@angular/common';
+/**
+ * Overview — "Your application at a glance".
+ *
+ * A calm, evidence-first landing view. Every number here comes from a REAL
+ * source (see the data map in each computed); nothing is fabricated. Where a
+ * value cannot be honestly derived it is omitted or shown as an empty state.
+ *
+ * Notable honesty choices:
+ *  - The "Capturing HH:MM:SS" timer uses PanelState.trackingStartedAt (a real
+ *    wall-clock start), not a guess from event timestamps.
+ *  - "Attention" items come from PanelState.allIssues() (the RecommendationEngine
+ *    is a v2 stub that returns []), mapped CRITICAL→High / WARNING→Medium.
+ *  - Recent-activity rows come from ExecutionSession (real renderCount /
+ *    apiCallCount / componentCount / boundary / duration). Trigger labels are
+ *    boundary-level only ("User interaction" / "Route change" / …) — we do not
+ *    invent finer kinds like "Button click".
+ *  - Duplicate-API count aggregates the real per-story `duplicate-api` insights.
+ */
+import { Component, inject, computed, signal, ChangeDetectionStrategy, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { PanelState } from '../../state/panel.state';
 import { ExecutionIntelligenceService } from '../../services/execution-intelligence.service';
-import { RecommendationEngineService } from '../../services/recommendation-engine.service';
-import { displayName, formatRenderRate } from '../../utils/display-name';
-import {
-  confidenceClass,
-  difficultyClass,
-  gainClass,
-  type RecommendationAction,
-} from '../../utils/recommendation-actions';
-import type { ComponentHotspot, SnapshotComparison, Issue } from '../../../../../types/panel';
-import type { RenderEvent } from '../../../../../types/render-events';
+import { displayName } from '../../utils/display-name';
+import type { ExecutionSession } from '../../../../../types/execution-intelligence';
 
-interface HealthSummary {
-  label: string;
+type TabTarget = 'rendering' | 'execution' | 'signals' | 'memory' | 'recommendations';
+type AttentionSeverity = 'high' | 'medium' | 'low';
+type AttentionAction = 'inspect-component' | 'open-memory' | 'open-execution';
+
+interface AttentionItem {
+  id: string;
+  severity: AttentionSeverity;
+  icon: 'render' | 'memory' | 'api';
+  title: string;
   detail: string;
-  className: string;
-  bannerClass: string;
-  icon: string;
+  targetComponent: string | null;
+  action: AttentionAction;
+  actionLabel: string;
 }
 
-interface CompareMetric {
-  label: string;
-  baseline: string;
-  current: string;
-  delta: string;
-  verdict: 'better' | 'worse' | 'same';
+interface ActivityRow {
+  id: string;
+  time: string;
+  triggerLabel: string;   // boundary-level kind, e.g. "User interaction"
+  triggerDetail: string;  // component / route context if any
+  icon: 'user' | 'route' | 'bootstrap' | 'timer' | 'websocket' | 'other';
+  duration: string;
+  durationSlow: boolean;
+  apis: number;
+  renders: number;
+  components: number;
 }
-
-type EvidenceTab = 'hotspots' | 'environment' | 'compare';
 
 @Component({
   selector: 'app-overview',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgClass, NgStyle],
+  imports: [],
   templateUrl: './overview.component.html',
   styleUrl: './overview.component.scss',
 })
-export class OverviewComponent {
+export class OverviewComponent implements OnDestroy {
   private readonly router = inject(Router);
   readonly state = inject(PanelState);
-  readonly executionIntelligence = inject(ExecutionIntelligenceService);
-  readonly recommendationEngine = inject(RecommendationEngineService);
+  readonly intelligence = inject(ExecutionIntelligenceService);
   readonly displayName = displayName;
-  readonly confidenceClass = confidenceClass;
-  readonly difficultyClass = difficultyClass;
-  readonly gainClass = gainClass;
 
-  // ── Collapse/Expand state ──
-  readonly expanded = signal<{ issue: boolean; fix: boolean; env: boolean }>({ issue: false, fix: false, env: false });
-
-  toggleSection(section: 'issue' | 'fix' | 'env'): void {
-    this.expanded.update(s => ({ ...s, [section]: !s[section] }));
+  // ── Live clock tick (for the elapsed capturing timer + "N ago") ──
+  private readonly now = signal(Date.now());
+  private readonly ticker = setInterval(() => this.now.set(Date.now()), 1000);
+  ngOnDestroy(): void { 
+    clearInterval(this.ticker);
+    this.detailModal.set(null); // Clear modal when leaving Overview
   }
 
-  // ── Evidence Tab state ──
-  readonly activeEvidenceTab = signal<EvidenceTab>('hotspots');
+  // ── Modal state (show detail before navigation) ──
+  readonly detailModal = signal<AttentionItem | null>(null);
 
-  readonly evidenceTabs = [
-    { id: 'hotspots' as EvidenceTab, label: 'Hotspots', count: computed(() => this.state.componentHotspots().length) },
-    { id: 'environment' as EvidenceTab, label: 'Environment', count: computed(() => this.activeZoneSources().length) },
-    { id: 'compare' as EvidenceTab, label: 'Compare Runs', count: computed(() => this.state.snapshots().length) },
-  ];
-
-  readonly renderRateNumber = computed(() => {
-    const events = this.state.renderEvents();
-    if (events.length === 0) return 0;
-
-    const activeFlowEvents = this.state.flowEvents();
-    
-    const routeChangesCount = activeFlowEvents.filter(e => 
-      e.type === 'route-change' && 
-      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
-    ).length;
-
-    const userInteractionsCount = activeFlowEvents.filter(e => 
-      e.type === 'user-interaction' && 
-      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
-    ).length || events.filter(r => !!r.interactionComponent).length;
-
-    const microTasksCount = events.reduce((sum, r) => {
-      const hasMicrotask = r.causes.some(c => c.type === 'zone' && (c.source === 'Promise.then' || c.source?.includes('Promise') || c.source?.includes('microTask')));
-      return sum + (hasMicrotask ? 1 : 0);
-    }, 0);
-
-    const serverPushesCount = activeFlowEvents.filter(e => 
-      e.type === 'http-response' && 
-      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
-    ).length || events.reduce((sum, r) => {
-      const hasServerPush = r.causes.some(c => c.type === 'zone' && (c.source === 'XMLHttpRequest' || c.source?.includes('fetch') || c.source?.includes('WebSocket')));
-      return sum + (hasServerPush ? 1 : 0);
-    }, 0);
-
-    const totalTriggerEvents = routeChangesCount + userInteractionsCount + microTasksCount + serverPushesCount;
-    return totalTriggerEvents > 0 ? (events.length / totalTriggerEvents) : 1;
+  // ── Capturing status ──
+  readonly isCapturing = computed(() => this.state.isTracking());
+  readonly captureElapsed = computed((): string | null => {
+    const start = this.state.trackingStartedAt();
+    if (start == null) return null;
+    const secs = Math.max(0, Math.floor((this.now() - start) / 1000));
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
   });
 
-  // ── Core computed data ──
-  constructor() {
-    // Use effect() to handle side effects (setInput) when inputs change
-    effect(() => {
-      this.recommendationEngine.setInput({
-        trackByIssues: this.state.trackByIssues(),
-        onPushRecommendations: this.state.onPushRecommendations(),
-        hotspots: this.state.componentHotspots(),
-        zonePollutionSources: this.state.zonePollutionSources(),
-        leakEvents: this.state.leakEvents(),
-        componentStats: this.state.componentStats(),
-      });
-    });
-  }
-
-  readonly actions = computed(() => this.recommendationEngine.recommendations());
-
-  readonly quickWins = computed(() => this.recommendationEngine.topQuickWins(3));
-  readonly topAction = computed(() => this.quickWins()[0] ?? this.actions()[0] ?? null);
-  readonly topHotspots = computed(() => this.state.componentHotspots().slice(0, 5));
-
-  readonly issuesCount = computed(() => this.state.allIssues().length);
-  readonly componentsCount = computed(() => this.state.componentStats().length);
-  readonly memoryRiskCount = computed(() => this.state.leakEvents().length);
-  readonly interactionsCount = computed(() => this.state.interactionProfiles().length);
-  readonly highestHotspotScore = computed(() => this.topHotspots()[0]?.score ?? 0);
+  // ── Runtime snapshot counts (all real) ──
+  readonly executionsCount = computed(() => this.intelligence.sessionCount());
+  readonly renderCount = computed(() => this.state.renderEvents().length);
+  readonly apiCallsCount = computed(() =>
+    this.intelligence.executionSessions().reduce((sum, s) => sum + (s.apiCallCount ?? 0), 0),
+  );
+  /** Reactive events = signal writes + subject emits + store dispatches (real flow events). */
+  readonly reactiveEventsCount = computed(() =>
+    this.state.flowEvents().filter(f =>
+      f.type === 'signal-write' || f.type === 'subject-emit' || f.type === 'store-dispatch',
+    ).length,
+  );
+  /** Cleanup risks = leak-detector events (teardown not confirmed). Real. */
+  readonly cleanupRiskCount = computed(() => this.state.leakEvents().length);
 
   readonly hasActivity = computed(() =>
-    this.state.renderEvents().length > 0 ||
-    this.state.leakEvents().length > 0 ||
-    this.state.trackByIssues().length > 0 ||
-    this.state.onPushRecommendations().length > 0 ||
-    this.state.zonePollutionSources().length > 0
+    this.renderCount() > 0 ||
+    this.executionsCount() > 0 ||
+    this.cleanupRiskCount() > 0 ||
+    this.state.allIssues().length > 0,
   );
 
-  // ── Environment computeds ──
-  readonly idleCdRate = computed(() => {
-    const events = this.state.renderEvents();
-    if (events.length === 0) return 0;
-    const idleEvents = events.filter(e => !e.interactionComponent);
-    const first = events[0].timestamp;
-    const last = events[events.length - 1].timestamp;
-    const seconds = Math.max((last - first) / 1000, 1);
-    return Number((idleEvents.length / seconds).toFixed(2));
+  // ── Duplicate-API aggregate (across stories' real insights) ──
+  readonly duplicateApiCount = computed(() => {
+    let n = 0;
+    for (const story of this.intelligence.executionStories()) {
+      for (const ins of story.insights ?? []) {
+        if (ins.category === 'duplicate-api') n++;
+      }
+    }
+    return n;
   });
 
-  readonly activeZoneSources = computed(() => {
-    return this.state.zonePollutionSources().filter(source => source.severity !== 'low');
-  });
+  // ── What needs your attention? (from allIssues + duplicate aggregate) ──
+  readonly attentionItems = computed((): AttentionItem[] => {
+    const items: AttentionItem[] = [];
 
-  readonly environmentProfile = computed(() => {
-    const idleRate = this.idleCdRate();
-    const zoneSources = this.activeZoneSources().length;
-    const hasHighActivity = idleRate > 5;
-    const hasZonePollution = zoneSources > 0;
-
-    if (hasZonePollution && hasHighActivity) return 'High Idle + Zone Pollution';
-    if (hasZonePollution) return 'Zone Pollution Detected';
-    if (hasHighActivity) return 'High Idle Activity';
-    return 'Clean Environment';
-  });
-
-  readonly environmentHealthClass = computed(() => {
-    const profile = this.environmentProfile();
-    if (profile.includes('High Idle') && profile.includes('Zone')) return 'text-red-400';
-    if (profile.includes('Zone') || profile.includes('High Idle')) return 'text-amber-400';
-    return 'text-green-400';
-  });
-
-  // ── Issue computeds ──
-  readonly topIssue = computed(() => {
-    const criticalIssues = this.state.allIssues().filter(i => i.severity === 'CRITICAL');
-    return criticalIssues[0] ?? null;
-  });
-
-  readonly impactEstimate = computed(() => {
-    const topAction = this.topAction();
-    if (!topAction) return 0;
-    const match = topAction.expectedGain.match(/(\d+)/);
-    return match ? parseInt(match[1], 10) : 15;
-  });
-
-  // ── Health Score (0-100) ──
-  readonly healthScore = computed(() => {
-    if (!this.hasActivity()) return null;
-
-    let score = 100;
-
-    // Render hotspot penalty (max 30 points)
-    const topScore = this.topHotspots()[0]?.score ?? 0;
-    score -= Math.min(30, (topScore / 100) * 30);
-
-    // Render count penalty (max 20 points) - more renders = worse
-    const renderCount = this.state.renderEvents().length;
-    score -= Math.min(20, (renderCount / 500) * 20);
-
-    // Average duration penalty (max 20 points) - slower = worse
-    const avgDuration = parseFloat(this.averageRenderDuration());
-    score -= Math.min(20, (avgDuration / 50) * 20);
-
-    // Memory risk penalty (max 15 points)
-    const memoryRisks = this.memoryRiskCount();
-    score -= Math.min(15, (memoryRisks / 10) * 15);
-
-    // Zone pollution penalty (max 15 points)
-    const zoneSources = this.activeZoneSources().length;
-    score -= Math.min(15, (zoneSources / 5) * 15);
-
-    return Math.max(0, Math.min(100, Math.round(score)));
-  });
-
-  readonly healthScoreLabel = computed(() => {
-    const score = this.healthScore();
-    if (score === null) return 'No Data';
-    if (score >= 85) return 'Excellent';
-    if (score >= 70) return 'Good';
-    if (score >= 50) return 'Fair';
-    if (score >= 30) return 'Poor';
-    return 'Critical';
-  });
-
-  readonly healthScoreClass = computed(() => {
-    const score = this.healthScore();
-    if (score === null) return 'text-gray-400';
-    if (score >= 85) return 'text-green-400';
-    if (score >= 70) return 'text-lime-400';
-    if (score >= 50) return 'text-yellow-400';
-    if (score >= 30) return 'text-amber-400';
-    return 'text-red-400';
-  });
-
-  readonly healthScoreBarClass = computed(() => {
-    const score = this.healthScore();
-    if (score === null) return 'bg-gray-600';
-    if (score >= 85) return 'bg-green-500';
-    if (score >= 70) return 'bg-lime-500';
-    if (score >= 50) return 'bg-yellow-500';
-    if (score >= 30) return 'bg-amber-500';
-    return 'bg-red-500';
-  });
-
-  // ── Health Summary (Tier 1) ──
-  readonly healthSummary = computed<HealthSummary>(() => {
-    if (!this.hasActivity()) {
-      return {
-        label: 'Waiting for tracking data',
-        detail: 'Start tracking, interact with your Angular page, then return here for analysis.',
-        className: 'text-gray-200',
-        bannerClass: 'banner-neutral',
-        icon: '⏸',
-      };
+    // Duplicate network calls (real aggregate). Only when detected.
+    const dupes = this.duplicateApiCount();
+    if (dupes > 0) {
+      items.push({
+        id: 'attn-duplicate-api',
+        severity: 'high',
+        icon: 'api',
+        title: `${dupes} repeated API call${dupes === 1 ? '' : 's'}`,
+        detail: 'Same request observed multiple times in a short period.',
+        targetComponent: null,
+        action: 'open-execution',
+        actionLabel: 'Open Execution',
+      });
     }
 
-    const topScore = this.topHotspots()[0]?.score ?? 0;
-    const criticalMemory = this.state.leakEvents().some(e => e.severity === 'CRITICAL');
-    const criticalZone = this.state.zonePollutionSources().some(s => s.severity === 'critical');
-
-    if (topScore >= 90 || criticalMemory || criticalZone) {
-      return {
-        label: 'Critical Performance Issue',
-        detail: 'Start with the highest-ranked fix. This recording contains a critical hotspot, zone trigger, or cleanup risk.',
-        className: 'text-red-400',
-        bannerClass: 'banner-red',
-        icon: '🔴',
-      };
+    // Render + memory issues from the real issue collection.
+    for (const issue of this.state.allIssues()) {
+      const severity = this.mapSeverity(issue.severity);
+      if (severity === 'low') continue; // keep the list focused on what matters
+      if (issue.type === 'leak') {
+        items.push({
+          id: issue.id,
+          severity,
+          icon: 'memory',
+          title: issue.title,
+          detail: issue.description,
+          targetComponent: issue.componentName ?? null,
+          action: 'open-memory',
+          actionLabel: 'Open Memory',
+        });
+      } else if (issue.type === 'render-hot' || issue.type === 'hotspot') {
+        items.push({
+          id: issue.id,
+          severity,
+          icon: 'render',
+          title: issue.title,
+          detail: issue.description,
+          targetComponent: issue.componentName ?? null,
+          action: 'inspect-component',
+          actionLabel: 'Inspect Component',
+        });
+      }
     }
 
-    if (topScore >= 70 || this.actions().length > 0) {
-      return {
-        label: 'Needs Review',
-        detail: 'Actionable fixes ranked and ready. Start with quick wins for maximum impact.',
-        className: 'text-amber-400',
-        bannerClass: 'banner-amber',
-        icon: '🟡',
-      };
-    }
+    // High severity first, then medium; cap to keep the panel calm.
+    const rank: Record<AttentionSeverity, number> = { high: 0, medium: 1, low: 2 };
+    return items.sort((a, b) => rank[a.severity] - rank[b.severity]).slice(0, 6);
+  });
 
+  // ── Last activity (most recent session) ──
+  readonly lastActivity = computed(() => {
+    const sessions = this.intelligence.executionSessions();
+    if (sessions.length === 0) return null;
+    const last = sessions[sessions.length - 1];
+    const comp = last.interactionComponent ? displayName(last.interactionComponent) : null;
     return {
-      label: 'Healthy Performance',
-      detail: 'No major hotspots detected. Keep this as a baseline before making changes.',
-      className: 'text-green-400',
-      bannerClass: 'banner-green',
-      icon: '🟢',
+      label: this.boundaryLabel(last),
+      detail: comp ?? this.boundaryKind(last),
+      ago: this.formatAgo(last.endTime),
     };
   });
 
-  readonly bannerIssueSummary = computed<string | null>(() => {
-    const hotspot = this.topHotspots()[0];
-    if (!hotspot) return null;
-    const cause = this.formatCauses(hotspot.primaryCause);
-    const gain = this.impactEstimate();
-    return `${displayName(hotspot.componentName)} (${formatRenderRate(hotspot.renderFrequency)}) from ${cause}${gain > 0 ? ` — ${gain}% gain if fixed` : ''}`;
+  // ── Recent activity table (real per-session counts) ──
+  readonly recentActivity = computed((): ActivityRow[] => {
+    const sessions = [...this.intelligence.executionSessions()].reverse().slice(0, 6);
+    return sessions.map(s => ({
+      id: s.id,
+      time: this.formatClock(s.startTime),
+      triggerLabel: this.boundaryLabel(s),
+      triggerDetail: s.interactionComponent ? displayName(s.interactionComponent) : this.boundaryKind(s),
+      icon: this.boundaryIcon(s),
+      duration: this.formatSpan(s.duration),
+      durationSlow: s.duration >= 3000,
+      apis: s.apiCallCount ?? 0,
+      renders: s.renderCount ?? 0,
+      components: s.componentCount ?? 0,
+    }));
   });
 
-  // ── Navigation ──
-  goToTab(tab: 'memory' | 'recommendations' | 'rendering'): void {
-    this.state.activeTab.set(tab as any);
+  // ── Navigation cards (real routes) ──
+  readonly navCards: Array<{ id: TabTarget; title: string; sub: string; icon: string }> = [
+    { id: 'rendering', title: 'Components', sub: 'Why did this component render?', icon: 'components' },
+    { id: 'execution', title: 'Execution', sub: 'What did this execution impact?', icon: 'execution' },
+    { id: 'signals', title: 'Signals', sub: 'Why did reactive values change?', icon: 'signals' },
+    { id: 'memory', title: 'Memory', sub: 'What is being retained?', icon: 'memory' },
+  ];
+
+  // ── Navigation + actions ──
+  goToTab(tab: TabTarget): void {
+    this.state.activeTab.set(tab);
     this.router.navigate(['/' + tab]);
   }
 
-  navigateToComponent(name: string): void {
-    this.state.selectedComponent.set(name);
+  openLastActivity(): void {
+    this.goToTab('execution');
   }
 
-  navigateToComponentInRenderTab(name: string): void {
-    this.state.selectedComponent.set(name);
-    this.state.activeTab.set('rendering');
-    this.router.navigate(['/rendering']);
+  openActivityRow(_row: ActivityRow): void {
+    // Rows represent execution sessions — send the developer to the Execution
+    // tab to follow the full runtime story.
+    this.goToTab('execution');
   }
 
-  selectHotspot(hotspot: ComponentHotspot): void {
-    this.state.selectedComponent.set(hotspot.componentName);
+  runAttention(item: AttentionItem): void {
+    // Show the detail modal first, so the user can review before navigating
+    this.detailModal.set(item);
   }
 
-  selectAction(action: RecommendationAction): void {
-    this.state.selectedComponent.set(action.componentName);
-    const matchingIssue = this.state.allIssues().find(issue =>
-      issue.id === action.id ||
-      issue.id === `zone-pollution-${action.componentName}` ||
-      issue.id === `hotspot-${action.componentName}`
-    );
-    if (matchingIssue) {
-      this.state.selectedIssue.set(matchingIssue);
+  /** Actually execute the attention action (called after modal review) */
+  executeAttention(item: AttentionItem): void {
+    this.detailModal.set(null); // Close modal
+    switch (item.action) {
+      case 'inspect-component':
+        if (item.targetComponent) {
+          this.state.selectedComponent.set(item.targetComponent);
+        }
+        this.goToTab('rendering');
+        break;
+      case 'open-memory':
+        this.goToTab('memory');
+        break;
+      case 'open-execution':
+        this.goToTab('execution');
+        break;
     }
   }
 
-  // ── Compare Runs ──
-  saveBaseline(): void {
-    this.state.clearSnapshots();
-    this.state.captureSnapshot('Baseline');
+  closeDetailModal(): void {
+    this.detailModal.set(null);
   }
 
-  captureCurrent(): void {
-    if (this.state.snapshots().length === 0) return;
-    this.state.captureSnapshot('Current');
-  }
-
-  resetComparison(): void {
-    this.state.clearSnapshots();
-  }
-
-  comparisonStatus(): string {
-    const count = this.state.snapshots().length;
-    if (count === 0) return 'Save a baseline before comparing a later run.';
-    if (count === 1) return 'Baseline saved. Capture current after the next run.';
-    return 'Lower render cost, risk, and cleanup counts are better.';
-  }
-
-  comparisonMetrics(comparison: SnapshotComparison): CompareMetric[] {
-    const baseline = comparison.baseline.metrics;
-    const current = comparison.current.metrics;
-    const delta = comparison.delta;
-
-    return [
-      this.lowerIsBetter('Render events', baseline.renders, current.renders, delta.renders),
-      this.lowerIsBetter('Render frequency', baseline.renderFrequency, current.renderFrequency, delta.renderFrequency, '', (val) => formatRenderRate(val)),
-      this.lowerIsBetter('Avg render cost', baseline.averageRenderDuration, current.averageRenderDuration, delta.averageRenderDuration, 'ms'),
-      this.lowerIsBetter('Total render cost', baseline.totalRenderDuration, current.totalRenderDuration, delta.totalRenderDuration, 'ms'),
-      this.lowerIsBetter('Open risks', baseline.issues, current.issues, delta.issues),
-      this.lowerIsBetter('Cleanup risks', baseline.leaks, current.leaks, delta.leaks),
-      this.lowerIsBetter('Render hotspots', baseline.hotspots, current.hotspots, delta.hotspots),
-    ];
-  }
-
-  getMetricTooltip(label: string): string {
-    switch (label) {
-      case 'Render events':
-        return 'Total count of component re-render events captured across the application.';
-      case 'Render frequency':
-        return 'The human-friendly re-rendering interval or frequency across all active components.';
-      case 'Avg render cost':
-        return 'The average CPU execution duration of a single rendering pass in milliseconds.';
-      case 'Total render cost':
-        return 'The cumulative CPU execution time spent rendering all active components.';
-      case 'Open risks':
-        return 'The total count of performance risk indicators and anti-patterns currently active.';
-      case 'Cleanup risks':
-        return 'The count of active memory cleanup risks (un-unsubscribed RxJS subscriptions, intervals, list keys, etc.).';
-      case 'Render hotspots':
-        return 'Components that re-render excessively, causing significant CPU bottlenecks.';
-      default:
-        return '';
-    }
-  }
-
-  // ── Formatting helpers ──
-  formatRenderRate(renderFrequency: number): string {
-    return formatRenderRate(renderFrequency);
-  }
-
-  renderFrequencyClass(freq: number): string {
-    if (freq <= 0) return 'text-gray-400';
-    if (freq < 1.0) return 'text-green-400';
-    if (freq < 2.0) return 'text-gray-200';
-    if (freq < 5.0) return 'text-amber-400';
-    return 'text-red-400 font-bold';
-  }
-
-  renderFrequencyRating(freq: number): string {
-    if (freq <= 0) return 'Idle';
-    if (freq < 1.0) return 'Optimal';
-    if (freq < 2.0) return 'Normal';
-    if (freq < 5.0) return 'Watch';
-    return 'Critical';
-  }
-
-  renderFrequencyRatingClass(freq: number): string {
-    switch (this.renderFrequencyRating(freq)) {
-      case 'Optimal':  return 'text-green-400 bg-green-500/15 border-green-500/30';
-      case 'Normal':   return 'text-gray-300 bg-gray-700/25 border-gray-600/30';
-      case 'Watch':    return 'text-amber-400 bg-amber-500/15 border-amber-500/30';
-      case 'Critical': return 'text-red-400 bg-red-500/15 border-red-500/30';
-      default:         return 'text-gray-500 bg-gray-800/25 border-gray-700/30';
-    }
-  }
-
-  /**
-   * Inline styles for the evidence-chip frequency badge in the hotspot list.
-   * Uses [ngStyle] to sidestep Angular ViewEncapsulation specificity issues
-   * that prevent Tailwind utility classes from overriding scoped SCSS rules.
-   */
-  renderFrequencyChipStyle(freq: number): Record<string, string> {
-    if (freq <= 0 || (freq >= 1.0 && freq < 2.0)) return {};
-    if (freq < 1.0) return { 'border-color': 'rgb(74 222 128 / 0.45)', color: 'rgb(74 222 128)' };
-    if (freq < 5.0) return { 'border-color': 'rgb(251 191 36 / 0.45)', color: 'rgb(251 191 36)' };
-    return { 'border-color': 'rgb(248 113 113 / 0.45)', color: 'rgb(248 113 113)' };
-  }
-
-  renderRate(): string {
-    const events = this.state.renderEvents();
-    if (events.length === 0) return '0.0';
-
-    const activeFlowEvents = this.state.flowEvents();
-    
-    const routeChangesCount = activeFlowEvents.filter(e => 
-      e.type === 'route-change' && 
-      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
-    ).length;
-
-    const userInteractionsCount = activeFlowEvents.filter(e => 
-      e.type === 'user-interaction' && 
-      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
-    ).length || events.filter(r => !!r.interactionComponent).length;
-
-    const microTasksCount = events.reduce((sum, r) => {
-      const hasMicrotask = r.causes.some(c => c.type === 'zone' && (c.source === 'Promise.then' || c.source?.includes('Promise') || c.source?.includes('microTask')));
-      return sum + (hasMicrotask ? 1 : 0);
-    }, 0);
-
-    const serverPushesCount = activeFlowEvents.filter(e => 
-      e.type === 'http-response' && 
-      events.some(r => Math.abs(r.timestamp - e.timestamp) <= 1000)
-    ).length || events.reduce((sum, r) => {
-      const hasServerPush = r.causes.some(c => c.type === 'zone' && (c.source === 'XMLHttpRequest' || c.source?.includes('fetch') || c.source?.includes('WebSocket')));
-      return sum + (hasServerPush ? 1 : 0);
-    }, 0);
-
-    const totalTriggerEvents = routeChangesCount + userInteractionsCount + microTasksCount + serverPushesCount;
-    const rate = totalTriggerEvents > 0 ? (events.length / totalTriggerEvents) : 1;
-    return rate.toFixed(1);
-  }
-
-  averageRenderDuration(): string {
-    const events = this.state.renderEvents();
-    if (events.length === 0) return '0.0';
-    const total = events.reduce((sum, e) => sum + e.duration, 0);
-    return (total / events.length).toFixed(1);
-  }
-
-  formatCauses(cause: string): string {
-    const map: Record<string, string> = {
-      zone: 'Zone Pollution',
-      parent: 'Parent Cascade',
-      input: 'Input Changes',
-      signal: 'Signal Update',
-      'manual-cd': 'Manual Trigger',
-      unknown: 'Unknown',
-    };
-    return map[cause] || cause;
-  }
-
-  scoreClass(score: number): string {
-    if (score >= 90) return 'text-red-400';
-    if (score >= 70) return 'text-amber-400';
-    if (score >= 40) return 'text-yellow-300';
-    return 'text-green-400';
-  }
-
-  riskLabel(score: number): string {
-    if (score >= 90) return 'critical';
-    if (score >= 70) return 'high';
-    if (score >= 40) return 'watch';
+  // ── Honest label/format helpers ──
+  private mapSeverity(sev: string): AttentionSeverity {
+    if (sev === 'CRITICAL') return 'high';
+    if (sev === 'WARNING') return 'medium';
     return 'low';
   }
 
-  causeLabel(cause: ComponentHotspot['primaryCause']): string {
-    switch (cause) {
-      case 'signal': return 'Signal';
-      case 'input': return 'Input';
-      case 'zone': return 'Zone';
-      case 'parent': return 'Cascade';
-      case 'manual-cd': return 'Manual CD';
-      default: return 'Unknown';
+  /** Boundary → a plain, honest trigger label (boundary-level granularity only). */
+  private boundaryLabel(s: ExecutionSession): string {
+    switch (s.boundary) {
+      case 'user-interaction': return 'User interaction';
+      case 'route-navigation': return 'Route change';
+      case 'component-bootstrap': return 'Initial load';
+      case 'timer': return 'Timer';
+      case 'websocket': return 'WebSocket message';
+      case 'background-task': return 'Background task';
+      case 'manual-refresh': return 'Manual refresh';
+      default: return 'Activity';
+    }
+  }
+  private boundaryKind(s: ExecutionSession): string {
+    switch (s.boundary) {
+      case 'user-interaction': return 'User click';
+      case 'route-navigation': return s.toRoute ? `→ ${s.toRoute}` : 'Route change';
+      case 'component-bootstrap': return 'Initial load';
+      case 'timer': return 'Timer fired';
+      case 'websocket': return 'Socket message';
+      default: return 'Runtime activity';
+    }
+  }
+  private boundaryIcon(s: ExecutionSession): ActivityRow['icon'] {
+    switch (s.boundary) {
+      case 'user-interaction': return 'user';
+      case 'route-navigation': return 'route';
+      case 'component-bootstrap': return 'bootstrap';
+      case 'timer': return 'timer';
+      case 'websocket': return 'websocket';
+      default: return 'other';
     }
   }
 
-  changeClass(verdict: CompareMetric['verdict']): string {
-    switch (verdict) {
-      case 'better': return 'text-green-300 bg-green-500/15 border-green-500/30';
-      case 'worse': return 'text-red-300 bg-red-500/15 border-red-500/30';
-      case 'same': return 'text-gray-300 bg-gray-700/25 border-gray-600/60';
-    }
+  private formatClock(ts: number): string {
+    const d = new Date(ts);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   }
-
-  verdictClass(verdict: CompareMetric['verdict']): string {
-    switch (verdict) {
-      case 'better': return 'text-green-400';
-      case 'worse': return 'text-red-400';
-      case 'same': return 'text-gray-400';
-    }
+  private formatSpan(ms: number): string {
+    return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
   }
-
-  verdictLabel(verdict: CompareMetric['verdict']): string {
-    switch (verdict) {
-      case 'better': return '✓ Better';
-      case 'worse': return '✗ Worse';
-      case 'same': return '— Same';
-    }
-  }
-
-  metricWhyLabel(label: string, verdict: CompareMetric['verdict']): string {
-    if (verdict === 'same') return '';
-    const better = verdict === 'better';
-    switch (label) {
-      case 'Render events': return better ? 'Fewer total re-renders' : 'More components re-rendering';
-      case 'Render frequency': return better ? 'Lower render rate per minute' : 'Higher render rate — longer recording may skew this';
-      case 'Avg render cost': return better ? 'Each render is faster' : 'Each render takes longer';
-      case 'Total render cost': return better ? 'Less total CPU time in renders' : 'More total CPU time spent rendering';
-      case 'Open risks': return better ? 'Fewer issues detected' : 'New issues surfaced';
-      case 'Cleanup risks': return better ? 'Fewer memory leak risks' : 'New teardown issues appeared';
-      case 'Render hotspots': return better ? 'Fewer high-frequency components' : 'More components rendering excessively';
-      default: return '';
-    }
-  }
-
-  // ── Private helpers ──
-  private lowerIsBetter(
-    label: string,
-    baseline: number,
-    current: number,
-    delta: number,
-    unit = '',
-    formatFn?: (val: number) => string
-  ): CompareMetric {
-    return {
-      label,
-      baseline: formatFn ? formatFn(baseline) : this.fmtValue(baseline, unit),
-      current: formatFn ? formatFn(current) : this.fmtValue(current, unit),
-      delta: formatFn
-        ? `${delta > 0 ? '+' : ''}${formatFn(delta)}`
-        : this.fmtDelta(delta, unit),
-      verdict: delta < 0 ? 'better' : delta > 0 ? 'worse' : 'same',
-    };
-  }
-
-  private fmtValue(value: number, unit: string): string {
-    const rounded = Math.abs(value) >= 10 || unit === ''
-      ? Math.round(value).toString()
-      : value.toFixed(1);
-    return unit ? `${rounded}${unit}` : rounded;
-  }
-
-  private fmtDelta(value: number, unit: string): string {
-    if (value === 0) return unit ? `0${unit}` : '0';
-    const rounded = Math.abs(value) >= 10 || unit === ''
-      ? Math.round(Math.abs(value)).toString()
-      : Math.abs(value).toFixed(1);
-    return `${value > 0 ? '+' : '-'}${rounded}${unit}`;
+  private formatAgo(ts: number): string {
+    const secs = Math.max(0, Math.floor((this.now() - ts) / 1000));
+    if (secs < 60) return `${secs}s ago`;
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return `${mins}m ago`;
+    return `${Math.floor(mins / 60)}h ago`;
   }
 }

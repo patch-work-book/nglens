@@ -1,5 +1,33 @@
 // src/types/render-events.ts
 
+/**
+ * Rich, structured description of a user interaction, captured at the DOM
+ * source. Used to classify and label the interaction accurately in the panel.
+ */
+export interface InteractionInfo {
+  /** DOM event type: 'click' | 'input' | 'keydown' | 'change' | 'pointerdown' | 'submit' ... */
+  eventType: string;
+  /** Lowercased tag name of the target element: 'button' | 'a' | 'input' | 'select' ... */
+  tag: string;
+  /** The `type` attribute for inputs/buttons: 'text' | 'checkbox' | 'submit' | 'radio' ... */
+  inputType?: string;
+  /** ARIA role, if present. */
+  role?: string;
+  /** True if the element (or an ancestor) is an anchor with an href. */
+  isLink?: boolean;
+  /** True if the element resolves to a button (tag, role, or submit/button input). */
+  isButton?: boolean;
+  /** True if the element is a text-entry field. */
+  isTextField?: boolean;
+  /**
+   * Best human-readable name for the target: accessible name derived from
+   * aria-label / title / textContent / value / placeholder / alt / name.
+   */
+  accessibleName?: string;
+  /** For keydown events: the key that was pressed. */
+  key?: string;
+}
+
 export interface RenderEvent {
   componentName: string;
   timestamp: number;
@@ -11,6 +39,13 @@ export interface RenderEvent {
   interactionComponent?: string;
   /** CSS-like selector of the element the user interacted with */
   interactionTarget?: string;
+  /**
+   * Structured metadata about the user interaction that triggered this render.
+   * Captured at the source (render-tracker) so the panel can label chips
+   * accurately (e.g. "Click Save button", "Type in Search") instead of
+   * re-parsing a lossy selector string.
+   */
+  interactionInfo?: InteractionInfo;
   /** Parent component in the render cascade (null if this is the top-level trigger) */
   parentComponent?: string | null;
   /** Depth in the cascade tree (0 = triggered directly, 1 = child of trigger, etc.) */

@@ -16,7 +16,7 @@
 import { Component, Input, Output, EventEmitter, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import type { TreeNode } from '@nglens/types/execution-tree';
-import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/types/execution-narrative';
+import type { ExecutionNarrative, Subsection } from '@nglens/types/execution-narrative';
 
 @Component({
   selector: 'app-inspector-modal',
@@ -190,7 +190,7 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
     .inspector-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.6);
+      background: rgba(0, 0, 0, 0.2);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -204,15 +204,15 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
     }
 
     .inspector-panel {
-      background: rgb(17, 24, 39);
-      border: 1px solid rgb(55, 65, 81);
+      background: var(--bg-primary);
+      border: 1px solid var(--border-primary);
       border-radius: 8px;
       width: 90%;
       max-width: 520px;
       max-height: 80vh;
       display: flex;
       flex-direction: column;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.2);
       animation: slideUp 0.12s ease-out;
     }
 
@@ -227,8 +227,8 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
       align-items: center;
       justify-content: space-between;
       padding: 12px 16px;
-      border-bottom: 1px solid rgb(55, 65, 81);
-      background: rgb(31, 41, 55);
+      border-bottom: 1px solid var(--border-primary);
+      background: var(--bg-secondary);
       border-radius: 8px 8px 0 0;
     }
 
@@ -243,7 +243,7 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
     .header-title {
       font-size: 13px;
       font-weight: 600;
-      color: rgb(243, 244, 246);
+      color: var(--text-primary);
     }
 
     .close-btn {
@@ -251,7 +251,7 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
       height: 24px;
       border: none;
       background: none;
-      color: rgb(156, 163, 175);
+      color: var(--text-muted);
       font-size: 16px;
       cursor: pointer;
       border-radius: 4px;
@@ -261,8 +261,8 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
       transition: all 0.15s;
 
       &:hover {
-        color: white;
-        background: rgba(255, 255, 255, 0.1);
+        color: var(--text-primary);
+        background: rgba(var(--color-light), 0.1);
       }
     }
 
@@ -275,7 +275,7 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
 
     /* ═══ SECTIONS (Dropdowns) ═══ */
     .section {
-      border-bottom: 1px solid rgba(55, 65, 81, 0.5);
+      border-bottom: 1px solid rgba(var(--border-primary), 0.5);
 
       &:last-child { border-bottom: none; }
     }
@@ -288,7 +288,7 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
       padding: 10px 16px;
       border: none;
       background: none;
-      color: rgb(209, 213, 219);
+      color: var(--text-secondary);
       font-size: 12px;
       font-weight: 500;
       cursor: pointer;
@@ -296,13 +296,13 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
       transition: background 0.1s;
 
       &:hover {
-        background: rgba(255, 255, 255, 0.03);
+        background: rgba(var(--color-light), 0.03);
       }
     }
 
     .toggle {
       font-size: 9px;
-      color: rgb(107, 114, 128);
+      color: var(--text-muted);
       width: 12px;
       text-align: center;
       flex-shrink: 0;
@@ -321,26 +321,26 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
       font-size: 10px;
       padding: 2px 6px;
       border-radius: 3px;
-      background: rgba(99, 102, 241, 0.2);
-      color: rgb(165, 180, 252);
+      background: rgba(var(--color-api), 0.2);
+      color: var(--color-api);
       font-weight: 500;
       flex-shrink: 0;
 
       &.subtle {
-        background: rgba(107, 114, 128, 0.2);
-        color: rgb(156, 163, 175);
+        background: rgba(var(--text-muted), 0.2);
+        color: var(--text-muted);
       }
 
       &.warn {
-        background: rgba(217, 119, 6, 0.2);
-        color: rgb(253, 186, 116);
+        background: rgba(var(--color-store), 0.2);
+        color: var(--color-store);
       }
     }
 
     .section-body {
       padding: 4px 16px 12px 36px;
       font-size: 11px;
-      color: rgb(156, 163, 175);
+      color: var(--text-muted);
       animation: expand 0.1s ease-out;
     }
 
@@ -352,11 +352,11 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
     /* ═══ NARRATIVE ═══ */
     .narrative-body p {
       margin: 0;
-      color: rgb(209, 213, 219);
+      color: var(--text-secondary);
       line-height: 1.5;
       padding: 8px 12px;
-      background: rgba(59, 130, 246, 0.08);
-      border-left: 3px solid rgb(59, 130, 246);
+      background: var(--color-blue-bg-light);
+      border-left: 3px solid var(--color-info);
       border-radius: 4px;
     }
 
@@ -375,20 +375,20 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
 
       &.is-slow {
         .timeline-value {
-          color: rgb(254, 202, 202);
+          color: var(--color-critical);
           font-weight: 600;
         }
       }
     }
 
     .timeline-label {
-      color: rgb(107, 114, 128);
+      color: var(--text-muted);
     }
 
     .timeline-value {
-      font-family: 'Monaco', 'Menlo', monospace;
+      font-family: inherit;
       font-size: 11px;
-      color: rgb(209, 213, 219);
+      color: var(--text-secondary);
     }
 
     /* ═══ CHANGES (DIFFS) ═══ */
@@ -400,9 +400,9 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
 
     .change-row {
       padding: 6px 8px;
-      background: rgba(30, 41, 59, 0.6);
+      background: rgba(var(--bg-secondary), 0.6);
       border-radius: 4px;
-      border: 1px solid rgba(55, 65, 81, 0.5);
+      border: 1px solid rgba(var(--border-primary), 0.5);
     }
 
     .change-header {
@@ -410,39 +410,39 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
     }
 
     .change-entity {
-      color: rgb(165, 243, 252);
+      color: var(--color-api);
       font-weight: 500;
     }
 
     .change-field {
-      color: rgb(156, 163, 175);
+      color: var(--text-muted);
     }
 
     .change-diff {
       display: flex;
       align-items: center;
       gap: 6px;
-      font-family: 'Monaco', 'Menlo', monospace;
+      font-family: inherit;
       font-size: 10px;
     }
 
     .diff-before {
-      color: rgb(252, 165, 165);
+      color: var(--color-critical);
       text-decoration: line-through;
     }
 
     .diff-arrow {
-      color: rgb(107, 114, 128);
+      color: var(--text-muted);
     }
 
     .diff-after {
-      color: rgb(134, 239, 172);
+      color: var(--color-signal);
     }
 
     .change-meaning {
       margin-top: 4px;
       font-size: 10px;
-      color: rgb(156, 163, 175);
+      color: var(--text-muted);
       font-style: italic;
     }
 
@@ -455,22 +455,22 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
 
     .consumer-chip {
       padding: 4px 8px;
-      background: rgba(34, 197, 94, 0.12);
-      border: 1px solid rgba(34, 197, 94, 0.3);
+      background: rgba(var(--color-signal), 0.12);
+      border: 1px solid rgba(var(--color-signal), 0.3);
       border-radius: 4px;
       font-size: 11px;
-      color: rgb(134, 239, 172);
+      color: var(--color-signal);
     }
 
     /* ═══ PAYLOAD ═══ */
     .payload-code {
       display: block;
       padding: 8px 10px;
-      background: rgba(0, 0, 0, 0.3);
+      background: rgba(0, 0, 0, 0.2);
       border-radius: 4px;
-      font-family: 'Monaco', 'Menlo', monospace;
+      font-family: inherit;
       font-size: 10px;
-      color: rgb(165, 243, 252);
+      color: var(--color-api);
       word-break: break-all;
       white-space: pre-wrap;
     }
@@ -484,11 +484,11 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
 
     .observation-item {
       padding: 6px 8px;
-      background: rgba(217, 119, 6, 0.08);
-      border-left: 2px solid rgb(217, 119, 6);
+      background: rgba(var(--color-store), 0.08);
+      border-left: 2px solid var(--color-store);
       border-radius: 3px;
       font-size: 11px;
-      color: rgb(253, 224, 71);
+      color: var(--color-store);
     }
 
     /* ═══ FOOTER ═══ */
@@ -496,23 +496,23 @@ import type { ExecutionNarrative, Subsection, ChapterChange } from '@nglens/type
       display: flex;
       justify-content: flex-end;
       padding: 10px 16px;
-      border-top: 1px solid rgb(55, 65, 81);
-      background: rgb(31, 41, 55);
+      border-top: 1px solid var(--border-primary);
+      background: var(--bg-secondary);
       border-radius: 0 0 8px 8px;
     }
 
     .close-action {
       padding: 6px 14px;
-      border: 1px solid rgb(75, 85, 99);
-      background: rgb(55, 65, 81);
-      color: rgb(229, 231, 235);
+      border: 1px solid var(--border-primary);
+      background: var(--border-primary);
+      color: var(--text-primary);
       border-radius: 4px;
       font-size: 11px;
       font-weight: 500;
       cursor: pointer;
       transition: background 0.15s;
 
-      &:hover { background: rgb(75, 85, 99); }
+      &:hover { background: var(--border-primary); }
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,

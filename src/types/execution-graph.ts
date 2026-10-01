@@ -15,7 +15,7 @@
  * Every causal relationship becomes a GraphEdge.
  */
 
-import type { RuntimeEvent, SessionBoundary } from './execution-intelligence';
+import type { RuntimeEvent } from './execution-intelligence';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // GRAPH NODES

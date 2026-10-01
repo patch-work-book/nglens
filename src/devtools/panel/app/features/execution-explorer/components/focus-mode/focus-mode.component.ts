@@ -7,7 +7,7 @@
  * - Child components impacted
  * - Optimization suggestions
  */
-import { Component, input, output, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, input, output, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 export interface ExecutionStep {
@@ -278,33 +278,33 @@ export interface FocusData {
     }
 
     .marker-api {
-      background-color: rgba(59, 130, 246, 0.2);
+      background-color: var(--color-blue-bg-stronger);
       color: var(--color-info);
     }
 
     .marker-store {
-      background-color: rgba(251, 191, 36, 0.2);
+      background-color: var(--color-yellow-bg-medium);
       color: var(--color-warning);
     }
 
     .marker-signal {
-      background-color: rgba(139, 92, 246, 0.2);
-      color: #A78BFA;
+      background-color: var(--color-purple-bg);
+      color: var(--color-render);
     }
 
     .marker-lifecycle {
-      background-color: rgba(34, 197, 94, 0.2);
+      background-color: var(--color-green-bg);
       color: var(--color-success);
     }
 
     .marker-render {
-      background-color: rgba(239, 68, 68, 0.2);
+      background-color: var(--color-red-bg-stronger);
       color: var(--color-error);
     }
 
     .marker-detection {
-      background-color: rgba(94, 234, 212, 0.2);
-      color: #2DD4BF;
+      background-color: var(--color-cyan-bg);
+      color: var(--color-api);
     }
 
     .timeline-content {
@@ -390,12 +390,12 @@ export interface FocusData {
     }
 
     .state-badge.changed {
-      background-color: rgba(251, 191, 36, 0.2);
+      background-color: var(--color-yellow-bg-medium);
       color: var(--color-warning);
     }
 
     .state-badge.readonly {
-      background-color: rgba(149, 163, 184, 0.2);
+      background-color: var(--color-gray-bg-light);
       color: var(--color-text-tertiary);
     }
 
@@ -443,17 +443,17 @@ export interface FocusData {
     }
 
     .tip-warning {
-      background-color: rgba(251, 191, 36, 0.1);
+      background-color: var(--color-yellow-bg-light);
       color: var(--color-warning);
     }
 
     .tip-error {
-      background-color: rgba(239, 68, 68, 0.1);
+      background-color: var(--color-red-bg-light);
       color: var(--color-error);
     }
 
     .tip-info {
-      background-color: rgba(59, 130, 246, 0.1);
+      background-color: var(--color-blue-bg-lighter);
       color: var(--color-info);
     }
 

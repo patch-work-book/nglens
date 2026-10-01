@@ -85,8 +85,8 @@ import { Phase, StoryStep } from '../../../services/execution-story.service';
         flex-direction: column;
         gap: 16px;
         padding: 16px;
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        border: 1px solid #0f4c75;
+        background: linear-gradient(135deg, var(--ri-bg-deep) 0%, var(--ri-bg-card) 100%);
+        border: 1px solid var(--ri-bg-raised);
         border-radius: 8px;
       }
       .timeline-header {
@@ -96,11 +96,11 @@ import { Phase, StoryStep } from '../../../services/execution-story.service';
         font-size: 12px;
       }
       .header-label {
-        color: #64b5f6;
+        color: var(--ri-accent-blue);
         font-weight: 600;
       }
       .header-meta {
-        color: #90caf9;
+        color: var(--ri-accent-blue);
         font-size: 11px;
       }
       .timeline {
@@ -114,7 +114,7 @@ import { Phase, StoryStep } from '../../../services/execution-story.service';
         left: 0;
         right: 0;
         height: 2px;
-        background: linear-gradient(90deg, #0f4c75, #64b5f6, #0f4c75);
+        background: linear-gradient(90deg, var(--ri-bg-raised), var(--ri-accent-blue), var(--ri-bg-raised));
       }
       .phase {
         position: absolute;
@@ -132,28 +132,28 @@ import { Phase, StoryStep } from '../../../services/execution-story.service';
         align-items: center;
         justify-content: center;
         font-size: 16px;
-        border: 2px solid #0f4c75;
-        background: #16213e;
+        border: 2px solid var(--ri-bg-raised);
+        background: var(--ri-bg-card);
       }
       .phase-trigger {
-        background: #1565c0;
-        border-color: #64b5f6;
+        background: var(--ri-accent-blue);
+        border-color: var(--ri-accent-blue);
       }
       .phase-apis {
-        background: #e65100;
-        border-color: #ff9800;
+        background: var(--ri-accent-amber);
+        border-color: var(--ri-accent-amber);
       }
       .phase-state {
-        background: #2e7d32;
-        border-color: #81c784;
+        background: var(--ri-accent-green);
+        border-color: var(--ri-accent-green);
       }
       .phase-renders {
-        background: #512da8;
-        border-color: #ba68c8;
+        background: var(--ri-accent-indigo);
+        border-color: var(--ri-accent-purple);
       }
       .phase-complete {
-        background: #1565c0;
-        border-color: #64b5f6;
+        background: var(--ri-accent-blue);
+        border-color: var(--ri-accent-blue);
       }
       .phase-label {
         display: flex;
@@ -165,11 +165,11 @@ import { Phase, StoryStep } from '../../../services/execution-story.service';
       .label-text {
         font-size: 11px;
         font-weight: 600;
-        color: #e0e0e0;
+        color: var(--ri-text-bright);
       }
       .label-time {
         font-size: 9px;
-        color: #90caf9;
+        color: var(--ri-accent-blue);
       }
       .steps-list {
         display: flex;
@@ -181,18 +181,18 @@ import { Phase, StoryStep } from '../../../services/execution-story.service';
         display: flex;
         gap: 12px;
         padding: 10px 12px;
-        background: rgba(255, 255, 255, 0.03);
-        border-left: 3px solid #0f4c75;
+        background: color-mix(in srgb, var(--ri-text-bright) 3%, transparent);
+        border-left: 3px solid var(--ri-bg-raised);
         border-radius: 4px;
       }
       .step-item.severity-error {
-        border-left-color: #ff5252;
+        border-left-color: var(--ri-accent-red);
       }
       .step-item.severity-warn {
-        border-left-color: #ffb74d;
+        border-left-color: var(--ri-accent-amber);
       }
       .step-item.severity-ok {
-        border-left-color: #81c784;
+        border-left-color: var(--ri-accent-green);
       }
       .step-indicator {
         font-size: 16px;
@@ -211,16 +211,16 @@ import { Phase, StoryStep } from '../../../services/execution-story.service';
         font-size: 12px;
       }
       .step-label {
-        color: #e0e0e0;
+        color: var(--ri-text-bright);
         font-weight: 500;
       }
       .step-time {
-        color: #90caf9;
+        color: var(--ri-accent-blue);
         font-size: 11px;
       }
       .step-detail {
         font-size: 11px;
-        color: #b0bec5;
+        color: var(--ri-text-primary);
       }
       .stats-footer {
         display: grid;
@@ -238,12 +238,12 @@ import { Phase, StoryStep } from '../../../services/execution-story.service';
         text-align: center;
       }
       .stat-label {
-        color: #90caf9;
+        color: var(--ri-accent-blue);
         text-transform: uppercase;
         font-size: 9px;
       }
       .stat-value {
-        color: #64b5f6;
+        color: var(--ri-accent-blue);
         font-weight: 600;
       }
     `,

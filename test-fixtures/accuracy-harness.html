@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ngLens Accuracy Harness</title>
+  <!--
+    KNOWN-BEHAVIOR TEST APP FOR ngLens ACCURACY VERIFICATION
+    ========================================================
+    This is a real Angular app whose render behavior is KNOWN by construction.
+    Load it, open ngLens (Components tab), Start profiling, and trigger each
+    scenario. Compare ngLens's output to the "EXPECTED" notes in each panel and
+    to the console.count() ground-truth logs.
+
+    Every component logs a console.count() keyed by its name each time its
+    template runs (via a getter read in the template). That console number is
+    the GROUND TRUTH for "how many times did this component's template execute".
+
+    See ACCURACY-VERIFICATION.md for the full checklist.
+
+    Angular is loaded as ES modules from the esm.sh CDN, pinned to v20 which
+    exposes the same global `ng` debug API ngLens instruments. If your target
+    app uses a different major, the render-count semantics are unchanged.
+  -->
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; background: #0f1419; color: #e8ecf1; }
+    h1 { font-size: 18px; padding: 16px 20px; margin: 0; border-bottom: 1px solid #2d3748; }
+    .intro { padding: 12px 20px; color: #a0aec0; font-size: 13px; line-height: 1.6; max-width: 900px; }
+    .intro code { background: #1c2432; padding: 1px 5px; border-radius: 3px; color: #67e8f9; }
+    scenario-parent-cascade, scenario-own-signal, scenario-onpush, scenario-api { display: block; }
+    .card { border: 1px solid #2d3748; border-radius: 8px; margin: 16px 20px; padding: 16px; background: #151b23; }
+    .card h2 { font-size: 15px; margin: 0 0 4px; }
+    .card .expected { font-size: 12px; color: #6ee7b7; margin: 4px 0 12px; }
+    .card .caveat { font-size: 12px; color: #fcd34d; margin: 4px 0 12px; }
+    button { background: #3b82f6; color: #fff; border: none; border-radius: 5px; padding: 7px 14px; font-size: 13px; cursor: pointer; margin-right: 8px; }
+    button:hover { background: #2563eb; }
+    .child { border-left: 3px solid #4a5568; padding: 6px 10px; margin-top: 8px; background: #1c2432; border-radius: 4px; font-size: 13px; }
+    .val { font-family: monospace; color: #fcd34d; }
+    .hint { font-size: 11px; color: #718096; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>🔬 ngLens Accuracy Harness</h1>
+  <div class="intro">
+    Open DevTools → <strong>ngLens → Components</strong>, click <strong>Start</strong>, then trigger a scenario below.
+    Open the <strong>Console</strong> too — each component logs <code>console.count()</code> when its template runs.
+    That console number is the ground truth to compare against ngLens's render count.
+    Full checklist in <code>ACCURACY-VERIFICATION.md</code>.
+  </div>
+
+  <app-root></app-root>
+
+  <script type="module">
+    import {
+      Component, signal, ChangeDetectionStrategy, Input, importProvidersFrom,
+    } from 'https://esm.sh/@angular/core@20';
+    import { bootstrapApplication } from 'https://esm.sh/@angular/platform-browser@20';
+    import { CommonModule } from 'https://esm.sh/@angular/common@20';
+    import { BehaviorSubject } from 'https://esm.sh/rxjs@7';
+
+    // NOTE: we intentionally do NOT enable prod mode — ngLens relies on the dev
+    // `ng` global debug API, which is only present in development builds.
+
+    // ── Ground-truth render counter ──
+    // Reading `tick` in a template forces a fresh count each time the template
+    // is evaluated. We log via console.count keyed by component name.
+    function renderMarker(name) {
+      // Called from template getter on every template execution.
+      console.count(`[render] ${name}`);
+      return '';
+    }
+
+    // ═══ SCENARIO 1: Pure parent cascade (Default CD child, no own state) ═══
+    // Clicking bumps the PARENT's signal. The child reads NOTHING of its own,
+    // but Default change detection re-checks/re-renders it every parent cycle.
+    // EXPECTED in ngLens: child = Parent propagation, Own trigger 0×, Medium.
+    @Component({
+      selector: 'cascade-child',
+      standalone: true,
+      template: `<div class="child">CascadeChildComponent (Default CD) {{ marker }}</div>`,
+    })
+    class CascadeChildComponent {
+      get marker() { return renderMarker('CascadeChildComponent'); }
+    }
+
+    @Component({
+      selector: 'scenario-parent-cascade',
+      standalone: true,
+      imports: [CascadeChildComponent],
+      template: `
+        <div class="card">
+          <h2>1 · Pure parent cascade</h2>
+          <p class="expected">EXPECTED: CascadeChildComponent → Parent propagation · Own trigger 0× · Medium confidence.</p>
+          <button (click)="bump()">Bump parent ({{ n() }})</button>
+          <div>ParentCascadeComponent {{ marker }}</div>
+          <cascade-child></cascade-child>
+          <p class="hint">Child has no inputs/signals of its own — any re-render is parent-driven.</p>
+        </div>`,
+    })
+    class ParentCascadeComponent {
+      n = signal(0);
+      get marker() { return renderMarker('ParentCascadeComponent'); }
+      bump() { this.n.update(v => v + 1); }
+    }
+
+    // ═══ SCENARIO 2: Own signal trigger ═══
+    // The child owns a signal and updates it via its own button.
+    // EXPECTED in ngLens: OwnSignalComponent → Own trigger (signal) · High.
+    @Component({
+      selector: 'scenario-own-signal',
+      standalone: true,
+      template: `
+        <div class="card">
+          <h2>2 · Own signal trigger</h2>
+          <p class="expected">EXPECTED: OwnSignalComponent → Own trigger (signal) · High confidence.</p>
+          <button (click)="inc()">Update own signal ({{ count() }})</button>
+          <div>OwnSignalComponent — value <span class="val">{{ count() }}</span> {{ marker }}</div>
+        </div>`,
+    })
+    class OwnSignalComponent {
+      count = signal(0);
+      get marker() { return renderMarker('OwnSignalComponent'); }
+      inc() { this.count.update(v => v + 1); }
+    }
+
+    // ═══ SCENARIO 3: OnPush that must NOT re-render ═══
+    // OnPush child whose @Input reference never changes while the parent bumps
+    // its own unrelated signal. The child should be SKIPPED by change detection.
+    // EXPECTED in ngLens: OnPushStableComponent does NOT appear as a render
+    // when you click "Bump parent (input unchanged)". If it does → false positive.
+    @Component({
+      selector: 'onpush-stable',
+      standalone: true,
+      changeDetection: ChangeDetectionStrategy.OnPush,
+      template: `<div class="child">OnPushStableComponent (OnPush) — input <span class="val">{{ data }}</span> {{ marker }}</div>`,
+    })
+    class OnPushStableComponent {
+      @Input() data = 'const';
+      get marker() { return renderMarker('OnPushStableComponent'); }
+    }
+
+    @Component({
+      selector: 'scenario-onpush',
+      standalone: true,
+      imports: [OnPushStableComponent],
+      template: `
+        <div class="card">
+          <h2>3 · OnPush that must NOT re-render</h2>
+          <p class="expected">EXPECTED: OnPushStableComponent does NOT render when input is unchanged.</p>
+          <p class="caveat">If ngLens reports a render here, it is a FALSE POSITIVE.</p>
+          <button (click)="bumpUnrelated()">Bump parent (input unchanged) ({{ n() }})</button>
+          <button (click)="changeInput()">Change input (should render once)</button>
+          <div>OnPushParentComponent {{ marker }}</div>
+          <onpush-stable [data]="inputVal()"></onpush-stable>
+        </div>`,
+    })
+    class OnPushParentComponent {
+      n = signal(0);
+      inputVal = signal('const');
+      get marker() { return renderMarker('OnPushParentComponent'); }
+      bumpUnrelated() { this.n.update(v => v + 1); }
+      changeInput() { this.inputVal.set('changed-' + Date.now()); }
+    }
+
+    // ═══ SCENARIO 4: API-driven render ═══
+    // Component updates only after a fetch() resolves.
+    // EXPECTED in ngLens: ApiDrivenComponent → External (API/state) correlated.
+    @Component({
+      selector: 'scenario-api',
+      standalone: true,
+      template: `
+        <div class="card">
+          <h2>4 · API-driven render</h2>
+          <p class="expected">EXPECTED: ApiDrivenComponent → External (API/state) correlated.</p>
+          <button (click)="load()">Fetch data</button>
+          <div>ApiDrivenComponent — status <span class="val">{{ status() }}</span> {{ marker }}</div>
+        </div>`,
+    })
+    class ApiDrivenComponent {
+      status = signal('idle');
+      get marker() { return renderMarker('ApiDrivenComponent'); }
+      async load() {
+        this.status.set('loading');
+        try {
+          // Public test API — real HTTP so ngLens observes an http-response flow.
+          await fetch('https://jsonplaceholder.typicode.com/todos/1').then(r => r.json());
+          this.status.set('loaded');
+        } catch {
+          this.status.set('error (offline?)');
+        }
+      }
+    }
+
+    // ═══ SCENARIO 5: NgRx-style store dispatch ═══
+    // A minimal store backed by a BehaviorSubject (like NgRx's ActionsSubject).
+    // dispatch() pushes a bracketed action, which ngLens detects as store-dispatch.
+    // EXPECTED in ngLens: a "Store: [Vat] Load Clients" store-dispatch flow, and
+    // StoreDrivenComponent Render Origin = External (API/state).
+    class MiniStore {
+      // Emulates NgRx ActionsSubject — a BehaviorSubject of actions.
+      actions$ = new BehaviorSubject({ type: '@ngrx/store/init' });
+      state = signal(0);
+      dispatch(action) {
+        this.actions$.next(action);           // ← ngLens observes this as store-dispatch
+        if (action.type === '[Vat] Load Clients') {
+          this.state.update(v => v + 1);      // reducer effect → drives the render
+        }
+      }
+    }
+    const miniStore = new MiniStore();
+
+    @Component({
+      selector: 'scenario-store',
+      standalone: true,
+      template: `
+        <div class="card">
+          <h2>5 · NgRx-style store dispatch</h2>
+          <p class="expected">EXPECTED: "Store: [Vat] Load Clients" store-dispatch flow · StoreDrivenComponent → External.</p>
+          <button (click)="dispatch()">Dispatch [Vat] Load Clients</button>
+          <div>StoreDrivenComponent — state <span class="val">{{ value() }}</span> {{ marker }}</div>
+          <p class="hint">Action is a bracketed type object pushed through a BehaviorSubject (NgRx convention).</p>
+        </div>`,
+    })
+    class StoreDrivenComponent {
+      value = miniStore.state;
+      get marker() { return renderMarker('StoreDrivenComponent'); }
+      dispatch() { miniStore.dispatch({ type: '[Vat] Load Clients', payload: { at: Date.now() } }); }
+    }
+
+    // ═══ SCENARIO 6: Facade service method ═══
+    // A facade service whose method mutates state. ngLens patches methods on
+    // classes named *Facade/*Store/*Service and emits facade-method flows.
+    // EXPECTED in ngLens: a "VatFacade.refresh()" facade-method flow, and
+    // FacadeDrivenComponent Render Origin = External (API/state).
+    class VatFacade {
+      total = signal(0);
+      refresh() {                              // ← ngLens observes this as facade-method
+        this.total.update(v => v + 1);
+      }
+    }
+    const vatFacade = new VatFacade();
+
+    @Component({
+      selector: 'scenario-facade',
+      standalone: true,
+      template: `
+        <div class="card">
+          <h2>6 · Facade service method</h2>
+          <p class="expected">EXPECTED: "VatFacade.refresh()" facade-method flow · FacadeDrivenComponent → External.</p>
+          <p class="caveat">Facade capture requires the class name to end in Facade/Store/Service. In this harness the facade is instantiated directly (not via DI), so ngLens's injector-scan patching may not reach it — this scenario primarily documents the expected shape. In a real DI app the facade IS reached.</p>
+          <button (click)="refresh()">Call VatFacade.refresh()</button>
+          <div>FacadeDrivenComponent — total <span class="val">{{ total() }}</span> {{ marker }}</div>
+        </div>`,
+    })
+    class FacadeDrivenComponent {
+      total = vatFacade.total;
+      get marker() { return renderMarker('FacadeDrivenComponent'); }
+      refresh() { vatFacade.refresh(); }
+    }
+
+    // ── Root ──
+    @Component({
+      selector: 'app-root',
+      standalone: true,
+      imports: [ParentCascadeComponent, OwnSignalComponent, OnPushParentComponent, ApiDrivenComponent, StoreDrivenComponent, FacadeDrivenComponent],
+      template: `
+        <scenario-parent-cascade></scenario-parent-cascade>
+        <scenario-own-signal></scenario-own-signal>
+        <scenario-onpush></scenario-onpush>
+        <scenario-api></scenario-api>
+        <scenario-store></scenario-store>
+        <scenario-facade></scenario-facade>`,
+    })
+    class AppComponent {}
+
+    bootstrapApplication(AppComponent).catch(err => console.error(err));
+  </script>
+</body>
+</html>

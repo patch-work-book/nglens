@@ -8,7 +8,7 @@
  * Level 4: Inspector (modal on click of a step)
  */
 
-import { Signal, WritableSignal } from '@angular/core';
+import { WritableSignal } from '@angular/core';
 import type { Chapter, Subsection, ExecutionNarrative } from './execution-narrative';
 import type { RuntimeEvent } from './execution-intelligence';
 

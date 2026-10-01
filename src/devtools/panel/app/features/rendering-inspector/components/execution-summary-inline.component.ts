@@ -54,8 +54,8 @@ export interface InlineSummary {
     `
       .summary-inline {
         padding: 8px 12px;
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        border: 1px solid #0f4c75;
+        background: linear-gradient(135deg, var(--ri-bg-deep) 0%, var(--ri-bg-card) 100%);
+        border: 1px solid var(--ri-bg-raised);
         border-radius: 6px;
         margin-bottom: 12px;
       }
@@ -76,18 +76,18 @@ export interface InlineSummary {
       }
 
       .health-green {
-        background: #1b5e20;
-        color: #4caf50;
+        background: color-mix(in srgb, var(--ri-green) 20%, transparent);
+        color: var(--ri-accent-green);
       }
 
       .health-yellow {
-        background: #f57f17;
-        color: #fff;
+        background: color-mix(in srgb, var(--ri-amber) 20%, transparent);
+        color: var(--ri-accent-amber);
       }
 
       .health-red {
-        background: #b71c1c;
-        color: #ff5252;
+        background: color-mix(in srgb, var(--ri-red) 20%, transparent);
+        color: var(--ri-accent-red);
       }
 
       .metric {
@@ -95,20 +95,20 @@ export interface InlineSummary {
         align-items: center;
         gap: 4px;
         padding: 2px 6px;
-        background: rgba(100, 181, 246, 0.1);
+        background: color-mix(in srgb, var(--ri-blue) 10%, transparent);
         border-radius: 3px;
-        color: #b0bec5;
+        color: var(--ri-text-primary);
         white-space: nowrap;
       }
 
       .metric strong {
-        color: #64b5f6;
+        color: var(--ri-accent-blue);
         font-weight: 600;
       }
 
       .calculations {
         cursor: pointer;
-        color: #64b5f6;
+        color: var(--ri-accent-blue);
         font-size: 10px;
         padding: 2px 4px;
         border-radius: 2px;
@@ -119,15 +119,15 @@ export interface InlineSummary {
       }
 
       .calculations summary:hover {
-        background: rgba(100, 181, 246, 0.1);
+        background: color-mix(in srgb, var(--ri-blue) 10%, transparent);
       }
 
       .calc-detail {
         padding: 4px 8px;
-        color: #90caf9;
-        font-family: monospace;
+        color: var(--ri-accent-blue);
+        font-family: inherit;
         font-size: 10px;
-        border-left: 2px solid #64b5f6;
+        border-left: 2px solid var(--ri-accent-blue);
         padding-left: 8px;
         margin-top: 4px;
       }

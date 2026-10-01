@@ -18,11 +18,9 @@
 import { Injectable } from '@angular/core';
 import type {
   ExecutionStory,
-  ExecutionStep,
   InsightMessage,
   RuntimeEvent,
   InsightSeverity,
-  InsightCategory,
 } from '../../../../types/execution-intelligence';
 
 @Injectable({ providedIn: 'root' })

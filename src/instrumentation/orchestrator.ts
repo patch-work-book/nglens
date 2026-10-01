@@ -66,10 +66,18 @@ function forEachAngularComponent(
   const effectiveLimit = Math.min(elements.length, limit);
 
   for (let i = 0; i < effectiveLimit; i++) {
-    const component = ng.getComponent(elements[i]);
-    if (!component) continue;
-    // Let errors bubble up - don't silently continue
-    visitor(component, i);
+    const element = elements[i];
+    // Validate element is a proper DOM Element before calling ng.getComponent()
+    if (!(element instanceof Element)) continue;
+
+    try {
+      const component = ng.getComponent(element);
+      if (!component) continue;
+      visitor(component, i);
+    } catch {
+      // Skip elements that ng.getComponent() fails on
+      continue;
+    }
   }
 }
 
@@ -83,12 +91,21 @@ function findAngularComponentByName(name: string): any | null {
 
   const elements = document.querySelectorAll('*');
   for (let i = 0; i < elements.length; i++) {
-    const component = ng.getComponent(elements[i]);
-    if (!component) continue;
+    const element = elements[i];
+    // Validate element is a proper DOM Element before calling ng.getComponent()
+    if (!(element instanceof Element)) continue;
 
-    const componentName = component.constructor?.name ?? '';
-    if (componentName === name) {
-      return component;
+    try {
+      const component = ng.getComponent(element);
+      if (!component) continue;
+
+      const componentName = component.constructor?.name ?? '';
+      if (componentName === name) {
+        return component;
+      }
+    } catch {
+      // Skip elements that ng.getComponent() fails on
+      continue;
     }
   }
 

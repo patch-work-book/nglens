@@ -2,7 +2,7 @@
 // Deep instrumentation: captures user interactions, builds parent→child cascade,
 // filters Angular internals, and properly attributes causes.
 
-import type { RenderEvent, RenderCause, EventBatch, RenderReason, FlowEvent } from '../types/render-events';
+import type { RenderEvent, RenderCause, EventBatch, RenderReason, FlowEvent, InteractionInfo } from '../types/render-events';
 
 const PAGE_TO_CONTENT_EVENT = '__ng_perf_to_content';
 
@@ -54,10 +54,12 @@ function isInternalName(name: string): boolean {
 
 /** Describes a captured user interaction (click, keydown, input). */
 interface CapturedInteraction {
-  type: string;           // 'click' | 'input' | 'keydown' | 'scroll'
+  type: string;           // 'click' | 'input' | 'keydown' | 'change' | 'pointerdown'
   targetSelector: string; // e.g. 'button.dropdown-toggle'
   ownerComponent: string; // component that owns the target element
   timestamp: number;
+  /** Rich structured metadata for accurate chip labelling in the panel. */
+  info: InteractionInfo;
 }
 
 export class RenderTracker {
@@ -205,35 +207,55 @@ export class RenderTracker {
   private noRenderTimeout: ReturnType<typeof setTimeout> | null = null;
 
   private readonly onInteraction = (event: Event): void => {
-    const target = event.target as Element | null;
-    if (!target) return;
+    const rawTarget = event.target as Element | null;
+    if (!rawTarget) return;
 
-    const ownerComponent = this.findOwnerComponent(target);
-    if (!ownerComponent || isInternalName(ownerComponent)) return;
+    // The literal event.target is often a nested <span>/<svg>/<i> inside the
+    // real interactive control. Climb to the nearest meaningful element so the
+    // captured metadata describes the button/link/field the user actually hit.
+    const target = this.resolveInteractiveElement(rawTarget, event.type);
+
+    // For keydown, ignore pure modifier presses (Shift/Ctrl/etc.) — they aren't
+    // meaningful interactions on their own.
+    if (event.type === 'keydown') {
+      const key = (event as KeyboardEvent).key;
+      if (key && ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Tab'].includes(key)) return;
+    }
+
+    const info = this.buildInteractionInfo(target, event);
+
+    // Owner component is best-effort now — we still record the interaction even
+    // when the target isn't inside a recognized component, because the metadata
+    // (button/link/field + accessible name) is what labels the chip.
+    const rawOwner = this.findOwnerComponent(target);
+    const ownerComponent = rawOwner && !isInternalName(rawOwner) ? rawOwner : '';
 
     this.lastInteraction = {
       type: event.type,
       targetSelector: this.buildSelector(target),
       ownerComponent,
       timestamp: performance.now(),
+      info,
     };
     this.interactionConsumed = false;
 
-    // Keep interaction context alive for 300ms (covers the CD cycle that follows)
+    // Keep interaction context alive for 600ms (covers slower CD cycles / async
+    // work that lands after the event; the 300ms window dropped many renders).
     if (this.interactionTimeout) clearTimeout(this.interactionTimeout);
-    this.interactionTimeout = setTimeout(() => { this.lastInteraction = null; }, 300);
+    this.interactionTimeout = setTimeout(() => { this.lastInteraction = null; }, 600);
 
     // Check if this interaction produced any renders — if not, emit a "no-render" event
     if (this.noRenderTimeout) clearTimeout(this.noRenderTimeout);
     this.noRenderTimeout = setTimeout(() => {
       if (!this.interactionConsumed && this.isRunning) {
         this.eventBuffer.push({
-          componentName: ownerComponent,
+          componentName: ownerComponent || info.tag || 'interaction',
           timestamp: Date.now(),
           duration: 0,
           causes: [{ type: 'zone', source: `addEventListener:${event.type}` }],
-          interactionComponent: ownerComponent,
+          interactionComponent: ownerComponent || undefined,
           interactionTarget: this.buildSelector(target),
+          interactionInfo: info,
           parentComponent: null,
           depth: 0,
         });
@@ -241,17 +263,104 @@ export class RenderTracker {
     }, 350);
   };
 
+  /**
+   * Climb from the raw event target to the nearest element that represents the
+   * actual interactive control (button, link, input, [role], etc.). Falls back
+   * to the original target when nothing better is found.
+   */
+  private resolveInteractiveElement(el: Element, eventType: string): Element {
+    // For typing/change events the target IS the field — don't climb.
+    if (eventType === 'input' || eventType === 'change' || eventType === 'keydown') return el;
+    const interactive = el.closest?.(
+      'button, a[href], [role="button"], [role="link"], [role="tab"], [role="menuitem"], input, select, textarea, label, summary, [onclick]'
+    );
+    return (interactive as Element) || el;
+  }
+
+  /** Build rich structured metadata describing the interaction target. */
+  private buildInteractionInfo(el: Element, event: Event): InteractionInfo {
+    const tag = el.tagName.toLowerCase();
+    const type = (el.getAttribute?.('type') || '').toLowerCase() || undefined;
+    const role = (el.getAttribute?.('role') || '').toLowerCase() || undefined;
+
+    const isLink = tag === 'a'
+      ? el.hasAttribute('href')
+      : (role === 'link' || !!el.closest?.('a[href]'));
+
+    const isButton =
+      tag === 'button' ||
+      role === 'button' ||
+      (tag === 'input' && ['submit', 'button', 'reset', 'image'].includes(type || '')) ||
+      (!isLink && !!el.closest?.('button, [role="button"]'));
+
+    const isTextField =
+      tag === 'textarea' ||
+      (el as HTMLElement).isContentEditable === true ||
+      (tag === 'input' && !['checkbox', 'radio', 'submit', 'button', 'reset', 'file', 'image', 'range', 'color'].includes(type || 'text')) ||
+      (tag === 'select');
+
+    const info: InteractionInfo = {
+      eventType: event.type,
+      tag,
+      inputType: type,
+      role,
+      isLink,
+      isButton,
+      isTextField,
+      accessibleName: this.accessibleName(el),
+    };
+    if (event.type === 'keydown') info.key = (event as KeyboardEvent).key;
+    return info;
+  }
+
+  /**
+   * Derive a short accessible name for an element, mirroring (loosely) the ARIA
+   * name computation: aria-label → title → visible text → value/placeholder →
+   * alt → name attribute. Kept short for display.
+   */
+  private accessibleName(el: Element): string {
+    const clean = (s: string | null | undefined): string =>
+      (s || '').replace(/\s+/g, ' ').trim().slice(0, 32);
+
+    const aria = clean(el.getAttribute?.('aria-label'));
+    if (aria) return aria;
+
+    const title = clean(el.getAttribute?.('title'));
+    if (title) return title;
+
+    // Visible text (buttons/links) — prefer textContent but avoid huge blobs.
+    const text = clean((el as HTMLElement).textContent);
+    if (text && text.length <= 32) return text;
+    if (text) return text.slice(0, 30) + '…';
+
+    const val = clean((el as HTMLInputElement).value);
+    if (val) return val;
+
+    const placeholder = clean(el.getAttribute?.('placeholder'));
+    if (placeholder) return placeholder;
+
+    const alt = clean(el.getAttribute?.('alt'));
+    if (alt) return alt;
+
+    const name = clean(el.getAttribute?.('name'));
+    if (name) return name;
+
+    return '';
+  }
+
   private setupInteractionListener(): void {
     // Capture phase to get the event before Angular handles it
     document.addEventListener('click', this.onInteraction, true);
     document.addEventListener('input', this.onInteraction, true);
     document.addEventListener('keydown', this.onInteraction, true);
+    document.addEventListener('change', this.onInteraction, true);
   }
 
   private teardownInteractionListener(): void {
     document.removeEventListener('click', this.onInteraction, true);
     document.removeEventListener('input', this.onInteraction, true);
     document.removeEventListener('keydown', this.onInteraction, true);
+    document.removeEventListener('change', this.onInteraction, true);
     if (this.interactionTimeout) { clearTimeout(this.interactionTimeout); this.interactionTimeout = null; }
     if (this.noRenderTimeout) { clearTimeout(this.noRenderTimeout); this.noRenderTimeout = null; }
   }
@@ -593,6 +702,7 @@ export class RenderTracker {
         causes: [node.depth === 0 ? primaryCause : { type: 'parent', source: node.parent ?? undefined }],
         interactionComponent: interaction?.ownerComponent ?? undefined,
         interactionTarget: interaction?.targetSelector ?? undefined,
+        interactionInfo: (node.depth === 0 && interaction) ? interaction.info : undefined,
         parentComponent: node.parent,
         depth: node.depth,
         cdCount: this.getCdCount(node.name),

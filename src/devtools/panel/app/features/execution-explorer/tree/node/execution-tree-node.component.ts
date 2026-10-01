@@ -15,7 +15,7 @@
  *     - Signal: value + consumers
  */
 
-import { Component, Input, Output, EventEmitter, signal, ChangeDetectionStrategy, inject } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import type { TreeNode } from '@nglens/types/execution-tree';
 import { DevtoolsPortService } from '../../../../services/devtools-port.service';
@@ -254,19 +254,19 @@ import { DevtoolsPortService } from '../../../../services/devtools-port.service'
       border-radius: 4px;
       font-size: 12px;
       cursor: pointer;
-      &:hover { background: rgba(255, 255, 255, 0.04); }
-      &.is-expanded.is-step { background: rgba(99, 102, 241, 0.08); }
-      &.is-session { font-weight: 600; color: rgb(229, 231, 235); }
-      &.is-chapter { font-weight: 500; color: rgb(209, 213, 219); }
-      &.is-step { color: rgb(156, 163, 175); font-size: 11px; }
-      &.is-bottleneck .node-label { color: rgb(239, 68, 68); font-weight: 600; }
+      &:hover { background: var(--color-row-hover); }
+      &.is-expanded.is-step { background: var(--color-indigo-bg-lighter); }
+      &.is-session { font-weight: 600; color: var(--color-text-light); }
+      &.is-chapter { font-weight: 500; color: var(--color-text-light-medium); }
+      &.is-step { color: var(--color-text-medium); font-size: 11px; }
+      &.is-bottleneck .node-label { color: var(--color-critical); font-weight: 600; }
     }
 
     .toggle-btn {
       width: 16px; height: 16px; padding: 0; border: none; background: none;
-      cursor: pointer; color: rgb(107, 114, 128); font-size: 9px; flex-shrink: 0;
+      cursor: pointer; color: var(--color-text-dark); font-size: 9px; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
-      &:hover { color: rgb(156, 163, 175); }
+      &:hover { color: var(--color-text-medium); }
     }
     .toggle-spacer { width: 16px; flex-shrink: 0; }
     .node-icon { font-size: 13px; flex-shrink: 0; }
@@ -274,20 +274,20 @@ import { DevtoolsPortService } from '../../../../services/devtools-port.service'
 
     .dur {
       padding: 1px 5px; border-radius: 3px; font-size: 10px; flex-shrink: 0;
-      font-family: 'Monaco', 'Menlo', monospace;
-      background: rgba(107, 114, 128, 0.15); color: rgb(156, 163, 175);
-      &.slow { background: rgba(239, 68, 68, 0.15); color: rgb(254, 202, 202); }
+      font-family: inherit;
+      background: var(--color-gray-bg-medium); color: var(--color-text-medium);
+      &.slow { background: var(--color-red-bg-medium); color: var(--color-red-light); }
     }
     .sev { font-size: 11px; flex-shrink: 0; }
 
-    .children { border-left: 1px solid rgba(107, 114, 128, 0.15); margin-left: 8px; }
+    .children { border-left: 1px solid var(--color-border-subtle); margin-left: 8px; }
 
     /* ═══ INLINE STEP DETAILS ═══ */
     .step-details {
       margin: 2px 0 6px 8px;
       padding: 6px 10px;
-      border-left: 2px solid rgba(99, 102, 241, 0.3);
-      background: rgba(30, 41, 59, 0.4);
+      border-left: 2px solid var(--color-indigo-border);
+      background: var(--color-nested-bg);
       border-radius: 0 4px 4px 0;
       font-size: 10px;
     }
@@ -300,20 +300,20 @@ import { DevtoolsPortService } from '../../../../services/devtools-port.service'
     }
 
     .detail-label {
-      color: rgb(107, 114, 128);
+      color: var(--color-text-dark);
       font-weight: 500;
       min-width: 56px;
       flex-shrink: 0;
     }
 
     .detail-val {
-      color: rgb(209, 213, 219);
-      &.slow { color: rgb(254, 202, 202); font-weight: 500; }
+      color: var(--color-text-light-medium);
+      &.slow { color: var(--color-red-light); font-weight: 500; }
     }
 
     .detail-code {
-      color: rgb(165, 243, 252);
-      font-family: 'Monaco', 'Menlo', monospace;
+      color: var(--color-cyan);
+      font-family: inherit;
       font-size: 10px;
       word-break: break-all;
     }
@@ -321,12 +321,12 @@ import { DevtoolsPortService } from '../../../../services/devtools-port.service'
     .detail-section {
       margin-top: 6px;
       padding-top: 4px;
-      border-top: 1px solid rgba(55, 65, 81, 0.4);
+      border-top: 1px solid var(--color-nested-border);
     }
 
     .detail-heading {
       display: block;
-      color: rgb(107, 114, 128);
+      color: var(--color-text-dark);
       font-weight: 500;
       font-size: 9px;
       text-transform: uppercase;
@@ -339,18 +339,18 @@ import { DevtoolsPortService } from '../../../../services/devtools-port.service'
       justify-content: space-between;
       padding: 2px 0;
     }
-    .diff-key { color: rgb(165, 243, 252); }
-    .diff-val { color: rgb(134, 239, 172); font-family: 'Monaco', 'Menlo', monospace; font-size: 9px; }
+    .diff-key { color: var(--color-cyan); }
+    .diff-val { color: var(--color-green); font-family: inherit; font-size: 9px; }
 
     .chips { display: flex; flex-wrap: wrap; gap: 4px; }
     .chip {
       padding: 1px 6px; border-radius: 3px; font-size: 9px;
-      background: rgba(99, 102, 241, 0.12); color: rgb(165, 180, 252);
-      border: 1px solid rgba(99, 102, 241, 0.2);
+      background: var(--color-indigo-bg-medium); color: var(--color-indigo-light);
+      border: 1px solid var(--color-indigo-border);
     }
 
     .obs-row {
-      padding: 3px 0; color: rgb(253, 224, 71); font-size: 10px;
+      padding: 3px 0; color: var(--color-yellow); font-size: 10px;
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,

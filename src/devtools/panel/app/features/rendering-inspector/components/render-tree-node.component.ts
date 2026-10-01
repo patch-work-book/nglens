@@ -72,34 +72,34 @@ import type { TreeNodeData, CascadeNodeData } from './render-tree-view.component
       cursor: pointer;
       transition: all 0.15s ease;
       border-left: 3px solid transparent;
-      background: rgba(255, 255, 255, 0.02);
+      background: color-mix(in srgb, var(--ri-text-bright) 2%, transparent);
     }
 
     .tree-node:hover {
-      background: rgba(100, 181, 246, 0.08);
-      border-left-color: #42a5f5;
+      background: color-mix(in srgb, var(--ri-blue) 8%, transparent);
+      border-left-color: var(--ri-accent-blue);
     }
 
     .tree-node.severity-high {
-      border-left-color: #ff6b6b;
+      border-left-color: var(--ri-accent-red);
     }
 
     .tree-node.severity-high:hover {
-      background: rgba(255, 107, 107, 0.08);
+      background: color-mix(in srgb, var(--ri-red) 8%, transparent);
     }
 
     .tree-node.severity-medium {
-      border-left-color: #ffa94d;
+      border-left-color: var(--ri-accent-amber);
     }
 
     .tree-node.severity-medium:hover {
-      background: rgba(255, 169, 77, 0.08);
+      background: color-mix(in srgb, var(--ri-amber) 8%, transparent);
     }
 
     .expand-btn {
       background: none;
       border: none;
-      color: #90caf9;
+      color: var(--ri-accent-blue);
       cursor: pointer;
       font-size: 12px;
       width: 16px;
@@ -135,7 +135,7 @@ import type { TreeNodeData, CascadeNodeData } from './render-tree-view.component
     }
 
     .component-name {
-      color: #cbd5e0;
+      color: var(--ri-text-primary);
       font-weight: 500;
       white-space: nowrap;
       text-overflow: ellipsis;
@@ -143,16 +143,16 @@ import type { TreeNodeData, CascadeNodeData } from './render-tree-view.component
     }
 
     .render-count {
-      color: #90caf9;
+      color: var(--ri-accent-blue);
       font-weight: 600;
       flex-shrink: 0;
       padding: 2px 4px;
-      background: rgba(100, 181, 246, 0.1);
+      background: color-mix(in srgb, var(--ri-blue) 10%, transparent);
       border-radius: 2px;
     }
 
     .duration {
-      color: #80deea;
+      color: var(--ri-accent-cyan);
       font-size: 10px;
       flex-shrink: 0;
     }
@@ -160,7 +160,7 @@ import type { TreeNodeData, CascadeNodeData } from './render-tree-view.component
     .impact-bar-mini {
       width: 40px;
       height: 2px;
-      background: rgba(255, 255, 255, 0.1);
+      background: color-mix(in srgb, var(--ri-text-bright) 10%, transparent);
       border-radius: 1px;
       overflow: hidden;
       flex-shrink: 0;
@@ -168,7 +168,7 @@ import type { TreeNodeData, CascadeNodeData } from './render-tree-view.component
 
     .impact-fill {
       height: 100%;
-      background: linear-gradient(90deg, #42a5f5, #64b5f6);
+      background: linear-gradient(90deg, var(--ri-accent-blue), var(--ri-accent-blue));
       transition: width 0.3s ease;
     }
   `],

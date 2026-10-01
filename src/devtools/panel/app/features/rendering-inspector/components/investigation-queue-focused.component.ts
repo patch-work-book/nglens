@@ -111,13 +111,13 @@ export interface RankedInvestigation {
         margin: 0;
         font-size: 14px;
         font-weight: 600;
-        color: #e0e0e0;
+        color: var(--ri-text-bright);
       }
 
       .count {
         font-size: 11px;
-        color: #90caf9;
-        background: rgba(100, 181, 246, 0.1);
+        color: var(--ri-accent-blue);
+        background: color-mix(in srgb, var(--ri-blue) 10%, transparent);
         padding: 2px 6px;
         border-radius: 3px;
       }
@@ -134,30 +134,30 @@ export interface RankedInvestigation {
         gap: 12px;
         align-items: center;
         padding: 12px;
-        background: linear-gradient(135deg, rgba(100, 181, 246, 0.05), rgba(15, 76, 117, 0.1));
-        border: 1px solid rgba(100, 181, 246, 0.3);
+        background: linear-gradient(135deg, color-mix(in srgb, var(--ri-blue) 5%, transparent), color-mix(in srgb, var(--ri-bg-raised) 10%, transparent));
+        border: 1px solid color-mix(in srgb, var(--ri-blue) 30%, transparent);
         border-radius: 6px;
         cursor: pointer;
         transition: all 0.2s ease;
       }
 
       .investigation-card:hover {
-        background: linear-gradient(135deg, rgba(100, 181, 246, 0.1), rgba(15, 76, 117, 0.15));
-        border-color: rgba(100, 181, 246, 0.5);
+        background: linear-gradient(135deg, color-mix(in srgb, var(--ri-blue) 10%, transparent), color-mix(in srgb, var(--ri-bg-raised) 15%, transparent));
+        border-color: color-mix(in srgb, var(--ri-blue) 50%, transparent);
         transform: translateX(4px);
       }
 
       .investigation-card.rank-1 {
-        border-left: 3px solid #ff6b6b;
-        background: linear-gradient(135deg, rgba(255, 107, 107, 0.05), rgba(15, 76, 117, 0.1));
+        border-left: 3px solid var(--ri-accent-red);
+        background: linear-gradient(135deg, color-mix(in srgb, var(--ri-red) 5%, transparent), color-mix(in srgb, var(--ri-bg-raised) 10%, transparent));
       }
 
       .investigation-card.rank-2 {
-        border-left: 3px solid #ffa94d;
+        border-left: 3px solid var(--ri-accent-amber);
       }
 
       .investigation-card.rank-3 {
-        border-left: 3px solid #74c0fc;
+        border-left: 3px solid var(--ri-accent-blue);
       }
 
       .rank-badge {
@@ -185,12 +185,12 @@ export interface RankedInvestigation {
       }
 
       .title {
-        color: #e0e0e0;
+        color: var(--ri-text-bright);
         flex: 1;
       }
 
       .gain-badge {
-        background: linear-gradient(135deg, #64b5f6, #42a5f5);
+        background: linear-gradient(135deg, var(--ri-accent-blue), var(--ri-accent-blue));
         color: white;
         padding: 2px 6px;
         border-radius: 3px;
@@ -217,13 +217,13 @@ export interface RankedInvestigation {
       }
 
       .metric-value {
-        color: #64b5f6;
+        color: var(--ri-accent-blue);
         font-weight: 600;
         font-size: 11px;
       }
 
       .metric-label {
-        color: #78909c;
+        color: var(--ri-text-secondary);
         text-transform: uppercase;
         font-size: 9px;
         letter-spacing: 0.3px;
@@ -231,10 +231,10 @@ export interface RankedInvestigation {
 
       .suggestion {
         font-size: 10px;
-        color: #90caf9;
+        color: var(--ri-accent-blue);
         padding: 4px 6px;
-        background: rgba(144, 202, 249, 0.1);
-        border-left: 2px solid #64b5f6;
+        background: color-mix(in srgb, var(--ri-blue) 10%, transparent);
+        border-left: 2px solid var(--ri-accent-blue);
         padding-left: 8px;
         border-radius: 2px;
       }
@@ -249,12 +249,12 @@ export interface RankedInvestigation {
       .confidence {
         font-size: 11px;
         font-weight: 600;
-        color: #64b5f6;
+        color: var(--ri-accent-blue);
       }
 
       .arrow {
         font-size: 16px;
-        color: #64b5f6;
+        color: var(--ri-accent-blue);
         opacity: 0.6;
       }
 

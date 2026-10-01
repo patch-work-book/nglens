@@ -4,7 +4,7 @@
  * Groups API calls by execution phase and shows them with success/retry indicators.
  * Transforms flat list of 30+ APIs into 2-3 grouped phases with clear narrative.
  */
-import { Component, input, output, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, input, output, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 export interface APICall {
@@ -169,17 +169,17 @@ export interface APIPhase {
     }
 
     .badge-success {
-      background-color: rgba(34, 197, 94, 0.2);
+      background-color: var(--color-green-bg);
       color: var(--color-success);
     }
 
     .badge-warning {
-      background-color: rgba(251, 191, 36, 0.2);
+      background-color: var(--color-yellow-bg-medium);
       color: var(--color-warning);
     }
 
     .badge-failed {
-      background-color: rgba(239, 68, 68, 0.2);
+      background-color: var(--color-red-bg-stronger);
       color: var(--color-error);
     }
 
@@ -213,7 +213,7 @@ export interface APIPhase {
 
     .api-item.api-retry {
       opacity: 0.7;
-      background-color: rgba(251, 191, 36, 0.05);
+      background-color: var(--color-yellow-bg-light);
     }
 
     .api-method {
@@ -241,22 +241,22 @@ export interface APIPhase {
     }
 
     .http-2xx {
-      background-color: rgba(34, 197, 94, 0.2);
+      background-color: var(--color-green-bg);
       color: var(--color-success);
     }
 
     .http-3xx {
-      background-color: rgba(59, 130, 246, 0.2);
+      background-color: var(--color-blue-bg-stronger);
       color: var(--color-info);
     }
 
     .http-4xx {
-      background-color: rgba(251, 191, 36, 0.2);
+      background-color: var(--color-yellow-bg-medium);
       color: var(--color-warning);
     }
 
     .http-5xx {
-      background-color: rgba(239, 68, 68, 0.2);
+      background-color: var(--color-red-bg-stronger);
       color: var(--color-error);
     }
 

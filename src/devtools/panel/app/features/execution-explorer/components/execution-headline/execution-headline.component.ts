@@ -164,7 +164,7 @@ export interface HeadlineData {
 
     .button-primary:hover {
       background-color: var(--color-primary-hover);
-      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+      box-shadow: 0 2px 8px var(--color-blue-shadow);
     }
 
     .button-primary:active {

@@ -9,7 +9,7 @@
  * Show: "Revenue Module" → [API, Store, Signal, Components]
  */
 
-import type { ExecutionStep, ExecutionScore, InsightMessage, ImpactMetrics } from './execution-intelligence';
+import type { ExecutionScore, InsightMessage } from './execution-intelligence';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // NARRATIVE BUILDER OUTPUT

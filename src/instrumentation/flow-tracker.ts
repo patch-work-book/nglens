@@ -44,6 +44,10 @@ export class FlowTracker {
   private patchedSignals = new WeakSet<object>();
   // Track which computed signals we've already patched
   private patchedComputeds = new WeakSet<object>();
+  // Track which facade/store/service method functions we've already patched
+  private patchedMethods = new WeakSet<object>();
+  // Re-entrancy guard so a patched method calling another doesn't double-log
+  private inFacadeCall = false;
   // Track which component initiated the latest API call
   private lastApiInitiator: string | null = null;
 
@@ -79,6 +83,8 @@ export class FlowTracker {
     this.buffer.length = 0;
     this.patchedSignals = new WeakSet<object>();
     this.patchedComputeds = new WeakSet<object>();
+    this.patchedMethods = new WeakSet<object>();
+    this.inFacadeCall = false;
     this.isRunning = false;
   }
 
@@ -123,35 +129,46 @@ export class FlowTracker {
         try {
           const ownerInfo = tracker.inferSubjectOwner(this);
 
-          // Detect NgRx store dispatch: value is an action object with a `type` string
-          const isNgrxAction = value && typeof value === 'object' && typeof value.type === 'string'
-            && value.type.length > 2 && value.type.includes(']');
-
-          let label: string;
-          let detail: string;
+          // Detect NgRx store dispatch: value is an action object with a `type`
+          // string. NgRx convention is "[Feature] Action", so a bracketed type
+          // is a strong signal; we also accept a plain typed action object.
+          const isNgrxAction = value && typeof value === 'object'
+            && typeof value.type === 'string' && value.type.length > 2
+            && (value.type.includes(']') || value.type.includes('/') || value.type.includes(' '));
 
           if (isNgrxAction) {
-            label = `Store: ${value.type}`;
-            detail = tracker.summarizeValue(value, true);
+            // Emit a real store-dispatch so the panel's store analysis activates.
+            const detail = tracker.summarizeValue(value, true);
+            tracker.buffer.push({
+              id: `flow-${++tracker.eventId}`,
+              type: 'store-dispatch',
+              timestamp: Date.now(),
+              label: `Store: ${value.type}`,
+              ownerClass: 'Store',
+              propertyName: value.type,
+              actionName: value.type,
+              detail,
+              value: detail,
+              sourceComponent: tracker.detectCurrentComponent() ?? undefined,
+              triggeredByInteractionTs: tracker.getActiveInteractionTimestamp(),
+            });
           } else {
-            label = ownerInfo
-              ? `${ownerInfo.className}.${ownerInfo.propName}.next()`
-              : 'Subject.next()';
-            detail = tracker.summarizeValue(value);
+            const detail = tracker.summarizeValue(value);
+            tracker.buffer.push({
+              id: `flow-${++tracker.eventId}`,
+              type: 'subject-emit',
+              timestamp: Date.now(),
+              label: ownerInfo
+                ? `${ownerInfo.className}.${ownerInfo.propName}.next()`
+                : 'Subject.next()',
+              ownerClass: ownerInfo?.className,
+              propertyName: ownerInfo?.propName,
+              detail,
+              value: detail,
+              sourceComponent: tracker.detectCurrentComponent() ?? undefined,
+              triggeredByInteractionTs: tracker.getActiveInteractionTimestamp(),
+            });
           }
-
-          tracker.buffer.push({
-            id: `flow-${++tracker.eventId}`,
-            type: 'subject-emit',
-            timestamp: Date.now(),
-            label,
-            ownerClass: isNgrxAction ? 'Store' : ownerInfo?.className,
-            propertyName: isNgrxAction ? value.type : ownerInfo?.propName,
-            detail,
-            value: detail,
-            sourceComponent: tracker.detectCurrentComponent() ?? undefined,
-            triggeredByInteractionTs: tracker.getActiveInteractionTimestamp(),
-          });
         } catch { /* ignore instrumentation errors */ }
         finally { inHook = false; }
       }
@@ -451,11 +468,14 @@ export class FlowTracker {
       this.patchInjectorSignals();
       // Patch signals on rendered components
       this.patchComponentSignals();
+      // Patch facade/store/service methods (state-mutating entry points)
+      this.patchInjectorMethods();
       // Re-scan periodically for lazy-loaded components/services
       globalThis.setTimeout(() => {
         if (this.isRunning) {
           this.patchInjectorSignals();
           this.patchComponentSignals();
+          this.patchInjectorMethods();
         }
       }, 3000);
       // Angular 17+: track effect() executions via global effect scheduler
@@ -487,6 +507,109 @@ export class FlowTracker {
         } catch { /* ignore */ }
       }
     } catch { /* ignore */ }
+  }
+
+  /**
+   * Patch state-mutating methods on facade/store/service classes so ngLens can
+   * attribute renders to a facade call (e.g. "VatFacade.loadClients()").
+   *
+   * Conservative by design to avoid perf/noise:
+   *  - only classes whose name ends in Facade / Store / Service
+   *  - only own-prototype methods (not inherited), skipping getters, the
+   *    constructor, Angular lifecycle hooks, and private (_ / ɵ) members
+   *  - re-entrancy guarded so a facade method calling another logs once
+   */
+  private patchInjectorMethods(): void {
+    try {
+      const ng = (globalThis as any).ng;
+      const rootEl = document.querySelector('[ng-version]');
+      if (!ng?.getInjector || !rootEl) return;
+
+      const injector = ng.getInjector(rootEl);
+      const records = injector?._records ?? injector?.records;
+      if (!(records instanceof Map)) return;
+
+      for (const [token] of records) {
+        if (typeof token !== 'function') continue;
+        const className = token.name;
+        if (!className || !/(Facade|Store|Service)$/.test(className)) continue;
+
+        try {
+          const inst = injector.get(token, null, { optional: true } as any);
+          if (!inst || typeof inst !== 'object') continue;
+          this.patchInstanceMethods(inst, className);
+        } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
+  }
+
+  /** Method names we never wrap (lifecycle hooks, framework internals). */
+  private static readonly SKIP_METHODS = new Set([
+    'constructor', 'ngOnInit', 'ngOnDestroy', 'ngOnChanges', 'ngDoCheck',
+    'ngAfterViewInit', 'ngAfterContentInit', 'ngAfterViewChecked', 'ngAfterContentChecked',
+  ]);
+
+  private patchInstanceMethods(inst: any, className: string): void {
+    let proto: any;
+    try {
+      proto = Object.getPrototypeOf(inst);
+    } catch { return; }
+    if (!proto || proto === Object.prototype) return;
+
+    let names: string[];
+    try {
+      names = Object.getOwnPropertyNames(proto);
+    } catch { return; }
+
+    const tracker = this;
+
+    for (const name of names) {
+      if (name.startsWith('_') || name.startsWith('ɵ')) continue;
+      if (FlowTracker.SKIP_METHODS.has(name)) continue;
+
+      let descriptor: PropertyDescriptor | undefined;
+      try {
+        descriptor = Object.getOwnPropertyDescriptor(proto, name);
+      } catch { continue; }
+      // Skip getters/setters — invoking them has side effects / isn't a call.
+      if (!descriptor || descriptor.get || descriptor.set) continue;
+
+      const original = descriptor.value;
+      if (typeof original !== 'function') continue;
+      if (this.patchedMethods.has(original)) continue;
+
+      try {
+        this.patchedMethods.add(original);
+        const patched = function (this: any, ...args: any[]) {
+          // Only log the outermost facade call in a chain, and only when running.
+          if (tracker.isRunning && !tracker.inFacadeCall) {
+            tracker.inFacadeCall = true;
+            try {
+              tracker.buffer.push({
+                id: `flow-${++tracker.eventId}`,
+                type: 'facade-method',
+                timestamp: Date.now(),
+                label: `${className}.${name}()`,
+                ownerClass: className,
+                methodName: name,
+                detail: args.length > 0 ? tracker.summarizeValue(args[0]) : '',
+                value: args.length > 0 ? tracker.summarizeValue(args[0]) : '',
+                sourceComponent: tracker.detectCurrentComponent() ?? undefined,
+                triggeredByInteractionTs: tracker.getActiveInteractionTimestamp(),
+              });
+            } catch { /* ignore */ }
+            finally {
+              // Release the guard after the synchronous portion completes.
+              try { return original.apply(this, args); }
+              finally { tracker.inFacadeCall = false; }
+            }
+          }
+          return original.apply(this, args);
+        };
+        // Preserve function name/length where possible.
+        Object.defineProperty(proto, name, { ...descriptor, value: patched });
+      } catch { /* ignore — some props are non-configurable */ }
+    }
   }
 
   private patchComponentSignals(): void {

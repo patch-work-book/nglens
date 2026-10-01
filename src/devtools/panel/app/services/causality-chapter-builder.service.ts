@@ -16,7 +16,7 @@
 
 import { Injectable } from '@angular/core';
 import type { ExecutionStory } from '../../../../types/execution-intelligence';
-import type { Chapter, ExecutionNarrative } from '../../../../types/execution-narrative';
+import type { Chapter } from '../../../../types/execution-narrative';
 import { CausalityChainDetectorService, type CausalityChain } from './causality-chain-detector.service';
 import { IntentNameGeneratorService } from './intent-name-generator.service';
 

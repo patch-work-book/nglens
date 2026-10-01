@@ -34,6 +34,8 @@ export interface SwimlaneItem {
   isBottleneck: boolean;
   isDuplicate: boolean;
   duplicateCount: number;
+  /** Whether this bar's width is minimum-constrained (actual duration too small to display proportionally) */
+  isMinWidthConstrained?: boolean;
   /** Original step data for detail drawer */
   stepData?: any;
 }
@@ -141,18 +143,20 @@ export class SwimlaneGroupingService {
     const storeItems = allItems.filter(i => i.category === 'store');
     const interactionItems = allItems.filter(i => i.category === 'interaction');
 
-    const apiLane = this.buildLane('lane-api', '🌐 Network', '🌐', 'api', apiItems);
-    const renderLane = this.buildLane('lane-render', '📦 Components', '📦', 'render', renderItems);
-    const signalLane = this.buildLane('lane-signal', '⚡ Signals', '⚡', 'signal', signalItems);
-    const storeLane = this.buildLane('lane-store', '🗄 State', '🗄', 'store', storeItems);
+    // Lane labels are plain text; the DevTools-style color accent on the lane
+    // header carries the category, so no decorative emoji is needed (spec §39).
+    const apiLane = this.buildLane('lane-api', 'Network', '', 'api', apiItems);
+    const renderLane = this.buildLane('lane-render', 'Components', '', 'render', renderItems);
+    const signalLane = this.buildLane('lane-signal', 'Signals', '', 'signal', signalItems);
+    const storeLane = this.buildLane('lane-store', 'State', '', 'store', storeItems);
 
     // Build lanes array (only include lanes with items)
     const lanes: SwimlaneLane[] = [];
     if (interactionItems.length > 0) {
       lanes.push({
         id: 'lane-interaction',
-        label: '🔘 Trigger',
-        icon: '🔘',
+        label: 'Trigger',
+        icon: '',
         category: 'interaction',
         entries: interactionItems,
         totalItemCount: interactionItems.length,
@@ -207,7 +211,12 @@ export class SwimlaneGroupingService {
 
       // Compute percentage positions for waterfall bars
       const startPct = sessionDuration > 0 ? Math.max(0, (itemStart / sessionDuration) * 100) : 0;
-      const widthPct = sessionDuration > 0 ? Math.max(0.3, (itemDur / sessionDuration) * 100) : 0.3;
+      // For render items with very small durations, use a larger minimum width (1%)
+      // for visibility. API and other events use 0.3% minimum for compact display.
+      const minWidthPct = category === 'render' ? 1 : 0.3;
+      const computedWidthPct = sessionDuration > 0 ? (itemDur / sessionDuration) * 100 : 0;
+      const widthPct = Math.max(minWidthPct, computedWidthPct);
+      const isMinWidthConstrained = computedWidthPct < minWidthPct;
 
       const isSlow = category === 'api'
         ? itemDur > SLOW_API_MS
@@ -240,6 +249,7 @@ export class SwimlaneGroupingService {
         isBottleneck: false,
         isDuplicate: false,
         duplicateCount: 1,
+        isMinWidthConstrained,
         stepData: step,
       });
     }
@@ -449,14 +459,9 @@ export class SwimlaneGroupingService {
     }
   }
 
-  private getBatchIcon(category: SwimlaneCategory): string {
-    switch (category) {
-      case 'api': return '📦';
-      case 'render': return '📦';
-      case 'signal': return '⚡';
-      case 'store': return '🗄';
-      default: return '📦';
-    }
+  private getBatchIcon(_category: SwimlaneCategory): string {
+    // No decorative icon; the group title + lane color convey category.
+    return '';
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -477,9 +482,12 @@ export class SwimlaneGroupingService {
           id: `issue-${issueId++}`,
           type: 'duplicate-api',
           severity: 'warning',
-          title: `Duplicate API: ${group[0].title}`,
-          detail: `Same endpoint called ${group.length + 1}× within ${DUPLICATE_WINDOW_MS}ms`,
-          suggestion: 'Cache responses or deduplicate with shareReplay(1)',
+          // Detection is a pure observation: identical URL requested more than
+          // once inside the window. We do NOT assert a cause (the two calls may
+          // be intentional) or prescribe a fix without evidence (spec §23).
+          title: `Duplicate request: ${group[0].title}`,
+          detail: `Same URL requested ${group.length}× within ${DUPLICATE_WINDOW_MS}ms. Cause not determined.`,
+          suggestion: 'If unintended, deduplicating (e.g. shareReplay) may help — verify the calls are redundant first.',
           relatedItemIds: group.map(i => i.id),
         });
       }
@@ -508,11 +516,13 @@ export class SwimlaneGroupingService {
         id: `issue-${issueId++}`,
         type: 'primary-bottleneck',
         severity: 'error',
-        title: `Primary bottleneck: ${bottleneck.title} (${Math.round(bottleneck.duration)}ms)`,
-        detail: `This operation is the longest single blocking item on the critical path`,
+        // Fact: this is the single longest-duration item observed. Whether it
+        // actually blocked paint is not established here (no dependency graph).
+        title: `Longest operation: ${bottleneck.title} (${Math.round(bottleneck.duration)}ms)`,
+        detail: `Longest single operation observed in this execution. Blocking impact not established.`,
         suggestion: bottleneck.category === 'api'
-          ? 'Prefetch this data or load it progressively with skeleton UI'
-          : 'Break into smaller chunks, defer non-critical work, or use web worker',
+          ? 'If this is on the render path, prefetching or progressive loading may help.'
+          : 'If this delays paint, consider splitting the work or deferring non-critical parts.',
         relatedItemIds: [bottleneck.id],
       });
     }
@@ -531,9 +541,10 @@ export class SwimlaneGroupingService {
           id: `issue-${issueId++}`,
           type: 'excessive-renders',
           severity: 'warning',
-          title: `${name} rendered ${group.length}× during this session`,
-          detail: `Component re-rendered excessively, likely due to missing OnPush or uncontrolled signal propagation`,
-          suggestion: 'Add ChangeDetectionStrategy.OnPush and verify input reference stability',
+          // Fact: render count only. We do not assert the cause (§10).
+          title: `${name} rendered ${group.length}× in this execution`,
+          detail: `${group.length} renders observed for this component. Cause not determined here — inspect it in Components.`,
+          suggestion: 'If the repeats are avoidable, OnPush or stabler inputs may reduce them.',
           relatedItemIds: group.map(i => i.id),
         });
       }

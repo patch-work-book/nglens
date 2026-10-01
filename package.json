@@ -1,6 +1,6 @@
 {
   "name": "nglens",
-  "version": "1.1.4",
+  "version": "1.2.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -16,7 +16,9 @@
     "dev:panel": "ng build --watch --configuration development",
     "dev:extension": "vite build --watch",
     "dev:watch-reload": "node scripts/chrome-reload.js",
-    "test": "vitest --run"
+    "test": "vitest --run",
+    "e2e:build": "vite build --config e2e/vite.e2e.config.ts",
+    "e2e": "npm run e2e:build && playwright test"
   },
   "dependencies": {
     "@angular/animations": "~22.0.2",
@@ -33,14 +35,17 @@
     "@angular/build": "~22.0.3",
     "@angular/cli": "~22.0.3",
     "@angular/compiler-cli": "~22.0.2",
+    "@playwright/test": "1.49.1",
     "@types/chrome": "^0.1.42",
     "autoprefixer": "^10.4.20",
+    "chrome-webstore-upload": "6.0.0",
     "fast-check": "4.8.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "6.0.3",
     "vite": "^8.0.16",
-    "vitest": "4.1.9"
+    "vitest": "4.1.9",
+    "zone.js": "0.16.2"
   },
   "overrides": {
     "piscina": "5.2.0"

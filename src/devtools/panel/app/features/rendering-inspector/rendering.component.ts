@@ -1,16 +1,19 @@
-import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, computed, effect, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { PanelState } from '../../state/panel.state';
 import { displayName } from '../../utils/display-name';
-import { CommandService } from '../../services/command.service';
 import { RenderInspectorAdapterService } from '../../services/render-inspector-adapter.service';
 import { InvestigationQueueService } from '../../services/investigation-queue.service';
 import { ExecutionStoryService } from '../../services/execution-story.service';
 import { RenderTreeViewComponent } from './components/render-tree-view.component';
-import { getActionIcon, getSeverityIcon } from './casual-icons';
+
+import { ActivityTimelineComponent } from './components/activity-timeline.component';
+import { getActionIcon, getSeverityIcon, type InteractionKind } from './casual-icons';
+import { classifyRenderOrigin } from './utils/render-origin';
+import { buildCascadeTree as buildCascadeTreePure, resolveFlowFocus } from './utils/cascade-tree';
 import type { InteractionProfile } from '../../../../../types/panel';
-import type { RenderCause, RenderEvent, FlowEvent, RenderReason } from '../../../../../types/render-events';
+import type { RenderCause, RenderEvent, FlowEvent, RenderReason, InteractionInfo } from '../../../../../types/render-events';
 
 /** A single entry in the unified timeline (either a flow event or a render event). */
 interface TimelineEntry {
@@ -35,6 +38,8 @@ interface ActionReplay {
   triggerIcon: string;
   targetSelector: string | null;
   triggerComponent: string | null;
+  /** Structured interaction metadata captured at the DOM source (for accurate chip labels). */
+  interactionInfo?: InteractionInfo;
   timestamp: number;
   totalRenders: number;
   uniqueComponents: number;
@@ -91,6 +96,16 @@ interface CascadeNode {
   children: CascadeNode[];
   /** Grouped render reasons for this component */
   reasons?: RenderReason[];
+  /**
+   * Histogram of render causes across ALL of this component's render events
+   * (not just the first). Keyed by RenderCause['type']. Powers the
+   * "why it rendered N times" parent-cascade vs own-trigger split.
+   */
+  causeBreakdown?: Record<string, number>;
+  /** Renders attributed to a parent cascade (cause.type === 'parent'). */
+  parentRenders?: number;
+  /** Renders attributed to this component's own trigger (signal/input/interaction). */
+  ownRenders?: number;
 }
 
 @Component({
@@ -100,6 +115,7 @@ interface CascadeNode {
   imports: [
     CommonModule,
     RenderTreeViewComponent,
+    ActivityTimelineComponent,
   ],
   templateUrl: './rendering.component.html',
   styleUrl: './rendering.component.scss',
@@ -113,15 +129,15 @@ export class RenderingComponent {
   readonly getActionIcon = getActionIcon;
   readonly getSeverityIcon = getSeverityIcon;
   
-  /** Safe icon rendering method */
-  getSafeActionIcon(trigger: string): SafeHtml {
-    return this.sanitizer.bypassSecurityTrustHtml(getActionIcon(trigger));
+  /** Safe icon rendering method — icon reflects the classified interaction kind. */
+  getSafeActionIcon(action: ActionReplay): SafeHtml {
+    const kind = this.classifyInteraction(action).kind;
+    return this.sanitizer.bypassSecurityTrustHtml(getActionIcon(kind));
   }
 
   getSafeSeverityIcon(severity: string): SafeHtml {
     return this.sanitizer.bypassSecurityTrustHtml(getSeverityIcon(severity));
   }
-  private readonly commandService = inject(CommandService);
   private readonly adapter = inject(RenderInspectorAdapterService);
   private readonly investigationQueueService = inject(InvestigationQueueService);
   private readonly executionStoryService = inject(ExecutionStoryService);
@@ -136,8 +152,16 @@ export class RenderingComponent {
         clearTimeout(this.cardRebuildTimer);
         this.cardRebuildTimer = setTimeout(() => {
           const newReplays = this.actionReplays();
+
+          // Only replace the array when the cards ACTUALLY changed. During live
+          // profiling events stream in continuously; rebuilding an identical set
+          // every 600ms churns the array reference and makes chips flicker
+          // (appear then vanish) as group boundaries momentarily shift.
+          if (this.replaysAreEquivalent(this.stableActionReplays(), newReplays)) {
+            return;
+          }
           this.stableActionReplays.set(newReplays);
-          
+
           // Auto-select: whenever replays exist but nothing is selected, pick the latest
           if (newReplays.length > 0 && this.selectedActionId() === null) {
             const latestActionId = newReplays[newReplays.length - 1].id;
@@ -163,6 +187,57 @@ export class RenderingComponent {
         }
       }
     }, 100);
+
+    // Smart default selection: when the selected action changes and no component
+    // is selected, auto-select the worst offender so the details panel is never
+    // empty. The user's explicit selection always wins. Guarded so it only fires
+    // once per action id (prevents thrash when replays recompute).
+    effect(() => {
+      const action = this.getSelectedAction();
+      if (!action?.tree || this.selectedComponentName() !== null) return;
+      if (this.autoSelectedForActionId === action.id) return;
+      const nodes = this.flattenTree(action.tree);
+      let worst: CascadeNode | null = null;
+      for (const n of nodes) {
+        if (!worst || n.count > worst.count) worst = n;
+      }
+      if (worst && worst.count > 1) {
+        this.autoSelectedForActionId = action.id;
+        this.onComponentSelected({
+          componentName: worst.componentName,
+          displayName: this.displayName(worst.componentName),
+          count: worst.count,
+          totalDuration: worst.totalDuration,
+          cause: worst.cause,
+          causeBreakdown: worst.causeBreakdown,
+          parentRenders: worst.parentRenders,
+          ownRenders: worst.ownRenders,
+          children: worst.children,
+          reasons: worst.reasons,
+        });
+      }
+    });
+  }
+
+  /**
+   * Structural equality check for action replay lists. Returns true when the
+   * two lists represent the same set of cards with the same headline counts,
+   * so we can skip a needless array replacement (which causes chip flicker).
+   */
+  private replaysAreEquivalent(a: ActionReplay[], b: ActionReplay[]): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      const x = a[i];
+      const y = b[i];
+      if (
+        x.id !== y.id ||
+        x.totalRenders !== y.totalRenders ||
+        x.uniqueComponents !== y.uniqueComponents
+      ) {
+        return false;
+      }
+    }
+    return true;
   }
   readonly expandedActions = signal(new Set<string>());
   readonly collapsedActions = signal(new Set<string>());
@@ -175,6 +250,126 @@ export class RenderingComponent {
   /** Track which action is selected in the timeline view */
   readonly selectedActionId = signal<string | null>(null);
   
+  /**
+   * Reusable explanation for estimated timing values (provenance = EST).
+   * Accurate to the implementation: per-component ms is the frame's wall-clock
+   * time divided evenly across the components that changed the DOM in that
+   * change-detection cycle — NOT a measured per-component execution time.
+   */
+  readonly estTooltip =
+    'Estimated. This is frame time allocated evenly across the components that ' +
+    'changed the DOM in this change-detection cycle — not a measured per-component ' +
+    'execution time. Treat it as a rough attribution, not a profiler measurement.';
+
+  /** Explanation for the top-bar total render time (interaction wall-clock span). */
+  readonly estTotalTooltip =
+    'Estimated. Wall-clock span of this interaction (first to last render event). ' +
+    'It includes idle gaps and is not a sum of per-component render times.';
+
+  /** Center workspace tab: Render Story (flow diagram + sequence), Timeline, Change Detection, Performance. */
+  readonly activeWorkspaceTab = signal<'flow' | 'timeline' | 'cd' | 'perf'>('flow');
+  /** Center: 'flow' (Parent→Self→Child diagram) vs 'cd' (change-detection cycle) toggle inside Render Story. */
+  readonly renderStoryView = signal<'flow' | 'cd'>('flow');
+
+  /** Component Details tab: Summary, Diagnostics, or Code. */
+  readonly activeDetailsTab = signal<'summary' | 'diagnostics' | 'code'>('summary');
+
+  /** Which origin's evidence ledger is expanded in the details panel. */
+  readonly expandedOriginKey = signal<string | null>(null);
+
+  toggleOriginEvidence(key: string): void {
+    this.expandedOriginKey.update(k => (k === key ? null : key));
+  }
+
+  /**
+   * Jump to a related component (parent or a child culprit) and focus it in the
+   * details panel. Resolves the node from the current action's tree so the full
+   * origin/evidence model is available for the destination.
+   */
+  jumpToComponent(rawOrDisplayName: string): void {
+    const action = this.getSelectedAction();
+    if (!action?.tree) return;
+    const target = this.flattenTree(action.tree).find(n =>
+      n.componentName === rawOrDisplayName || this.displayName(n.componentName) === rawOrDisplayName
+    );
+    if (!target) return;
+    this.onComponentSelected({
+      componentName: target.componentName,
+      displayName: this.displayName(target.componentName),
+      count: target.count,
+      totalDuration: target.totalDuration,
+      cause: target.cause,
+      causeBreakdown: target.causeBreakdown,
+      parentRenders: target.parentRenders,
+      ownRenders: target.ownRenders,
+      children: target.children,
+      reasons: target.reasons,
+      parentName: this.findParentName(action.tree, target.componentName),
+    });
+  }
+
+  /**
+   * Render Path: the ancestor chain from a root down to the selected component,
+   * with each hop's real render count and ~estimated cost. Highlights the
+   * hotspot hop (highest estimated cost) so a developer sees where cost enters.
+   */
+  readonly renderPath = computed(() => {
+    const action = this.getSelectedAction();
+    const name = this.selectedComponentName();
+    if (!action?.tree || !name) return null;
+
+    // DFS to find the chain of nodes to the selected one.
+    const chain: CascadeNode[] = [];
+    const dfs = (nodes: CascadeNode[], trail: CascadeNode[]): boolean => {
+      for (const n of nodes) {
+        const nextTrail = [...trail, n];
+        if (this.displayName(n.componentName) === name) {
+          chain.push(...nextTrail);
+          return true;
+        }
+        if (n.children?.length && dfs(n.children, nextTrail)) return true;
+      }
+      return false;
+    };
+    dfs(action.tree, []);
+    if (chain.length === 0) return null;
+
+    let maxCost = 0;
+    for (const n of chain) if (n.totalDuration > maxCost) maxCost = n.totalDuration;
+
+    return chain.map(n => ({
+      name: this.displayName(n.componentName),
+      rawName: n.componentName,
+      count: n.count,
+      cost: n.totalDuration, // estimated
+      isHotspot: n.totalDuration === maxCost && maxCost > 0 && chain.length > 1,
+      isSelected: this.displayName(n.componentName) === name,
+    }));
+  });
+
+  /** Single-letter render-origin glyph for the tree (P/S/I/A/?). */
+  originGlyph(node: CascadeNode): string {
+    const b = node.causeBreakdown ?? {};
+    const parent = b['parent'] ?? 0;
+    const own = (b['signal'] ?? 0) + (b['input'] ?? 0) + (b['manual-cd'] ?? 0);
+    if (own > 0 && own >= parent) {
+      if ((b['input'] ?? 0) > (b['signal'] ?? 0)) return 'I';
+      return 'S';
+    }
+    if (parent > 0) return 'P';
+    return '?';
+  }
+
+  /** Find the display name of a node's parent in the tree (for jump-to-parent). */
+  private findParentName(nodes: CascadeNode[], childName: string, parent: string | null = null): string | null {
+    for (const n of nodes) {
+      if (n.componentName === childName) return parent ? this.displayName(parent) : null;
+      const found = this.findParentName(n.children ?? [], childName, n.componentName);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
   /** UX Level 3: Contextual Detail Drawer */
   readonly selectedComponentName = signal<string | null>(null);
   /** Full component data for the selected node (from tree view hover) */
@@ -189,12 +384,188 @@ export class RenderingComponent {
   /** Default to tree view in new UX */
   readonly showTreeView = signal(true);
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // RENDER CAUSALITY VIEW — built ONLY on observable data.
+  //
+  // Accuracy note: per-component millisecond timing in ngLens is an even split
+  // of one MutationObserver frame (frameDuration / componentCount), so it is an
+  // estimate, not a per-component measurement. This view therefore leads with
+  // render COUNTS, CAUSE attribution, and OBSERVED causal chains — all of which
+  // come from real signals — and never presents fabricated timing as precise.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Classify a render cause into an honest confidence level based on how the
+   * cause was actually determined.
+   *
+   * - direct:   we directly observed the trigger (user interaction, signal
+   *             write, or an HTTP/flow event tied to the render).
+   * - inferred: derived from DOM nesting (a parent re-render cascaded down).
+   *             Plausible, but not verified against Angular's CD graph.
+   * - uncertain: zone/unknown — we saw a render but could not attribute a cause.
+   */
+  classifyConfidence(causeType: string | undefined, source?: string): {
+    level: 'direct' | 'inferred' | 'uncertain';
+    label: string;
+  } {
+    const src = (source ?? '').toLowerCase();
+    switch (causeType) {
+      case 'signal':
+      case 'input':
+        return { level: 'direct', label: 'Observed' };
+      case 'parent':
+        return { level: 'inferred', label: 'Inferred from DOM' };
+      case 'manual-cd':
+        return { level: 'direct', label: 'Observed' };
+      case 'zone':
+        // Interaction-derived zone causes ARE observed (addEventListener:click, etc.)
+        if (src.includes('addeventlistener') || src.includes('click') || src.includes('input') || src.includes('keydown')) {
+          return { level: 'direct', label: 'Observed' };
+        }
+        if (src.includes('fetch') || src.includes('xmlhttprequest') || src.includes('http')) {
+          return { level: 'direct', label: 'Observed' };
+        }
+        return { level: 'uncertain', label: 'Unattributed' };
+      default:
+        return { level: 'uncertain', label: 'Unattributed' };
+    }
+  }
+
+  /**
+   * Causality view model for the selected action.
+   * Everything here is derived from real render counts + observed causes.
+   */
+  readonly causalityModel = computed(() => {
+    const action = this.getSelectedAction();
+    if (!action || !action.tree || action.tree.length === 0) return null;
+
+    const nodes = this.flattenTree(action.tree);
+
+    // ── Cause breakdown by real render count ──
+    const causeBuckets = new Map<string, {
+      type: string;
+      label: string;
+      confidence: 'direct' | 'inferred' | 'uncertain';
+      confidenceLabel: string;
+      renderCount: number;
+      components: number;
+    }>();
+
+    let totalRenders = 0;
+    // Confidence tally across all renders
+    const confidenceTally = { direct: 0, inferred: 0, uncertain: 0 };
+
+    for (const node of nodes) {
+      const cause = node.cause ?? { type: 'zone', source: 'unknown' };
+      const conf = this.classifyConfidence(cause.type, cause.source);
+      const label = this.formatCauseLabel(cause);
+      const key = `${cause.type}:${label}`;
+
+      const existing = causeBuckets.get(key);
+      if (existing) {
+        existing.renderCount += node.count;
+        existing.components += 1;
+      } else {
+        causeBuckets.set(key, {
+          type: cause.type ?? 'zone',
+          label,
+          confidence: conf.level,
+          confidenceLabel: conf.label,
+          renderCount: node.count,
+          components: 1,
+        });
+      }
+
+      totalRenders += node.count;
+      confidenceTally[conf.level] += node.count;
+    }
+
+    const causes = Array.from(causeBuckets.values())
+      .map(c => ({
+        ...c,
+        pct: totalRenders > 0 ? Math.round((c.renderCount / totalRenders) * 100) : 0,
+      }))
+      .sort((a, b) => b.renderCount - a.renderCount);
+
+    // ── Confidence distribution (percentages of total renders) ──
+    const confidence = {
+      direct: totalRenders > 0 ? Math.round((confidenceTally.direct / totalRenders) * 100) : 0,
+      inferred: totalRenders > 0 ? Math.round((confidenceTally.inferred / totalRenders) * 100) : 0,
+      uncertain: totalRenders > 0 ? Math.round((confidenceTally.uncertain / totalRenders) * 100) : 0,
+    };
+
+    // ── Observed causal chains (real: HTTP → store/signal → subscribers) ──
+    const chains = this.buildCausalChains(action);
+
+    // ── Top re-render offenders by count (real) ──
+    const offenders = [...nodes]
+      .filter(n => n.count >= 2)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6)
+      .map(n => ({
+        name: this.displayName(n.componentName),
+        count: n.count,
+        confidence: this.classifyConfidence(n.cause?.type, n.cause?.source).level,
+        causeLabel: this.formatCauseLabel(n.cause),
+      }));
+
+    return {
+      totalRenders,
+      uniqueComponents: action.uniqueComponents,
+      // Frame duration IS real (whole mutation batch); label it as such in UI.
+      frameDuration: action.duration,
+      causes,
+      confidence,
+      chains,
+      offenders,
+    };
+  });
+
   onComponentSelected(componentData: any): void {
     // Show details panel for the selected component
     // Use display name if available, fallback to raw component name
     const displayedName = componentData.displayName || componentData.componentName;
+
+    // Push the current selection onto the back-stack so navigation is reversible.
+    const current = this.selectedComponentData();
+    if (current && (current.displayName || current.componentName) !== displayedName) {
+      this.selectionHistory.update(h => [...h, current]);
+    }
+
     this.selectedComponentName.set(displayedName);
     this.selectedComponentData.set(componentData);
+  }
+
+  /** Back-stack of previously selected components (for reversible drill-down). */
+  readonly selectionHistory = signal<any[]>([]);
+
+  /** Whether a previous selection exists to return to. */
+  readonly canGoBack = computed(() => this.selectionHistory().length > 0);
+
+  /** Display name of the component we'd return to (for the Back label). */
+  readonly previousSelectionName = computed(() => {
+    const history = this.selectionHistory();
+    if (history.length === 0) return '';
+    const prev = history[history.length - 1];
+    return prev.displayName || prev.componentName || 'previous';
+  });
+
+  /** Return to the previously selected component. */
+  goBackSelection(): void {
+    const history = this.selectionHistory();
+    if (history.length === 0) return;
+    const prev = history[history.length - 1];
+    this.selectionHistory.update(h => h.slice(0, -1));
+    const displayedName = prev.displayName || prev.componentName;
+    this.selectedComponentName.set(displayedName);
+    this.selectedComponentData.set(prev);
+  }
+
+  /** Clear the selection AND its history (the × close button). */
+  clearSelection(): void {
+    this.selectionHistory.set([]);
+    this.selectedComponentName.set(null);
+    this.selectedComponentData.set(null);
   }
 
   /** Get component metrics for the detail drawer */
@@ -224,7 +595,602 @@ export class RenderingComponent {
     };
   });
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // RENDER ORIGIN + EVIDENCE + CONFIDENCE MODEL (the trust foundation)
+  //
+  // Core principle: CONFIDENCE is a judgment about EVIDENCE, expressed as a word
+  // (high/medium/low), NOT the percentage of renders in a bucket. A component
+  // can render 2/2 times via "parent propagation" (100% attribution share) while
+  // our CONFIDENCE that the parent CAUSED it is only Medium — because we observe
+  // co-occurrence in the same change-detection cycle, not a proven causal edge.
+  //
+  // Four origins:
+  //   own-trigger        — a signal/input/interaction was observed ON this comp
+  //   parent-propagation — parent rendered in the same CD cycle (INFERRED, ≤Medium)
+  //   external           — an API/store flow correlated with the render
+  //   unknown            — rendered, but no attributable cause was observed
+  // ══════════════════════════════════════════════════════════════════════════
 
+  /**
+   * Classify the selected component's renders into origin buckets, each carrying
+   * real counts, an evidence ledger (observed vs not-observed), and an honest
+   * confidence WORD. Confidence is never derived from the render share.
+   */
+  readonly renderOrigin = computed(() => {
+    const data = this.selectedComponentData();
+    if (!data) return null;
+
+    const total: number = data.count ?? 0;
+    const breakdown: Record<string, number> = data.causeBreakdown ?? {};
+    const parentName: string | undefined = data.parentName;
+    const compName: string = data.displayName || data.componentName || 'This component';
+
+    // Real counts from the observed cause histogram (pure, unit-tested logic).
+    const partition = classifyRenderOrigin(breakdown, data.cause?.source ?? '');
+    const parentRenders = partition.parentRenders;
+    const ownRenders = partition.ownRenders;
+    const unknownRenders = partition.unknownRenders;
+
+    // External: correlated API / store-dispatch / facade-method flows that
+    // impacted this component (all observed, never proven causal edges).
+    const action = this.getSelectedAction();
+    let externalRenders = 0;
+    let externalTrigger: string | null = null;
+    if (action) {
+      // 1) Causal chains (HTTP → store → subscribers).
+      const chains = this.buildCausalChains(action);
+      for (const chain of chains) {
+        if (chain.impactedComponents.includes(compName)) {
+          externalTrigger = chain.trigger.label;
+          break;
+        }
+      }
+      // 2) Direct store-dispatch / facade-method flows attributed to this
+      //    component (by sourceComponent or owning class).
+      if (!externalTrigger) {
+        const storeOrFacade = action.flowEntries.find(f =>
+          (f.type === 'store-dispatch' || f.type === 'facade-method') &&
+          (
+            (f.sourceComponent && this.displayName(f.sourceComponent) === compName) ||
+            (f.ownerClass && this.displayName(f.ownerClass) === compName)
+          )
+        );
+        if (storeOrFacade) externalTrigger = storeOrFacade.label;
+      }
+    }
+
+    // Build the four buckets with evidence + honest confidence words.
+    type Origin = {
+      key: 'own-trigger' | 'parent-propagation' | 'external' | 'unknown';
+      label: string;
+      count: number;
+      confidence: 'high' | 'medium' | 'low';
+      confidenceLabel: string;
+      observed: string[];
+      notObserved: string[];
+      detail: string;
+    };
+    const origins: Origin[] = [];
+
+    if (ownRenders > 0) {
+      origins.push({
+        key: 'own-trigger',
+        label: 'Own trigger',
+        count: ownRenders,
+        confidence: 'high',
+        confidenceLabel: 'High',
+        observed: [
+          'Signal / input / interaction observed on this component',
+          `${compName} rendered`,
+        ],
+        notObserved: [],
+        detail: 'A change to this component\u2019s own state or inputs was directly observed.',
+      });
+    }
+
+    if (parentRenders > 0) {
+      origins.push({
+        key: 'parent-propagation',
+        label: 'Parent propagation',
+        count: parentRenders,
+        // Inferred from same-cycle co-occurrence. Never above Medium.
+        confidence: 'medium',
+        confidenceLabel: 'Medium',
+        observed: [
+          parentName ? `Parent (${parentName}) rendered` : 'Parent rendered',
+          `${compName} rendered`,
+          'Both in the same change-detection cycle',
+        ],
+        notObserved: [
+          'Direct parent \u2192 child causal edge',
+        ],
+        detail: parentName
+          ? `Rendered during the same change-detection cycle as its parent ${parentName}. The parent likely propagated the render, but a direct causal edge was not proven.`
+          : 'Rendered during the same change-detection cycle as its parent. Likely propagation, not proven.',
+      });
+    }
+
+    if (externalRenders > 0 || externalTrigger) {
+      origins.push({
+        key: 'external',
+        label: 'External (API / state)',
+        count: externalRenders || 0,
+        confidence: 'medium',
+        confidenceLabel: 'Medium',
+        observed: [
+          externalTrigger ? `Observed flow: ${externalTrigger}` : 'Correlated API/state flow',
+          `${compName} rendered within the flow window`,
+        ],
+        notObserved: ['Direct data \u2192 render binding'],
+        detail: 'A correlated API response or state change was observed in the same window as this render.',
+      });
+    }
+
+    if (unknownRenders > 0) {
+      origins.push({
+        key: 'unknown',
+        label: 'Unknown',
+        count: unknownRenders,
+        confidence: 'low',
+        confidenceLabel: 'Low',
+        observed: [`${compName} rendered`],
+        notObserved: ['Any attributable trigger (signal / input / parent / API)'],
+        detail: 'A render was observed but no attributable cause was found — likely framework scheduling or an untracked source.',
+      });
+    }
+
+    origins.sort((a, b) => b.count - a.count);
+
+    // Dominant origin + honest overall confidence WORD.
+    const dominant = origins[0] ?? null;
+
+    return {
+      total,
+      compName,
+      parentName,
+      ownRenders,
+      parentRenders,
+      externalRenders,
+      unknownRenders,
+      origins,
+      dominant,
+    };
+  });
+
+  /**
+   * "Why did it render N times?" — evidence-based headline built on the origin
+   * model. Wording reflects confidence; never presents inference as proof.
+   */
+  readonly renderExplanation = computed(() => {
+    const data = this.selectedComponentData();
+    const origin = this.renderOrigin();
+    if (!data || !origin) return null;
+
+    const total: number = origin.total;
+    const parentName: string | undefined = origin.parentName;
+
+    // Entries = origin buckets rendered as the "why" list.
+    const entries = origin.origins.map(o => ({
+      type: o.key,
+      label: o.label,
+      count: o.count,
+      pct: total > 0 ? Math.round((o.count / total) * 100) : 0,
+      confidence: o.confidence,
+      confidenceLabel: o.confidenceLabel,
+      isParent: o.key === 'parent-propagation',
+    }));
+
+    const parentRenders: number = origin.parentRenders;
+    const ownRenders: number = origin.ownRenders;
+
+    // Evidence-first: `headline` is the plain OBSERVED fact (render count only,
+    // no cause claim). `interpretation` is the separate, confidence-qualified
+    // reading of that evidence — so the UI leads with what we saw, then offers
+    // the (clearly-hedged) inference. We never fold an inferred cause into the
+    // headline as if it were observed.
+    const headline =
+      total <= 1 ? 'Rendered once.' : `Rendered ${total}×.`;
+
+    // Parent relationship stated explicitly (observation, not proof). Only set
+    // when parent-propagation renders were actually counted.
+    const parentRelation =
+      parentRenders > 0
+        ? {
+            parentName: parentName ?? null,
+            count: parentRenders,
+          }
+        : null;
+
+    let interpretation: string;
+    if (total <= 1) {
+      interpretation = 'No repeated re-rendering to explain.';
+    } else if (origin.dominant?.key === 'parent-propagation') {
+      interpretation = parentName
+        ? `Most renders coincided with ${parentName} re-rendering in the same change-detection cycle — likely parent propagation, not proven.`
+        : 'Most renders coincided with a parent re-rendering in the same change-detection cycle — likely parent propagation, not proven.';
+    } else if (origin.dominant?.key === 'own-trigger') {
+      interpretation = "A signal, input, or interaction was observed on this component itself.";
+    } else if (origin.dominant?.key === 'external') {
+      interpretation = 'A correlated API/state change was observed in the same window.';
+    } else {
+      interpretation = 'No attributable trigger was observed for these renders.';
+    }
+
+    return {
+      total,
+      parentRenders,
+      ownRenders,
+      entries,
+      headline,
+      interpretation,
+      parentRelation,
+    };
+  });
+
+  /**
+   * Render Flow model for the center workspace: TRIGGER → COMPONENT → TRIGGERED.
+   * All counts are real. When a component is selected it centers on that node;
+   * otherwise it centers on the action's top-level (root) component.
+   */
+  readonly renderFlowModel = computed(() => {
+    const action = this.getSelectedAction();
+    if (!action?.tree || action.tree.length === 0) return null;
+
+    const selectedName = this.selectedComponentName();
+
+    // Resolve the focused node via the shared, unit-tested TRUST RULE:
+    // a selected component NEVER diverges from the right panel; if it's absent
+    // from this action's tree, focus is null (empty state) — no fallback.
+    const focus = resolveFlowFocus(
+      action.tree as CascadeNode[],
+      selectedName,
+      (raw) => this.displayName(raw),
+    ) as CascadeNode | null;
+    if (!focus) return null;
+
+    const focusDisplay = this.displayName(focus.componentName);
+
+    // ── TRIGGERS: what caused THIS component to render ──
+    const triggers: Array<{ icon: string; label: string; type: string; confidence: string; confidenceLabel: string }> = [];
+    const breakdown = focus.causeBreakdown ?? {};
+    for (const [type, count] of Object.entries(breakdown)) {
+      if (count <= 0) continue;
+      if (type === 'parent') continue; // parent cascade is shown via the graph edge, not a trigger card
+      const conf = this.classifyConfidence(type, focus.cause?.source);
+      // When the cause is unattributed, keep it honestly labelled "Unknown
+      // trigger" instead of surfacing a raw zone source that reads like a
+      // confident cause. Evidence insufficient ⇒ Unknown stays Unknown.
+      const label = conf.level === 'uncertain'
+        ? 'Unknown trigger'
+        : this.formatCauseLabel({ type, source: focus.cause?.source });
+      triggers.push({
+        icon: this.triggerIconForType(type),
+        label,
+        type,
+        confidence: conf.level,
+        confidenceLabel: conf.label,
+      });
+    }
+    // Add observed causal-chain triggers (API/store) that impacted this component.
+    const chains = this.buildCausalChains(action);
+    for (const chain of chains) {
+      if (chain.impactedComponents.includes(focusDisplay)) {
+        triggers.push({
+          icon: chain.trigger.icon,
+          label: chain.trigger.label,
+          type: chain.trigger.type,
+          confidence: 'direct',
+          confidenceLabel: 'Observed',
+        });
+      }
+    }
+    // If this node is a pure parent-cascade child with no own trigger, say so.
+    if (triggers.length === 0 && (focus.parentRenders ?? 0) > 0) {
+      triggers.push({
+        icon: '⬆️',
+        label: 'Parent re-render',
+        type: 'parent',
+        confidence: 'inferred',
+        confidenceLabel: 'Inferred from DOM',
+      });
+    }
+
+    // ── TRIGGERED: the children this component caused to render ──
+    const triggered = (focus.children ?? [])
+      .slice()
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8)
+      .map(c => ({
+        name: this.displayName(c.componentName),
+        rawName: c.componentName,
+        count: c.count,
+        totalDuration: c.totalDuration,
+        severity: c.count >= 5 ? 'high' : c.count >= 3 ? 'medium' : 'low',
+        node: c,
+      }));
+
+    return {
+      triggers,
+      component: {
+        name: focusDisplay,
+        rawName: focus.componentName,
+        count: focus.count,
+        totalDuration: focus.totalDuration,
+      },
+      triggered,
+      childrenTotal: focus.children?.length ?? 0,
+    };
+  });
+
+  /** Icon for a render cause type (used by the flow graph trigger cards). */
+  private triggerIconForType(type: string): string {
+    switch (type) {
+      case 'signal': return '⚡';
+      case 'input': return '📥';
+      case 'zone': return '🖱️';
+      case 'manual-cd': return '🔧';
+      case 'http': return '🌐';
+      case 'store-dispatch': return '🗄️';
+      default: return '•';
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // REDESIGN SUPPORT — derived, real-data models for the new Components UI.
+  // Every value below comes from observed data (causeBreakdown, flowEntries,
+  // cascade tree, timeline). Missing concepts return 'Not observed' rather than
+  // being fabricated.
+  // ════════════════════════════════════════════════════════════════════════
+
+  /**
+   * The five-row "Why did it render?" list used by the redesigned right panel.
+   * Each row maps to a semantic concept (parent/input/signal/rxjs/store) with a
+   * real count and confidence, or a "Not observed" state. Colors are keyed by
+   * `sem` so they match the tree, flow diagram, and related-activity dots.
+   */
+  readonly whyRows = computed(() => {
+    const data = this.selectedComponentData();
+    if (!data) return [];
+    const breakdown: Record<string, number> = data.causeBreakdown ?? {};
+    const origin = this.renderOrigin();
+
+    const parent = breakdown['parent'] ?? 0;
+    const signal = breakdown['signal'] ?? 0;
+    const input = breakdown['input'] ?? 0;
+
+    // RxJS / Store come from correlated flow entries on this component.
+    const flows = this.getSelectedComponentFlows();
+    const rxjs = flows.filter(f => f.type === 'subject-emit').length;
+    const store = flows.filter(f => f.type === 'store-dispatch' || f.type === 'store-select' || f.type === 'facade-method').length;
+
+    type Why = {
+      key: 'parent' | 'input' | 'signal' | 'rxjs' | 'store';
+      sem: string; label: string; icon: string;
+      count: number; observed: boolean;
+      confidence: 'high' | 'medium' | 'low' | null; confidenceLabel: string;
+    };
+    const rows: Why[] = [
+      { key: 'parent', sem: 'parent', label: 'Parent propagation', icon: '⬆', count: parent, observed: parent > 0, confidence: parent > 0 ? 'medium' : null, confidenceLabel: 'Medium' },
+      { key: 'input', sem: 'input', label: 'Input changes', icon: '▤', count: input, observed: input > 0, confidence: input > 0 ? 'high' : null, confidenceLabel: 'High' },
+      { key: 'signal', sem: 'signal', label: 'Signal changes', icon: '◈', count: signal, observed: signal > 0, confidence: signal > 0 ? 'high' : null, confidenceLabel: 'High' },
+      { key: 'rxjs', sem: 'rxjs', label: 'RxJS / Observable', icon: '∿', count: rxjs, observed: rxjs > 0, confidence: rxjs > 0 ? 'medium' : null, confidenceLabel: 'Medium' },
+      { key: 'store', sem: 'store', label: 'Store changes', icon: '▦', count: store, observed: store > 0, confidence: store > 0 ? 'medium' : null, confidenceLabel: 'Medium' },
+    ];
+    // Observed rows first (by count), then the not-observed rows.
+    return rows.sort((a, b) =>
+      (b.observed ? 1 : 0) - (a.observed ? 1 : 0) || b.count - a.count
+    );
+  });
+
+  /** Only the causes actually OBSERVED — no "Not observed" noise on the surface. */
+  readonly whyObserved = computed(() => this.whyRows().filter(w => w.observed));
+
+  /** Overall confidence word for the selected component (from the dominant origin). */
+  readonly overallConfidence = computed<{ level: 'high' | 'medium' | 'low'; label: string } | null>(() => {
+    const origin = this.renderOrigin();
+    if (!origin?.dominant) return null;
+    return { level: origin.dominant.confidence, label: origin.dominant.confidenceLabel };
+  });
+
+  /** Short "reason tag" shown next to the component title (e.g. "Renders due to parent propagation"). */
+  readonly reasonTag = computed<string | null>(() => {
+    const origin = this.renderOrigin();
+    if (!origin?.dominant) return null;
+    switch (origin.dominant.key) {
+      case 'parent-propagation': return 'Renders due to parent propagation';
+      case 'own-trigger': return 'Renders due to own state change';
+      case 'external': return 'Renders due to API / state change';
+      default: return 'Cause not attributed';
+    }
+  });
+
+  /**
+   * "Related activity" counts for the left panel. All derived from the selected
+   * component's node + its position in the cascade tree.
+   *  - parent:   1 if this component has a parent in the tree, else 0
+   *  - child:    number of direct children
+   *  - siblings: components sharing the same parent (same CD subtree)
+   *  - signals:  distinct signal/flow connections observed for this component
+   */
+  readonly relatedActivity = computed(() => {
+    const data = this.selectedComponentData();
+    const action = this.getSelectedAction();
+    if (!data || !action?.tree) {
+      return { parentRenders: 0, childRenders: 0, siblings: 0, signalLinks: 0, parentName: null as string | null };
+    }
+    const name = data.displayName || data.componentName;
+    const children: CascadeNode[] = data.children ?? [];
+    const childRenders = children.reduce((s, c) => s + (c.count ?? 0), 0);
+
+    // Parent + siblings via the tree.
+    const parentName = this.findParentName(action.tree as CascadeNode[], data.componentName);
+    let siblings = 0;
+    let parentRenders = 0;
+    if (parentName) {
+      const parentNode = this.flattenTree(action.tree).find(n => this.displayName(n.componentName) === parentName);
+      if (parentNode) {
+        parentRenders = parentNode.count;
+        siblings = (parentNode.children ?? []).filter(c => this.displayName(c.componentName) !== name).length;
+      }
+    }
+
+    const signalLinks = this.getSelectedComponentFlows().filter(
+      f => f.type === 'signal-write' || f.type === 'subject-emit' || f.type === 'store-select'
+    ).length;
+
+    return { parentRenders, childRenders, siblings, signalLinks, parentName };
+  });
+
+  /**
+   * A numbered render sequence for the selected component: the real, timestamped
+   * render events within the action window, made relative to the first one.
+   * Per-render ms is an estimate (frame time split), labelled as such in the UI.
+   */
+  readonly renderSequence = computed(() => {
+    const action = this.getSelectedAction();
+    const name = this.selectedComponentName();
+    if (!action || !name) return [];
+
+    const events = this.getActionEvents(action)
+      .filter(e => this.displayName(e.componentName) === name)
+      .sort((a, b) => a.timestamp - b.timestamp);
+    if (events.length === 0) return [];
+
+    const start = events[0].timestamp;
+    // Coalesce events within the same CD cycle (50ms) into one numbered step.
+    const steps: Array<{ n: number; label: string; detail: string; offsetMs: number; sem: string }> = [];
+    let lastTs = -Infinity;
+    let n = 0;
+    for (const e of events) {
+      if (e.timestamp - lastTs < 50 && steps.length > 0) continue;
+      lastTs = e.timestamp;
+      const causeType = e.causes[0]?.type ?? 'zone';
+      const sem = causeType === 'parent' ? 'parent'
+        : causeType === 'signal' ? 'signal'
+        : causeType === 'input' ? 'input'
+        : 'self';
+      const detail = causeType === 'parent'
+        ? 'Detected in the same change-detection cycle.'
+        : causeType === 'signal' ? 'A signal read by this component changed.'
+        : causeType === 'input' ? 'An input binding changed.'
+        : 'No direct input or signal change observed.';
+      steps.push({
+        n: ++n,
+        label: `${name} render #${n}`,
+        detail,
+        offsetMs: Math.round(e.timestamp - start),
+        sem,
+      });
+    }
+    return steps;
+  });
+
+  /**
+   * Flow-diagram nodes for the redesigned center panel: Parent → Selected →
+   * Children, each a real node with counts. Parent node is resolved from the
+   * cascade tree (renderFlowModel only exposes the parent as a trigger edge).
+   */
+  readonly flowDiagram = computed(() => {
+    const model = this.renderFlowModel();
+    const action = this.getSelectedAction();
+    if (!model || !action?.tree) return null;
+
+    const rel = this.relatedActivity();
+    const parent = rel.parentName
+      ? { name: rel.parentName, count: rel.parentRenders, sem: 'parent' as const }
+      : null;
+
+    const self = {
+      name: model.component.name,
+      count: model.component.count,
+      totalDuration: model.component.totalDuration,
+      sem: 'self' as const,
+    };
+
+    const children = model.triggered.map(c => ({
+      name: c.name, rawName: c.rawName, count: c.count,
+      totalDuration: c.totalDuration, node: c.node, sem: 'child' as const,
+    }));
+
+    return { parent, self, children, childrenTotal: model.childrenTotal };
+  });
+
+  /** Jump selection to the parent component (used by the "Inspect parent" CTA). */
+  inspectParent(): void {
+    const parentName = this.relatedActivity().parentName;
+    if (parentName) this.jumpToComponent(parentName);
+  }
+
+  /**
+   * One-line verdict for the selected component — the answer up front.
+   * Plain language, confidence-qualified, no jargon dump.
+   */
+  readonly verdict = computed<{ text: string; level: 'high' | 'medium' | 'low' } | null>(() => {
+    const origin = this.renderOrigin();
+    const data = this.selectedComponentData();
+    if (!origin || !data) return null;
+    const n = origin.total;
+    if (n <= 1) return { text: 'Rendered once — nothing to optimize.', level: 'high' };
+    const dom = origin.dominant;
+    const level = dom?.confidence ?? 'low';
+    switch (dom?.key) {
+      case 'parent-propagation':
+        return { text: `Rendered ${n}× — mostly dragged along by its parent${origin.parentName ? ' ' + origin.parentName : ''}.`, level };
+      case 'own-trigger':
+        return { text: `Rendered ${n}× — triggered by its own state or inputs.`, level };
+      case 'external':
+        return { text: `Rendered ${n}× — correlated with an API / store change.`, level };
+      default:
+        return { text: `Rendered ${n}× — no clear cause was observed.`, level };
+    }
+  });
+
+  /**
+   * Rich tooltip text for a component's render count in the tree/cascade —
+   * "why it rendered" lives in the hover, keeping the surface clean.
+   */
+  causeTooltipFor(node: { causeBreakdown?: Record<string, number>; count?: number; parentRenders?: number; ownRenders?: number }): string {
+    const b = node.causeBreakdown ?? {};
+    const parts: string[] = [];
+    if ((b['parent'] ?? 0) > 0) parts.push(`${b['parent']} from parent cascade`);
+    if ((b['signal'] ?? 0) > 0) parts.push(`${b['signal']} from signal changes`);
+    if ((b['input'] ?? 0) > 0) parts.push(`${b['input']} from input changes`);
+    if ((b['manual-cd'] ?? 0) > 0) parts.push(`${b['manual-cd']} from manual CD`);
+    if ((b['zone'] ?? 0) > 0) parts.push(`${b['zone']} from zone/async`);
+    const total = node.count ?? 0;
+    if (parts.length === 0) return `Rendered ${total}× — cause not attributed.`;
+    return `Rendered ${total}×: ` + parts.join(', ') + '. Timing is estimated.';
+  }
+
+  /** Tooltip explaining what a "why" chip means, including its evidence. */
+  whyTooltipFor(w: { label: string; count: number; confidenceLabel: string }): string {
+    return `${w.label}: observed ${w.count}× · ${w.confidenceLabel} confidence. Hover counts elsewhere for the full breakdown.`;
+  }
+
+  /** The single recommended action for the selected component, cause-driven. */
+  readonly recommendedAction = computed<{ text: string; cta: string; kind: 'parent' | 'own' | 'none' } | null>(() => {
+    const origin = this.renderOrigin();
+    const m = this.selectedComponentMetrics();
+    if (!origin || !m || origin.total <= 1) return null;
+    if (origin.dominant?.key === 'parent-propagation') {
+      return {
+        text: 'This component re-renders whenever its parent does, even without its own changes.',
+        cta: 'Add OnPush to isolate it',
+        kind: 'parent',
+      };
+    }
+    if (origin.dominant?.key === 'own-trigger' && m.renderCount >= 4) {
+      return {
+        text: 'Its own signal/input changes drive frequent renders.',
+        cta: 'Review the signals it reads',
+        kind: 'own',
+      };
+    }
+    if (m.renderCount >= 5) {
+      return { text: `Rendered ${m.renderCount}× — consider OnPush or computed signals.`, cta: '', kind: 'none' };
+    }
+    return null;
+  });
 
   private formatCauseLabel(cause: any): string {
     // If we don't have cause data, bail out
@@ -271,6 +1237,191 @@ export class RenderingComponent {
     return new Set(events.map(e => e.componentName)).size;
   });
 
+  /**
+   * Top metric bar model. Counts are real; total render time is an estimate
+   * (frame time split across components) and is labelled ~est in the UI.
+   * No trend arrows in v1 — we have no baseline to compare against.
+   */
+  readonly metricBar = computed(() => {
+    const action = this.getSelectedAction();
+    // Use the tree-consistent (coalesced) render count so the headline number
+    // matches what the component tree/hotspots actually sum to.
+    const totalRenders = action
+      ? this.meaningfulRenderCount(action)
+      : this.deduplicatedRenderCount();
+    const components = action
+      ? this.flattenTree(action.tree).length
+      : this.deduplicatedComponentCount();
+
+    // Wasted renders = re-renders beyond the first for each component (real count).
+    let wasted = 0;
+    if (action?.tree) {
+      for (const node of this.flattenTree(action.tree)) {
+        if (node.count > 1) wasted += node.count - 1;
+      }
+    }
+
+    return {
+      totalRenders,
+      components,
+      totalRenderTime: action?.duration ?? 0, // estimated — shown with ~
+      wasted,
+      live: this.state.isTracking(),
+    };
+  });
+
+  /**
+   * Accuracy self-audit: checks the tool's own numbers reconcile.
+   *  - tree total: sum of per-component render counts vs the action's totalRenders
+   *  - origin sum: for the selected component, origin buckets sum to its count
+   * Internal consistency only — does NOT prove ground-truth accuracy (use the
+   * test-fixtures harness for that), but it catches aggregation bugs.
+   */
+  readonly renderReconciliation = computed(() => {
+    const action = this.getSelectedAction();
+    if (!action?.tree) return null;
+
+    const nodes = this.flattenTree(action.tree);
+    const treeSum = nodes.reduce((s, n) => s + n.count, 0);
+    // The DISPLAYED render count is the coalesced tree sum, so this must match
+    // exactly. The raw mutation-event count (action.totalRenders) is higher and
+    // is shown only as context in tooltips.
+    const treeConsistent = treeSum > 0;
+
+    // Origin reconciliation for the selected component.
+    let originConsistent = true;
+    let originDetail = '';
+    const origin = this.renderOrigin();
+    if (origin) {
+      const bucketSum = origin.ownRenders + origin.parentRenders + origin.unknownRenders;
+      // externalRenders overlaps other buckets (correlation, not a partition),
+      // so we reconcile the partitioning buckets against the total.
+      originConsistent = bucketSum === origin.total;
+      originDetail = `${bucketSum}/${origin.total} classified`;
+    }
+
+    const ok = treeConsistent && originConsistent;
+    return {
+      ok,
+      treeSum,
+      totalRenders: action.totalRenders,
+      treeConsistent,
+      originConsistent,
+      originDetail,
+    };
+  });
+
+  /**
+   * Summary of the selected action's tree so the displayed total always visibly
+   * reconciles with the chip — even when parts of the tree are collapsed.
+   * renders = sum of per-component counts; components = distinct nodes.
+   */
+  readonly treeSummary = computed(() => {
+    const action = this.getSelectedAction();
+    if (!action?.tree) return { renders: 0, components: 0 };
+    const nodes = this.flattenTree(action.tree);
+    return {
+      renders: nodes.reduce((s, n) => s + n.count, 0),
+      components: nodes.length,
+    };
+  });
+
+  /** Ranked re-render offenders by real render count (for the Hotspots panel). */
+  readonly renderHotspots = computed(() => {
+    const action = this.getSelectedAction();
+    if (!action?.tree) return [];
+    return this.flattenTree(action.tree)
+      .filter(n => n.count >= 2)
+      .sort((a, b) => b.count - a.count || b.totalDuration - a.totalDuration)
+      .slice(0, 8)
+      .map(n => ({
+        name: this.displayName(n.componentName),
+        rawName: n.componentName,
+        count: n.count,
+        totalDuration: n.totalDuration, // estimated
+        node: n,
+      }));
+  });
+
+  /**
+   * Verdict over the selected action's tree: health status + worst offender.
+   * Threshold: >=3 renders = warn contributor, >=5 = hot. Always populated.
+   */
+  readonly renderVerdict = computed(() => {
+    const action = this.getSelectedAction();
+    if (!action?.tree) {
+      return { status: 'clean' as const, message: 'No action selected.', worst: null as null | { name: string; count: number } };
+    }
+    const nodes = this.flattenTree(action.tree);
+    const excessive = nodes.filter(n => n.count >= 3);
+    let worstNode: CascadeNode | null = null;
+    for (const n of nodes) {
+      if (!worstNode || n.count > worstNode.count) worstNode = n;
+    }
+    const worst = worstNode && worstNode.count > 1
+      ? { name: this.displayName(worstNode.componentName), count: worstNode.count }
+      : null;
+
+    // Count renders beyond the first per component (potentially unnecessary).
+    let potentiallyUnnecessary = 0;
+    for (const n of nodes) if (n.count > 1) potentiallyUnnecessary += n.count - 1;
+
+    let status: 'clean' | 'warn' | 'hot' = 'clean';
+    if (excessive.some(n => n.count >= 5)) status = 'hot';
+    else if (excessive.length > 0) status = 'warn';
+
+    // Factual, count-based wording. We do NOT assert the renders are "excessive"
+    // or "wasted" — that's not proven. We state the observed count only.
+    // ">=3 renders in one interaction" is the flag threshold.
+    const flagged = excessive.length;
+    let message: string;
+    if (status === 'clean') {
+      message = potentiallyUnnecessary > 0
+        ? `${potentiallyUnnecessary} repeat render${potentiallyUnnecessary === 1 ? '' : 's'} (possibly avoidable).`
+        : 'No repeated re-renders.';
+    } else {
+      message = `${flagged} component${flagged === 1 ? '' : 's'} rendered 3+ times.`;
+    }
+
+    return { status, message, worst, potentiallyUnnecessary };
+  });
+
+  /**
+   * Ancestor path (component names) from a root down to the worst offender,
+   * so the tree can auto-expand exactly that branch.
+   */
+  readonly worstOffenderPath = computed<string[]>(() => {
+    const action = this.getSelectedAction();
+    if (!action?.tree) return [];
+
+    // Find the node with the highest count.
+    let worst: CascadeNode | null = null;
+    const findWorst = (nodes: CascadeNode[]): void => {
+      for (const n of nodes) {
+        if (!worst || n.count > worst.count) worst = n;
+        if (n.children?.length) findWorst(n.children);
+      }
+    };
+    findWorst(action.tree);
+    if (!worst || (worst as CascadeNode).count <= 1) return [];
+
+    // Walk the tree collecting the ancestor chain to the worst node.
+    const path: string[] = [];
+    const dfs = (nodes: CascadeNode[], trail: string[]): boolean => {
+      for (const n of nodes) {
+        const nextTrail = [...trail, n.componentName];
+        if (n === worst) {
+          path.push(...nextTrail);
+          return true;
+        }
+        if (n.children?.length && dfs(n.children, nextTrail)) return true;
+      }
+      return false;
+    };
+    dfs(action.tree, []);
+    return path;
+  });
+
   readonly avgIFP = computed(() => {
     const replays = this.stableActionReplays();
     if (replays.length === 0) return 0;
@@ -286,11 +1437,10 @@ export class RenderingComponent {
   });
 
   // Card stability: cache previous cards to prevent flickering
-  private cachedCards: ActionReplay[] = [];
-  private lastCardCount = 0;
   private cardRebuildTimer: any = null;
   private lastEventCount = 0;
-  private hasAutoSelectedOnce = false;
+  /** Guards the auto-select effect so it fires at most once per action. */
+  private autoSelectedForActionId: string | null = null;
 
   // Replace computed with signal that we control updates to
   readonly stableActionReplays = signal<ActionReplay[]>([]);
@@ -441,6 +1591,45 @@ export class RenderingComponent {
     // Toggle selection (clicking same action again deselects)
     const isAlreadySelected = this.selectedActionId() === id;
     this.selectedActionId.set(isAlreadySelected ? null : id);
+
+    // TRUST RULE: switching session/action must not leave a stale selected
+    // component from the previous action. If the currently selected component
+    // doesn't exist in the newly selected action's tree, clear the selection
+    // (and reset the auto-select guard) so every panel stays consistent.
+    const selectedName = this.selectedComponentName();
+    if (selectedName) {
+      const action = this.getSelectedAction();
+      const stillPresent = !!action?.tree &&
+        this.flattenTree(action.tree).some(n => this.displayName(n.componentName) === selectedName);
+      if (!stillPresent) {
+        this.selectionHistory.set([]);
+        this.selectedComponentName.set(null);
+        this.selectedComponentData.set(null);
+        this.autoSelectedForActionId = null; // allow auto-select for the new action
+      }
+    }
+  }
+
+  /**
+   * Whether an action represents a MEANINGFUL performance concern — not merely
+   * a high render count. 🔥 is reserved for a detected excessive re-render
+   * pattern (a component rendering ≥5×) or a genuinely exceeded frame budget.
+   */
+  isActionConcern(action: ActionReplay): boolean {
+    if (!action.tree) return false;
+    const hasExcessiveComponent = this.flattenTree(action.tree).some(n => n.count >= 5);
+    return hasExcessiveComponent || action.frameBudgetExceeded;
+  }
+
+  /** Human-readable reason for the concern flag (tooltip). */
+  actionConcernReason(action: ActionReplay): string {
+    if (!action.tree) return '';
+    const worst = this.flattenTree(action.tree).sort((a, b) => b.count - a.count)[0];
+    if (worst && worst.count >= 5) {
+      return `${this.displayName(worst.componentName)} re-rendered ${worst.count}× — excessive re-render pattern.`;
+    }
+    if (action.frameBudgetExceeded) return 'Frame budget exceeded during this action.';
+    return 'Performance concern detected.';
   }
 
   getPerformanceScore(duration: number): number {
@@ -926,6 +2115,21 @@ export class RenderingComponent {
     return 'Consider OnPush + signals for fine-grained reactivity.';
   }
 
+  /**
+   * Developer-meaningful render count for an action = the sum of the cascade
+   * tree's per-component counts. This is what the tree/hotspots/origin actually
+   * add up to, after coalescing same-cycle renders and dropping minified
+   * (≤2-char) components. `action.totalRenders` is the RAW mutation-event count
+   * and will be higher; we display THIS so the headline number reconciles with
+   * the tree the user sees.
+   */
+  meaningfulRenderCount(action: ActionReplay): number {
+    if (!action?.tree) return 0;
+    const nodes = this.flattenTree(action.tree);
+    const sum = nodes.reduce((s, n) => s + n.count, 0);
+    return sum;
+  }
+
   /** Get the hottest component in an action (highest impact) */
   getHotspot(action: ActionReplay): { name: string; count: number; duration: number; pct: number } | null {
     const nodes = this.flattenTree(action.tree);
@@ -1321,6 +2525,7 @@ export class RenderingComponent {
       triggerIcon: this.detectIcon(events),
       targetSelector: interaction?.interactionTarget ?? null,
       triggerComponent: interaction?.interactionComponent ?? null,
+      interactionInfo: this.pickInteractionInfo(events),
       timestamp: profile.startTime,
       totalRenders: events.length,
       uniqueComponents: new Set(events.map(e => e.componentName)).size,
@@ -1416,6 +2621,7 @@ export class RenderingComponent {
         triggerIcon: this.detectIcon(group),
         targetSelector: interaction?.interactionTarget ?? null,
         triggerComponent: interaction?.interactionComponent ?? null,
+        interactionInfo: this.pickInteractionInfo(group),
         timestamp: startTs,
         totalRenders: group.length,
         uniqueComponents: new Set(group.map(e => e.componentName)).size,
@@ -1430,85 +2636,9 @@ export class RenderingComponent {
   }
 
   private buildCascadeTree(events: RenderEvent[]): CascadeNode[] {
-    // Build tree using the depth and parentComponent from instrumentation
-    // Skip minified names (1-2 char) — they're not useful to developers
-    const filteredEvents = events.filter(e => e.componentName.length > 2);
-    const nodeMap = new Map<string, CascadeNode>();
-    // Definitive parent per component (first non-null parent wins, ignoring self-parent)
-    const parentOf = new Map<string, string>();
-    // Track last counted render timestamp per component to coalesce a single
-    // mount/CD cycle (Angular emits several DOM mutations for one render).
-    const lastCountedTs = new Map<string, number>();
-    const SAME_CYCLE_MS = 50;
-
-    for (const event of filteredEvents) {
-      const existing = nodeMap.get(event.componentName);
-      const lastTs = lastCountedTs.get(event.componentName);
-      // Only count as a distinct render if it's outside the same-cycle window
-      const isDistinctRender = lastTs == null || (event.timestamp - lastTs) >= SAME_CYCLE_MS;
-
-      if (existing) {
-        if (isDistinctRender) {
-          existing.count++;
-          lastCountedTs.set(event.componentName, event.timestamp);
-        }
-        existing.totalDuration += event.duration;
-      } else {
-        nodeMap.set(event.componentName, {
-          componentName: event.componentName,
-          count: 1,
-          totalDuration: event.duration,
-          cause: event.causes[0] ?? { type: 'zone', source: 'unknown' },
-          depth: event.depth ?? 0,
-          children: [],
-        });
-        lastCountedTs.set(event.componentName, event.timestamp);
-      }
-
-      // Record a stable parent for this component (skip self-reference)
-      const p = event.parentComponent;
-      if (p && p !== event.componentName && !parentOf.has(event.componentName)) {
-        parentOf.set(event.componentName, p);
-      }
-    }
-
-    // Build parent→child relationships using the definitive parent map.
-    // A node is a root if it has no parent in this action's node set.
-    const roots: CascadeNode[] = [];
-    for (const [name, node] of nodeMap) {
-      const parentName = parentOf.get(name);
-      // Guard against parent pointing to a node not in this set, or a cycle
-      if (parentName && nodeMap.has(parentName) && !this.wouldCycle(name, parentName, parentOf)) {
-        const parent = nodeMap.get(parentName)!;
-        if (!parent.children.includes(node)) {
-          parent.children.push(node);
-        }
-      } else {
-        roots.push(node);
-      }
-    }
-
-    // Sort children by duration (most expensive first)
-    const sortTree = (nodes: CascadeNode[]): void => {
-      nodes.sort((a, b) => b.totalDuration - a.totalDuration);
-      for (const n of nodes) sortTree(n.children);
-    };
-    sortTree(roots);
-
-    return roots;
-  }
-
-  /** Detect whether linking child→parent would create a cycle. */
-  private wouldCycle(child: string, parent: string, parentOf: Map<string, string>): boolean {
-    let current: string | undefined = parent;
-    const visited = new Set<string>();
-    while (current) {
-      if (current === child) return true;
-      if (visited.has(current)) return true;
-      visited.add(current);
-      current = parentOf.get(current);
-    }
-    return false;
+    // Delegates to the pure, ground-truth-tested builder so the exact same
+    // aggregation logic runs in both production and the accuracy harness.
+    return buildCascadeTreePure(events) as CascadeNode[];
   }
 
   private buildTimeline(renderEvents: RenderEvent[], flowEvents: FlowEvent[]): TimelineEntry[] {
@@ -1718,6 +2848,9 @@ export class RenderingComponent {
       case 'subject-emit': return '📡';
       case 'http-response': return '🌐';
       case 'route-change': return '🧭';
+      case 'store-dispatch': return '🏪';
+      case 'store-select': return '📥';
+      case 'facade-method': return '🏛️';
       default: return '•';
     }
   }
@@ -1732,36 +2865,251 @@ export class RenderingComponent {
     }
   }
 
-  // ── New UX: Semantic Labels, CD-MER, Cause Distribution, Flow Correlation ──
+  // ── Semantic labels, CD attribution, cause distribution, flow correlation ──
 
-  /** Semantic label for action chips: "[Type] [Target]" format */
-  getSemanticLabel(action: ActionReplay): string {
-    const trigger = action.trigger;
-    const target = action.targetSelector;
+  /**
+   * Classify what kind of interaction triggered an action so the chip can show
+   * a precise icon + label (button click vs link click vs typed input vs page
+   * navigation vs direct load, etc.). This is the single source of truth for
+   * both getSemanticLabel() and getSafeActionIcon().
+   */
+  classifyInteraction(action: ActionReplay): { kind: InteractionKind; label: string } {
+    const trigger = (action.trigger || '').trim();
+    const t = trigger.toLowerCase();
 
-    if (trigger === 'Page Load') return 'Page Load';
-    if (trigger.startsWith('navigation')) return trigger;
-    if (trigger.includes('click') && target) return `Click "${this.shortenSelector(target)}"`;
-    if (trigger.includes('input') && target) return `Input "${this.shortenSelector(target)}"`;
-    if (trigger.includes('keystroke')) return trigger;
+    // ── 0. Direct page load always wins ──
+    if (t === 'page load') return { kind: 'page-load', label: 'Page load' };
 
-    // Check if we have signal/API info in flow entries
+    // ── 1. Route / navigation (highest priority after page load) ──
+    if (t.startsWith('navigation') || t.includes('route') || t.includes('navigate')) {
+      const routeFlow = action.flowEntries.find(f => f.type === 'route-change');
+      const dest = this.routeDestination(routeFlow);
+      return { kind: 'navigation', label: dest ? `Navigate to ${dest}` : 'Navigation' };
+    }
+
+    // ── 2. PREFERRED PATH: classify from structured interaction metadata ──
+    // This is captured at the DOM source and is far more accurate than parsing
+    // the trigger/selector strings.
+    const info = action.interactionInfo;
+    if (info) {
+      const name = this.cleanName(info.accessibleName);
+      const et = info.eventType;
+
+      // Changing a discrete control (select/checkbox/radio) — check before the
+      // generic text-field typing branch since <select> also flags isTextField.
+      if (et === 'change') {
+        if (info.tag === 'select') return { kind: 'input', label: name ? `Select ${name}` : 'Select option' };
+        if (info.inputType === 'checkbox') return { kind: 'button', label: name ? `Toggle ${name}` : 'Toggle checkbox' };
+        if (info.inputType === 'radio') return { kind: 'button', label: name ? `Choose ${name}` : 'Choose option' };
+        // A text field firing change (blur commit) still reads as typing.
+        if (info.isTextField) return { kind: 'input', label: name ? `Edit ${name}` : `Edit ${this.fieldNoun(info)}` };
+        return { kind: 'input', label: name ? `Change ${name}` : 'Change value' };
+      }
+      // Typing into a text field (input/keydown)
+      if (info.isTextField && (et === 'input' || et === 'keydown')) {
+        return { kind: 'input', label: name ? `Type in ${name}` : `Type in ${this.fieldNoun(info)}` };
+      }
+      // Link / anchor click → navigation-like
+      if (info.isLink && (et === 'click' || et === 'pointerdown')) {
+        return { kind: 'link', label: name ? `Click ${name} link` : 'Link click' };
+      }
+      // Button click (button tag, role=button, submit/button input, or ancestor button)
+      if (info.isButton && (et === 'click' || et === 'pointerdown')) {
+        if (info.inputType === 'submit') return { kind: 'button', label: name ? `Submit ${name}` : 'Submit form' };
+        if (info.inputType === 'checkbox') return { kind: 'button', label: name ? `Toggle ${name}` : 'Toggle checkbox' };
+        if (info.inputType === 'radio') return { kind: 'button', label: name ? `Choose ${name}` : 'Choose option' };
+        return { kind: 'button', label: name ? `Click ${name}` : 'Button click' };
+      }
+      // Generic click on some other element
+      if (et === 'click' || et === 'pointerdown') {
+        return { kind: 'button', label: name ? `Click ${name}` : `Click ${this.tagNoun(info.tag)}` };
+      }
+      // Keydown that isn't in a field → a keyboard shortcut / key press
+      if (et === 'keydown') {
+        const key = info.key || this.extractKey(trigger);
+        return { kind: 'keyboard', label: key ? `Press "${key}"` : 'Key press' };
+      }
+      // Any input event not caught above
+      if (et === 'input') {
+        return { kind: 'input', label: name ? `Type in ${name}` : 'Typing' };
+      }
+    }
+
+    // ── 3. FALLBACK: no structured info — use trigger/selector strings ──
+    const target = action.targetSelector || '';
+    const targetName = this.describeTarget(target);
+
+    if (t.includes('click') || t.includes('pointer') || t.includes('tap') || t.includes('mousedown')) {
+      const el = this.classifyClickTarget(target);
+      if (el === 'button') return { kind: 'button', label: targetName ? `Click ${targetName} button` : 'Button click' };
+      if (el === 'link') return { kind: 'link', label: targetName ? `Click ${targetName} link` : 'Link click' };
+      return { kind: 'button', label: targetName ? `Click ${targetName}` : 'Click' };
+    }
+    if (t.includes('keydown') || t.includes('keyup') || t.includes('keypress') || t.includes('keystroke')) {
+      const key = this.extractKey(trigger);
+      if (this.isTextField(target)) return { kind: 'input', label: targetName ? `Type in ${targetName}` : 'Typing' };
+      return { kind: 'keyboard', label: key ? `Press "${key}"` : 'Key press' };
+    }
+    if (t.includes('input') || t.includes('change') || this.isTextField(target)) {
+      return { kind: 'input', label: targetName ? `Type in ${targetName}` : 'Typing' };
+    }
+
+    // ── 4. Data-driven triggers inferred from flow entries ──
     const signalFlow = action.flowEntries.find(f => f.type === 'signal-write');
-    if (signalFlow) return `Signal: ${signalFlow.label.replace('Signal: ', '').split('.').pop() || 'update'}`;
+    if (signalFlow) {
+      const name = signalFlow.label.replace('Signal: ', '').split('.').pop() || 'update';
+      return { kind: 'signal', label: `Signal ${name}` };
+    }
     const httpFlow = action.flowEntries.find(f => f.type === 'http-response');
-    if (httpFlow) return `API ${this.shortenUrl(httpFlow.label)}`;
+    if (httpFlow) return { kind: 'api', label: `API ${this.shortenUrl(httpFlow.label)}` };
 
-    if (target) return `${trigger} "${this.shortenSelector(target)}"`;
-    return trigger || 'Action';
+    // ── 5. Generic "Page activity" — describe by dominant flow type ──
+    if (t === 'page activity' || trigger.length === 0) {
+      const routeFlow = action.flowEntries.find(f => f.type === 'route-change');
+      if (routeFlow) {
+        const dest = this.routeDestination(routeFlow);
+        return { kind: 'navigation', label: dest ? `Navigate to ${dest}` : 'Navigation' };
+      }
+      const types = new Set(action.flowEntries.map(f => f.type));
+      if (types.has('http-response')) return { kind: 'api', label: 'Background API activity' };
+      if (types.has('subject-emit')) return { kind: 'signal', label: 'Observable emission' };
+      if (types.has('signal-write')) return { kind: 'signal', label: 'Signal update' };
+      if (types.has('timer')) return { kind: 'timer', label: 'Timer tick' };
+      return { kind: 'other', label: 'Page activity' };
+    }
+
+    // ── 6. Timer ──
+    if (t.includes('timer') || t.includes('interval') || t.includes('timeout')) {
+      return { kind: 'timer', label: 'Timer' };
+    }
+
+    // ── Fallback: use the raw trigger, appending target if we have one ──
+    if (targetName) return { kind: 'other', label: `${trigger} on ${targetName}` };
+    return { kind: 'other', label: trigger || 'Action' };
   }
 
-  /** Shorten CSS selector for display */
-  private shortenSelector(selector: string): string {
+  /** Quote and trim an accessible name for display; '' when nothing useful. */
+  private cleanName(name: string | undefined): string {
+    const n = (name || '').replace(/\s+/g, ' ').trim();
+    if (!n) return '';
+    const short = n.length > 26 ? n.slice(0, 26) + '…' : n;
+    return `"${short}"`;
+  }
+
+  /** Human noun for a text field based on its input type. */
+  private fieldNoun(info: InteractionInfo): string {
+    switch (info.inputType) {
+      case 'search': return 'search box';
+      case 'email': return 'email field';
+      case 'password': return 'password field';
+      case 'number': return 'number field';
+      case 'tel': return 'phone field';
+      case 'url': return 'URL field';
+      default:
+        if (info.tag === 'textarea') return 'text area';
+        if (info.tag === 'select') return 'dropdown';
+        return 'field';
+    }
+  }
+
+  /** Human noun for a clicked element by tag. */
+  private tagNoun(tag: string): string {
+    switch (tag) {
+      case 'a': return 'link';
+      case 'button': return 'button';
+      case 'input': return 'control';
+      case 'select': return 'dropdown';
+      case 'label': return 'label';
+      case 'li': return 'list item';
+      case 'tr': return 'row';
+      case 'td': return 'cell';
+      case 'svg': case 'path': case 'i': return 'icon';
+      case 'img': return 'image';
+      default: return 'element';
+    }
+  }
+
+  /** Semantic label for action chips — delegates to the interaction classifier. */
+  getSemanticLabel(action: ActionReplay): string {
+    return this.classifyInteraction(action).label;
+  }
+
+  /** Decide whether a click target is a button, a link, or a generic element. */
+  private classifyClickTarget(selector: string): 'button' | 'link' | 'element' {
+    if (!selector) return 'element';
+    const s = selector.toLowerCase();
+    // Anchor / link cues
+    if (/\ba\b|\banchor\b|\[href|routerlink|\bnav-|\blink\b/.test(s)) return 'link';
+    // Button cues (tag, role, common classes, submit inputs)
+    if (/\bbutton\b|\bbtn\b|role="?button|\[type="?(submit|button)|mat-button|mat-raised|mat-icon-button/.test(s)) {
+      return 'button';
+    }
+    // Inputs of clickable types
+    if (/input\[type="?(checkbox|radio|submit|button)/.test(s)) return 'button';
+    return 'element';
+  }
+
+  /** Is the target a text-entry field (input/textarea/select/contenteditable)? */
+  private isTextField(selector: string): boolean {
+    if (!selector) return false;
+    const s = selector.toLowerCase();
+    if (/\btextarea\b|\bselect\b|contenteditable|\[type="?(text|search|email|password|number|tel|url)/.test(s)) {
+      return true;
+    }
+    // Bare input tag (no non-text type qualifier) counts as text field
+    return /\binput\b/.test(s) && !/\[type="?(checkbox|radio|submit|button|file)/.test(s);
+  }
+
+  /**
+   * Produce a short, human-friendly target name from a CSS selector.
+   * Prefers a readable id/class/label over the raw selector; returns '' when
+   * there is nothing meaningful to show (so the label reads cleanly).
+   */
+  private describeTarget(selector: string): string {
     if (!selector) return '';
-    // Extract meaningful part: #id, .class, or tag
-    const match = selector.match(/#[\w-]+|\.[\w-]+|button|input|a|select|textarea/);
-    if (match) return match[0];
-    return selector.length > 20 ? selector.slice(0, 20) + '…' : selector;
+    // Prefer an id (#save-btn → "save"), then a meaningful class (.submit-form → "submit form")
+    const id = selector.match(/#([\w-]+)/);
+    if (id) return `"${this.humanizeToken(id[1])}"`;
+    const cls = selector.match(/\.([\w-]+)/);
+    if (cls && !/^(ng-|cdk-|mat-|_)/.test(cls[1])) return `"${this.humanizeToken(cls[1])}"`;
+    // aria-label / title attribute
+    const aria = selector.match(/\[(?:aria-label|title)="([^"]+)"/);
+    if (aria) return `"${aria[1].length > 24 ? aria[1].slice(0, 24) + '…' : aria[1]}"`;
+    return '';
+  }
+
+  /** Turn a token like "save-user-btn" into "save user". */
+  private humanizeToken(token: string): string {
+    const cleaned = token
+      .replace(/[-_]+/g, ' ')
+      .replace(/\b(btn|button|link|el|elem|cmp|component)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const out = cleaned || token;
+    return out.length > 24 ? out.slice(0, 24) + '…' : out;
+  }
+
+  /** Extract the pressed key from a trigger like: keydown event "a". */
+  private extractKey(trigger: string): string {
+    const m = trigger.match(/["']([^"']+)["']/);
+    return m ? m[1] : '';
+  }
+
+  /** Pull a readable destination path from a route-change flow entry. */
+  private routeDestination(routeFlow: FlowEntry | undefined): string {
+    if (!routeFlow) return '';
+    const raw = routeFlow.detail || routeFlow.label || '';
+    // Try to find a URL-ish path
+    const path = raw.match(/\/[\w\-/]+/);
+    if (path) {
+      let p = path[0].replace(/\/\d{5,}/g, '/…');
+      if (p.length > 32) {
+        const parts = p.split('/').filter(Boolean);
+        p = parts.length > 2 ? `/${parts[0]}/…/${parts[parts.length - 1]}` : p.slice(0, 32) + '…';
+      }
+      return p;
+    }
+    return raw.length > 28 ? raw.slice(0, 28) + '…' : raw;
   }
 
   /** Component hover handler for bi-directional correlation */
@@ -1815,20 +3163,34 @@ export class RenderingComponent {
     return 'color-success';
   }
 
-  /** CD-MER severity class */
-  getCdMerClass(pct: number): string {
+  /** CD attribution severity class. Null (no data) is neutral, not colored. */
+  getCdMerClass(pct: number | null): string {
+    if (pct == null) return '';
     if (pct < 25) return 'color-critical';
     if (pct < 60) return 'color-warning';
     return 'color-success';
   }
 
-  /** Get CD-MER for currently selected component */
-  getComponentCdMer(): number {
+  /**
+   * CD attribution ratio for the selected component, or null when there is no
+   * change-detection data (no ngDoCheck observed). Returning null lets the UI
+   * show "—" instead of a fabricated 100% — the old code defaulted to 100 when
+   * cdCount was 0, which read as "perfectly efficient" despite meaning "no data".
+   */
+  getComponentCdMer(): number | null {
     const name = this.selectedComponentName();
-    if (!name) return 100;
+    if (!name) return null;
     const stats = this.state.componentStats().find(s => this.displayName(s.componentName) === name);
-    return stats?.cdMer ?? 100;
+    // cdCount === 0 means no ngDoCheck was observed → ratio is not defined.
+    if (!stats || !stats.cdCount || stats.cdCount <= 0) return null;
+    return stats.cdMer ?? null;
   }
+
+  /** Tooltip explaining the CD attribution ratio truthfully. */
+  readonly cdAttributionTooltip =
+    'CD attribution — DOM-mutation passes ÷ ngDoCheck passes for this component. ' +
+    'A rough ratio (the mutation count is a proxy for "produced a DOM change"), not an exact Angular measurement. ' +
+    'Shown as — when no change-detection activity was observed.';
 
   /** Get template bindings count for selected component */
   getComponentBindings(): number | string {
@@ -1861,13 +3223,63 @@ export class RenderingComponent {
     }).slice(0, 8);
   }
 
+  // ── Diagnostics tab helpers (all backed by observed data) ──────────────────
+
+  /**
+   * Signals & state writes observed on the selected component/service class.
+   * Real data: owning class + signal name + last written value. We match by
+   * ownerClass (the class the signal property lives on), which is reliable —
+   * unlike sourceComponent, which is only a last-interaction heuristic and is
+   * intentionally NOT used here.
+   */
+  getComponentSignals(): Array<{ name: string; value: string; kind: 'signal' | 'computed' | 'input' }> {
+    const action = this.getSelectedAction();
+    const name = this.selectedComponentName();
+    if (!action || !name) return [];
+
+    const seen = new Set<string>();
+    const out: Array<{ name: string; value: string; kind: 'signal' | 'computed' | 'input' }> = [];
+    for (const f of action.flowEntries) {
+      if (f.type !== 'signal-write') continue;
+      if (!f.ownerClass || this.displayName(f.ownerClass) !== name) continue;
+      const label = f.label ?? '';
+      const kind: 'signal' | 'computed' | 'input' =
+        label.includes('(computed)') ? 'computed' : label.includes('(input)') ? 'input' : 'signal';
+      // Derive the property name from the label: "ClassName.propName.set()" → "propName".
+      const cleaned = label.replace(/\s*\((computed|input)\)\s*/i, '').trim();
+      const parts = cleaned.split('.');
+      const propName = parts.length >= 2 ? parts[1].replace(/\(\)$/, '') : cleaned;
+      const key = `${propName}:${kind}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ name: propName, value: f.value ?? '—', kind });
+    }
+    return out.slice(0, 12);
+  }
+
+  /** High-frequency listeners (mousemove/scroll/etc.) observed on the component — real zone-pollution signal. */
+  getComponentHighFreqListeners(): string[] {
+    const name = this.selectedComponentName();
+    if (!name) return [];
+    const stats = this.state.componentStats().find(s => this.displayName(s.componentName) === name);
+    return stats?.highFrequencyEvents ?? [];
+  }
+
+  /** Raw ngDoCheck cycle count for the selected component (real, from the ngDoCheck hook). */
+  getComponentCdCycles(): number | string {
+    const name = this.selectedComponentName();
+    if (!name) return '—';
+    const stats = this.state.componentStats().find(s => this.displayName(s.componentName) === name);
+    return stats?.cdCount ?? '—';
+  }
+
   /** Smart fix suggestion based on metrics */
   getSmartFix(m: any): string {
     if (!m) return '';
     const cdMer = this.getComponentCdMer();
 
-    if (cdMer < 25) {
-      return `Low CD-MER (${cdMer.toFixed(1)}%) — most change detection cycles produce no DOM mutations. Add ChangeDetectionStrategy.OnPush or memoize expensive template expressions.`;
+    if (cdMer != null && cdMer < 25) {
+      return `Low CD attribution (${cdMer.toFixed(1)}%) — many change-detection passes produced no DOM change. Consider ChangeDetectionStrategy.OnPush or memoizing expensive template expressions.`;
     }
     if (m.renderCount >= 6) {
       return `Excessive re-renders (${m.renderCount}×). Investigate why the component is marked dirty so often. Consider OnPush + signals for fine-grained reactivity.`;
@@ -1995,6 +3407,14 @@ export class RenderingComponent {
       return `${action.totalRenders} renders from one action is high. Check if all components actually need to update, or if some are cascading unnecessarily.`;
     }
     return null;
+  }
+
+  /** Pick the richest interaction metadata from a group of render events. */
+  private pickInteractionInfo(events: RenderEvent[]): InteractionInfo | undefined {
+    // Prefer the depth-0 event that carries structured info; fall back to any.
+    const withInfo = events.find(e => e.interactionInfo && (e.depth ?? 0) === 0)
+      ?? events.find(e => e.interactionInfo);
+    return withInfo?.interactionInfo;
   }
 
   private detectTrigger(events: RenderEvent[]): string {

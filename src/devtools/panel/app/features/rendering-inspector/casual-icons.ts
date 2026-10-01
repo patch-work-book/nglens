@@ -58,6 +58,35 @@ export const CasualIcons = {
     <circle cx="5" cy="12" r="1"/>
   </svg>`,
 
+  // Button press — a pointer tapping a rounded button
+  button: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="8" width="12" height="8" rx="4"/>
+    <path d="M14 14l5 5"/>
+    <path d="M19 15v4h-4"/>
+  </svg>`,
+
+  // Link / anchor click
+  link: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 15l6-6"/>
+    <path d="M10.5 6.5l1-1a3.5 3.5 0 0 1 5 5l-1 1"/>
+    <path d="M13.5 17.5l-1 1a3.5 3.5 0 0 1-5-5l1-1"/>
+  </svg>`,
+
+  // Navigation / route change — compass-ish arrow
+  navigation: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/>
+    <polygon points="16 8 11 13 8 16 13 11"/>
+  </svg>`,
+
+  // Keyboard key press
+  keyboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="7" width="18" height="10" rx="2"/>
+    <line x1="7" y1="11" x2="7" y2="11"/>
+    <line x1="11" y1="11" x2="11" y2="11"/>
+    <line x1="15" y1="11" x2="15" y2="11"/>
+    <line x1="8" y1="14" x2="16" y2="14"/>
+  </svg>`,
+
   // UI controls
   close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
     <line x1="18" y1="6" x2="6" y2="18"/>
@@ -77,20 +106,53 @@ export const CasualIcons = {
 };
 
 /**
- * Get icon SVG by action trigger type
+ * Interaction kinds used to pick both the icon and the human-readable label
+ * for an action chip. Keep this in sync with classifyInteraction() in
+ * rendering.component.ts.
  */
-export function getActionIcon(trigger: string): string {
-  switch (trigger) {
+export type InteractionKind =
+  | 'page-load'
+  | 'navigation'
+  | 'button'
+  | 'link'
+  | 'input'
+  | 'keyboard'
+  | 'api'
+  | 'timer'
+  | 'signal'
+  | 'other';
+
+/**
+ * Get icon SVG by interaction kind (preferred) or a legacy trigger string.
+ */
+export function getActionIcon(kind: string): string {
+  switch (kind) {
+    // New interaction kinds
+    case 'page-load':
     case 'Page Load':
       return CasualIcons.pageLoad;
-    case 'Click':
-      return CasualIcons.click;
+    case 'navigation':
+      return CasualIcons.navigation;
+    case 'button':
+      return CasualIcons.button;
+    case 'link':
+      return CasualIcons.link;
+    case 'keyboard':
+      return CasualIcons.keyboard;
+    case 'input':
     case 'Input':
       return CasualIcons.input;
+    case 'signal':
+      return CasualIcons.input;
+    case 'timer':
     case 'Timer':
       return CasualIcons.timer;
+    case 'api':
     case 'API':
       return CasualIcons.api;
+    case 'click':
+    case 'Click':
+      return CasualIcons.click;
     default:
       return CasualIcons.other;
   }

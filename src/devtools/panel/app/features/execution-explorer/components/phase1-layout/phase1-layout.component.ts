@@ -9,7 +9,7 @@
  */
 import { Component, input, output, signal, computed, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { StickyExecutionSummaryComponent, type StickyExecutionMetrics } from '../sticky-summary/sticky-summary.component';
+import { StickyExecutionSummaryComponent } from '../sticky-summary/sticky-summary.component';
 import { ExecutionHeadlineComponent, type HeadlineData } from '../execution-headline/execution-headline.component';
 import { HotspotsListComponent, type HotspotsData } from '../hotspots-list/hotspots-list.component';
 import type { ExecutionNarrative } from '@nglens/types/execution-narrative';

@@ -1,13 +1,13 @@
 <div class="h-full overflow-auto">
 
   <!-- Status Bar -->
-  <div class="sticky top-0 z-20 px-4 py-2.5 bg-gray-900/95 backdrop-blur border-b border-gray-800 flex items-center justify-between">
+  <div class="sticky top-0 z-20 px-4 py-2.5 backdrop-blur border-b flex items-center justify-between" style="background: var(--color-gray-bg-medium); border-color: var(--color-border-subtle);">
     <div class="flex items-center gap-3">
-      <h2 class="text-sm font-semibold text-gray-100">Memory</h2>
+      <h2 class="text-sm font-semibold" style="color: var(--color-text-light);">Memory</h2>
       <div class="flex items-center gap-2 text-[11px]">
-        <span class="text-gray-500">{{ liveComponents().length }} active</span>
-        <span class="text-gray-700">·</span>
-        <span [ngClass]="totalLeakedCount() > 0 ? 'text-red-400' : 'text-green-400'">
+        <span style="color: var(--color-text-medium);">{{ liveComponents().length }} active</span>
+        <span style="color: var(--color-text-medium);">·</span>
+        <span [style.color]="totalLeakedCount() > 0 ? 'var(--color-red-light)' : 'var(--color-green)'">
           {{ totalLeakedCount() }} leaked
         </span>
       </div>
@@ -15,16 +15,16 @@
     <div class="flex gap-1">
       <button (click)="viewMode.set('live')"
         class="text-[10px] px-2.5 py-1 rounded-full font-medium border transition-colors"
-        [ngClass]="viewMode() === 'live'
-          ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
-          : 'bg-gray-800 text-gray-500 border-gray-700 hover:text-gray-300'">
+        [style.backgroundColor]="viewMode() === 'live' ? 'var(--color-blue-bg-medium)' : 'var(--color-gray-bg-lighter)'"
+        [style.color]="viewMode() === 'live' ? 'var(--color-text-light)' : 'var(--color-text-medium)'"
+        [style.borderColor]="viewMode() === 'live' ? 'var(--color-blue-bg-stronger)' : 'var(--color-border-subtle)'">
         Live View
       </button>
       <button (click)="viewMode.set('destroyed')"
         class="text-[10px] px-2.5 py-1 rounded-full font-medium border transition-colors"
-        [ngClass]="viewMode() === 'destroyed'
-          ? 'bg-red-500/15 text-red-400 border-red-500/30'
-          : 'bg-gray-800 text-gray-500 border-gray-700 hover:text-gray-300'">
+        [style.backgroundColor]="viewMode() === 'destroyed' ? 'var(--color-red-bg-medium)' : 'var(--color-gray-bg-lighter)'"
+        [style.color]="viewMode() === 'destroyed' ? 'var(--color-red-light)' : 'var(--color-text-medium)'"
+        [style.borderColor]="viewMode() === 'destroyed' ? 'var(--color-red-bg-stronger)' : 'var(--color-border-subtle)'">
         Leak Report
       </button>
     </div>
@@ -36,70 +36,65 @@
 
       <!-- Health summary -->
       <div class="grid grid-cols-3 gap-3">
-        <div class="px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-800/40">
-          <div class="text-[9px] text-gray-500 uppercase tracking-wide">Active Resources</div>
-          <div class="text-xl font-bold text-gray-100 mt-1">{{ totalActiveResources() }}</div>
-          <div class="text-[9px] text-gray-500 mt-0.5">subscriptions + timers + listeners</div>
+        <div class="px-3 py-2.5 rounded-lg border" style="background: var(--color-gray-bg-lighter); border-color: var(--color-border-subtle); color: var(--color-text-light);">
+          <div class="text-[9px] uppercase tracking-wide" style="color: var(--color-text-medium);">Active Resources</div>
+          <div class="text-xl font-bold mt-1">{{ totalActiveResources() }}</div>
+          <div class="text-[9px] mt-0.5" style="color: var(--color-text-medium);">subscriptions + timers + listeners</div>
         </div>
-        <div class="px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-800/40">
-          <div class="text-[9px] text-gray-500 uppercase tracking-wide">Components at Risk</div>
+        <div class="px-3 py-2.5 rounded-lg border" style="background: var(--color-gray-bg-lighter); border-color: var(--color-border-subtle); color: var(--color-text-light);">
+          <div class="text-[9px] uppercase tracking-wide" style="color: var(--color-text-medium);">Components at Risk</div>
           <div class="text-xl font-bold mt-1"
-               [ngClass]="atRiskCount() > 0 ? 'text-amber-400' : 'text-green-400'">
+               [style.color]="atRiskCount() > 0 ? 'var(--color-yellow)' : 'var(--color-green)'">
             {{ atRiskCount() }}
           </div>
-          <div class="text-[9px] text-gray-500 mt-0.5">high resource count without cleanup</div>
+          <div class="text-[9px] mt-0.5" style="color: var(--color-text-medium);">high resource count without cleanup</div>
         </div>
-        <div class="px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-800/40">
-          <div class="text-[9px] text-gray-500 uppercase tracking-wide">Confirmed Leaks</div>
+        <div class="px-3 py-2.5 rounded-lg border" style="background: var(--color-gray-bg-lighter); border-color: var(--color-border-subtle); color: var(--color-text-light);">
+          <div class="text-[9px] uppercase tracking-wide" style="color: var(--color-text-medium);">Confirmed Leaks</div>
           <div class="text-xl font-bold mt-1"
-               [ngClass]="totalLeakedCount() > 0 ? 'text-red-400' : 'text-green-400'">
+               [style.color]="totalLeakedCount() > 0 ? 'var(--color-red-light)' : 'var(--color-green)'">
             {{ totalLeakedCount() }}
           </div>
-          <div class="text-[9px] text-gray-500 mt-0.5">resource leaks in {{ destroyedWithLeaks().length }} component{{ destroyedWithLeaks().length > 1 ? 's' : '' }}</div>
+          <div class="text-[9px] mt-0.5" style="color: var(--color-text-medium);">resource leaks in {{ destroyedWithLeaks().length }} component{{ destroyedWithLeaks().length > 1 ? 's' : '' }}</div>
         </div>
       </div>
 
-      <!-- What Junior sees: simple list of what's running -->
-      <!-- What Senior sees: risk indicators per component -->
-      <!-- What Architect sees: systemic patterns -->
-
       @if (liveComponents().length === 0) {
-        <div class="rounded-lg border border-gray-700 p-6 text-center">
+        <div class="rounded-lg border p-6 text-center" style="background: var(--color-gray-bg-lighter); border-color: var(--color-border-subtle);">
           <div class="text-2xl opacity-20 mb-2">🧹</div>
-          <p class="text-sm text-gray-400">No active resources tracked yet.</p>
-          <p class="text-[10px] text-gray-600 mt-1">Start recording and interact with the page to see live resources.</p>
+          <p class="text-sm" style="color: var(--color-text-medium);">No active resources tracked yet.</p>
+          <p class="text-[10px] mt-1" style="color: var(--color-text-dark);">Start recording and interact with the page to see live resources.</p>
         </div>
       } @else {
         <div class="space-y-1">
           @for (comp of liveComponents(); track comp.name) {
             <div class="flex items-center gap-3 px-4 py-2.5 rounded-lg border transition-colors"
-                 [ngClass]="comp.status === 'at-risk'
-                   ? 'border-amber-800/40 bg-amber-950/20 hover:bg-amber-950/30'
-                   : 'border-gray-800 bg-gray-800/30 hover:bg-gray-800/50'">
+                 [style.borderColor]="comp.status === 'at-risk' ? 'var(--color-orange-border)' : 'var(--color-border-subtle)'"
+                 [style.backgroundColor]="comp.status === 'at-risk' ? 'var(--color-yellow-bg-light)' : 'var(--color-gray-bg-lighter)'">
               <!-- Status dot -->
               <span class="w-2 h-2 rounded-full flex-shrink-0"
-                    [ngClass]="comp.status === 'at-risk' ? 'bg-amber-500' : 'bg-green-500'"></span>
+                    [style.backgroundColor]="comp.status === 'at-risk' ? 'var(--color-yellow)' : 'var(--color-green)'"></span>
               <!-- Component name -->
-              <span class="text-xs font-mono text-gray-200 flex-1 min-w-0 truncate">{{ comp.displayName }}</span>
+              <span class="text-xs font-mono flex-1 min-w-0 truncate" style="color: var(--color-text-light);">{{ comp.displayName }}</span>
               <!-- Resource counts -->
               @if (comp.subscriptions > 0) {
-                <span class="text-[9px] px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300 border border-purple-700/30">
+                <span class="text-[9px] px-1.5 py-0.5 rounded border" style="background: var(--color-purple-bg); color: var(--color-indigo-light); border-color: var(--color-indigo-border);">
                   {{ comp.subscriptions }} sub{{ comp.subscriptions > 1 ? 's' : '' }}
                 </span>
               }
               @if (comp.timers > 0) {
-                <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/30">
+                <span class="text-[9px] px-1.5 py-0.5 rounded border" style="background: var(--color-yellow-bg-medium); color: var(--color-yellow); border-color: var(--color-orange-border);">
                   {{ comp.timers }} timer{{ comp.timers > 1 ? 's' : '' }}
                 </span>
               }
               @if (comp.listeners > 0) {
-                <span class="text-[9px] px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-300 border border-blue-700/30">
+                <span class="text-[9px] px-1.5 py-0.5 rounded border" style="background: var(--color-blue-bg-light); color: var(--color-cyan); border-color: var(--color-cyan-bg);">
                   {{ comp.listeners }} listener{{ comp.listeners > 1 ? 's' : '' }}
                 </span>
               }
               <!-- Risk warning -->
               @if (comp.riskReason) {
-                <span class="text-[9px] text-amber-400 flex-shrink-0">{{ comp.riskReason }}</span>
+                <span class="text-[9px] flex-shrink-0" style="color: var(--color-yellow);">{{ comp.riskReason }}</span>
               }
             </div>
           }
@@ -107,12 +102,12 @@
 
         <!-- Architect insight: systemic pattern -->
         @if (systemicPattern()) {
-          <div class="mt-3 px-4 py-3 rounded-lg border border-indigo-800/40 bg-indigo-950/20">
+          <div class="mt-3 px-4 py-3 rounded-lg border" style="background: var(--color-indigo-bg-lighter); border-color: var(--color-indigo-border);">
             <div class="flex items-start gap-2">
               <span class="text-[10px] mt-0.5">🏗️</span>
               <div>
-                <div class="text-[9px] text-gray-500 uppercase tracking-wide font-semibold">Architecture Insight</div>
-                <p class="text-[11px] text-indigo-300 mt-0.5">{{ systemicPattern() }}</p>
+                <div class="text-[9px] uppercase tracking-wide font-semibold" style="color: var(--color-text-medium);">Architecture Insight</div>
+                <p class="text-[11px] mt-0.5" style="color: var(--color-indigo-light);">{{ systemicPattern() }}</p>
               </div>
             </div>
           </div>
@@ -126,62 +121,65 @@
     <div class="p-4 space-y-3">
 
       @if (destroyedWithLeaks().length === 0) {
-        <div class="rounded-lg border border-green-800/40 p-6 text-center bg-green-950/10">
+        <div class="rounded-lg border p-6 text-center" style="background: var(--color-green-bg); border-color: var(--color-green-border);">
           <div class="text-2xl opacity-30 mb-2">✓</div>
-          <p class="text-sm text-green-300">No leaks detected</p>
-          <p class="text-[10px] text-gray-500 mt-1">
+          <p class="text-sm" style="color: var(--color-green);">No leaks detected</p>
+          <p class="text-[10px] mt-1" style="color: var(--color-text-medium);">
             Navigate between pages while recording. Components that fail to clean up their resources will appear here.
           </p>
         </div>
       } @else {
         <!-- Leak explanation for junior developers -->
-        <div class="px-3 py-2.5 rounded border border-gray-700 bg-gray-800/40 text-[10px] text-gray-400">
-          <strong class="text-gray-300">What is a memory leak?</strong>
+        <div class="px-3 py-2.5 rounded border text-[10px]" style="background: var(--color-gray-bg-lighter); border-color: var(--color-border-subtle); color: var(--color-text-medium);">
+          <strong style="color: var(--color-text-light);">What is a memory leak?</strong>
           A component was destroyed (navigated away) but its subscriptions or timers are still running in the background, consuming memory and CPU.
         </div>
 
         @for (comp of destroyedWithLeaks(); track comp.name) {
           <div class="rounded-lg border overflow-hidden"
-               [ngClass]="comp.severity === 'CRITICAL' ? 'border-red-800/50 bg-red-950/10' : 'border-amber-800/40 bg-amber-950/10'">
+               [style.borderColor]="comp.severity === 'CRITICAL' ? 'var(--color-red-bg-stronger)' : 'var(--color-orange-border)'"
+               [style.backgroundColor]="comp.severity === 'CRITICAL' ? 'var(--color-red-bg-light)' : 'var(--color-yellow-bg-light)'">
             <!-- Header -->
-            <div class="px-4 py-3 flex items-center gap-3">
+            <div class="px-4 py-3 flex items-center gap-3" style="border-bottom: 1px solid; border-color: var(--color-border-subtle);">
               <span class="text-sm"
-                    [ngClass]="comp.severity === 'CRITICAL' ? 'text-red-400' : 'text-amber-400'">⚠</span>
+                    [style.color]="comp.severity === 'CRITICAL' ? 'var(--color-red-light)' : 'var(--color-yellow)'">⚠</span>
               <div class="flex-1 min-w-0">
-                <span class="text-xs font-semibold text-gray-100">{{ comp.displayName }}</span>
-                <span class="text-[9px] text-gray-500 ml-2">destroyed but resources still active</span>
+                <span class="text-xs font-semibold" style="color: var(--color-text-light);">{{ comp.displayName }}</span>
+                <span class="text-[9px] ml-2" style="color: var(--color-text-medium);">destroyed but resources still active</span>
               </div>
-              <span class="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                    [ngClass]="comp.severity === 'CRITICAL'
-                      ? 'bg-red-500/15 text-red-300 border border-red-500/30'
-                      : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'">
+              <span class="text-[10px] px-2 py-0.5 rounded-full font-medium border"
+                    [style.backgroundColor]="comp.severity === 'CRITICAL' ? 'var(--color-red-bg-medium)' : 'var(--color-yellow-bg-medium)'"
+                    [style.color]="comp.severity === 'CRITICAL' ? 'var(--color-red-light)' : 'var(--color-yellow)'"
+                    [style.borderColor]="comp.severity === 'CRITICAL' ? 'var(--color-red-bg-stronger)' : 'var(--color-orange-border)'">
                 {{ comp.leakedCount }} leaked
               </span>
             </div>
             <!-- Leaked resources — grouped and collapsible -->
-            <div class="border-t border-gray-800/50">
+            <div style="border-top: 1px solid; border-color: var(--color-border-subtle);">
               <button
-                class="w-full px-4 py-2 pl-10 flex items-center gap-2 text-[10px] hover:bg-gray-800/30 select-none"
+                class="w-full px-4 py-2 pl-10 flex items-center gap-2 text-[10px] select-none"
+                style="color: var(--color-text-medium);"
                 (click)="toggleGroup(comp.name)">
-                <span class="text-gray-400">{{ isExpanded(comp.name) ? '▾' : '▸' }}</span>
-                <span class="text-gray-400">{{ comp.leakedCount }} resource{{ comp.leakedCount > 1 ? 's' : '' }} — click to expand</span>
+                <span>{{ isExpanded(comp.name) ? '▾' : '▸' }}</span>
+                <span>{{ comp.leakedCount }} resource{{ comp.leakedCount > 1 ? 's' : '' }} — click to expand</span>
               </button>
               @if (isExpanded(comp.name)) {
-                <div class="divide-y divide-gray-800/30">
+                <div>
                   @for (group of groupLeakEvents(comp.leaked); track group.key) {
                     <div class="px-4 py-2 pl-14 flex items-center gap-2 text-[10px]"
+                         style="border-top: 1px solid; border-color: var(--color-border-subtle);"
                          [title]="group.type + ': ' + group.source + ' (×' + group.count + ')'">
                       <span class="px-1.5 py-0.5 rounded font-medium border"
-                            [ngClass]="group.type === 'subscription' ? 'text-purple-300 bg-purple-900/40 border-purple-700/30'
-                                      : group.type === 'timer' ? 'text-amber-300 bg-amber-900/40 border-amber-700/30'
-                                      : 'text-blue-300 bg-blue-900/40 border-blue-700/30'">
+                            [style.color]="group.type === 'subscription' ? 'var(--color-indigo-light)' : group.type === 'timer' ? 'var(--color-yellow)' : 'var(--color-cyan)'"
+                            [style.backgroundColor]="group.type === 'subscription' ? 'var(--color-purple-bg)' : group.type === 'timer' ? 'var(--color-yellow-bg-medium)' : 'var(--color-blue-bg-light)'"
+                            [style.borderColor]="group.type === 'subscription' ? 'var(--color-indigo-border)' : group.type === 'timer' ? 'var(--color-orange-border)' : 'var(--color-cyan-bg)'">
                         {{ group.type === 'subscription' ? 'Sub' : group.type === 'timer' ? 'Timer' : 'Listener' }}
                       </span>
-                      <span class="text-gray-200 font-mono flex-1 truncate">{{ group.source }}</span>
+                      <span class="font-mono flex-1 truncate" style="color: var(--color-text-light);">{{ group.source }}</span>
                       @if (group.count > 1) {
-                        <span class="text-gray-300 flex-shrink-0">×{{ group.count }}</span>
+                        <span class="flex-shrink-0" style="color: var(--color-text-light);">×{{ group.count }}</span>
                       }
-                      <span class="text-red-400 flex-shrink-0">still running</span>
+                      <span class="flex-shrink-0" style="color: var(--color-red-light);">still running</span>
                     </div>
                   }
                 </div>

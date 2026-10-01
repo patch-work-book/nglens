@@ -57,7 +57,7 @@ export interface RenderReason {
           <div class="reasons-section">
             <div class="reasons-label">Caused by:</div>
             <div class="reasons-list">
-              @for (reason of metrics().reasons | slice:0:3; track reason.type) {
+              @for (reason of metrics().reasons | slice:0:3; track $index) {
                 <div class="reason-item">
                   <span class="reason-type">{{ formatReasonType(reason.type) }}</span>
                   <span class="reason-description">{{ reason.description }}</span>
@@ -146,7 +146,7 @@ export interface RenderReason {
 
     .component-card.performance-slow {
       border-left: 4px solid var(--color-slow);
-      background-color: rgba(239, 68, 68, 0.05);
+      background-color: var(--color-red-bg-light);
     }
 
     .card-header {
@@ -177,17 +177,17 @@ export interface RenderReason {
     }
 
     .badge-fast {
-      background-color: rgba(34, 197, 94, 0.2);
+      background-color: var(--color-green-bg);
       color: var(--color-success);
     }
 
     .badge-warning {
-      background-color: rgba(251, 191, 36, 0.2);
+      background-color: var(--color-yellow-bg-medium);
       color: var(--color-warning);
     }
 
     .badge-slow {
-      background-color: rgba(239, 68, 68, 0.2);
+      background-color: var(--color-red-bg-stronger);
       color: var(--color-slow);
     }
 
@@ -296,17 +296,17 @@ export interface RenderReason {
     }
 
     .assessment-fast {
-      background-color: rgba(34, 197, 94, 0.1);
+      background-color: var(--color-green-bg);
       color: var(--color-success);
     }
 
     .assessment-warning {
-      background-color: rgba(251, 191, 36, 0.1);
+      background-color: var(--color-yellow-bg-medium);
       color: var(--color-warning);
     }
 
     .assessment-slow {
-      background-color: rgba(239, 68, 68, 0.1);
+      background-color: var(--color-red-bg-light);
       color: var(--color-slow);
     }
 
@@ -351,7 +351,7 @@ export interface RenderReason {
     }
 
     .button-accent:hover {
-      background-color: #F59E0B;
+      background-color: var(--color-store);
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,

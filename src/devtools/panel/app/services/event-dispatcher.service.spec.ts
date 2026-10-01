@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as fc from 'fast-check';
 import { EventDispatcherService } from './event-dispatcher.service';
+import { DevtoolsPortService } from './devtools-port.service';
 import { PanelState } from '../state/panel.state';
 import type { PortMessage } from '../../../../types/port-messages';
 
@@ -66,18 +67,25 @@ function createTestService(): { service: EventDispatcherService; state: PanelSta
     configurable: true,
   });
 
-  // Inject the port service (if the fix adds it, it will be used; on unfixed code this won't exist)
-  Object.defineProperty(service, 'portService', {
-    value: mockDevtoolsPortService,
+  // Inject a mock Injector that returns the mock port service
+  const mockInjector = {
+    get: (token: any) => {
+      if (token === (DevtoolsPortService as any) || token?.name === 'DevtoolsPortService') {
+        return mockDevtoolsPortService;
+      }
+      return null;
+    },
+  };
+
+  Object.defineProperty(service, 'injector', {
+    value: mockInjector,
     writable: true,
     configurable: true,
   });
 
-  // Also try the injector-based lazy pattern (the fix might use this)
-  Object.defineProperty(service, 'injector', {
-    value: {
-      get: () => mockDevtoolsPortService,
-    },
+  // Pre-initialize the port service cache so the getter returns the mock immediately
+  Object.defineProperty(service, '_portService', {
+    value: mockDevtoolsPortService,
     writable: true,
     configurable: true,
   });
@@ -178,23 +186,32 @@ describe('EventDispatcherService', () => {
       expect(mockSend).not.toHaveBeenCalled();
     });
 
-    it('should resume START_TRACKING after TAB_NAVIGATED when tracking was active', () => {
-      state.connectionState.set('connected');
-      state.isTracking.set(true);
+    it('should resume START_TRACKING after TAB_NAVIGATED when tracking was active', async () => {
+      vi.useFakeTimers();
+      try {
+        state.connectionState.set('connected');
+        state.isTracking.set(true);
 
-      const message: PortMessage = {
-        type: 'TAB_NAVIGATED',
-        payload: null,
-        timestamp: Date.now(),
-      };
+        const message: PortMessage = {
+          type: 'TAB_NAVIGATED',
+          payload: null,
+          timestamp: Date.now(),
+        };
 
-      service.dispatch(message);
+        service.dispatch(message);
 
-      expect(state.connectionState()).toBe('connected');
-      expect(state.isTracking()).toBe(true);
-      expect(mockSend).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'START_TRACKING' })
-      );
+        expect(state.connectionState()).toBe('connected');
+        expect(state.isTracking()).toBe(true);
+
+        // Fast-forward through the setTimeout(50) in handleTabNavigated
+        vi.advanceTimersByTime(50);
+
+        expect(mockSend).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'START_TRACKING' })
+        );
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should keep render data after ROUTE_CHANGED by default', () => {
