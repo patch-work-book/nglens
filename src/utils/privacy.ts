@@ -7,9 +7,13 @@
  * - URL allowlist for the only permitted external navigation (angular.dev docs)
  * - Data sanitization helper that delegates to the serializer
  *
- * All analysis is performed locally in the browser. Anonymous usage analytics
- * may be sent to Google Analytics only after explicit user opt-in. The other
- * external interaction is opening angular.dev documentation links in new tabs.
+ * All analysis is performed locally in the browser.
+ *
+ * RELEASE NOTE (v1.2.0): usage analytics are DISABLED for this release via the
+ * ANALYTICS_ENABLED_IN_RELEASE kill-switch in analytics-service.ts. The opt-in,
+ * anonymous, fail-closed analytics code remains in the tree for a future
+ * release but transmits nothing in v1.2.0. The only external interaction in
+ * this release is opening angular.dev documentation links in new tabs.
  */
 
 import { safeClone, CIRCULAR_REFERENCE_MARKER, DOM_NODE_MARKER, FUNCTION_MARKER } from './serializer';
@@ -25,8 +29,12 @@ export const PRIVACY_POLICY = {
   /** Analysis data, source code, page URLs, and DOM content are not transmitted */
   noAnalysisDataExfiltration: true,
 
-  /** Anonymous usage analytics require explicit opt-in consent */
-  analyticsOptInOnly: true,
+  /**
+   * Usage analytics are DISABLED in this release (v1.2.0). The analytics code
+   * exists but is turned off by the ANALYTICS_ENABLED_IN_RELEASE kill-switch in
+   * analytics-service.ts, and no API secret is bundled, so nothing is sent.
+   */
+  analyticsDisabledInRelease: true,
 
   /** No external API calls are used for analysis functionality */
   noExternalAnalysisAPIs: true,
@@ -51,14 +59,18 @@ export const PRIVACY_POLICY = {
 
   /** Permissions used and their justification */
   permissions: {
-    activeTab: 'Access current tab for Angular detection and analysis',
-    scripting: 'Inject page-script.js into main world for Angular API access',
-    storage: 'Persist scan results and consent state locally (no sync/cloud)',
+    scripting: 'Inject the local analysis script into the inspected page for Angular API access',
+    storage: 'Persist scan results and settings locally (no sync/cloud)',
   },
 
-  /** Host permissions used and their justification */
+  /**
+   * Host permissions used and their justification. These match manifest.json.
+   * The broad http/https host access is required ONLY to inject the local
+   * analysis script into the inspected page — it is not used to send data out.
+   */
   hostPermissions: {
-    'https://www.google-analytics.com/*': 'Send anonymous usage analytics after opt-in consent',
+    'http://*/*': 'Inject the local analysis script into the inspected page (no data sent)',
+    'https://*/*': 'Inject the local analysis script into the inspected page (no data sent)',
   },
 } as const;
 

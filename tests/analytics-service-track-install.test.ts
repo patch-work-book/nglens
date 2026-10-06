@@ -42,6 +42,16 @@ vi.stubEnv('VITE_GA4_API_SECRET', 'test-secret');
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock;
 
+// Construct an AnalyticsService with the release kill-switch forced ON, so the
+// retry/backoff/dedup MECHANISM can be exercised. In production the kill-switch
+// is OFF (ANALYTICS_ENABLED_IN_RELEASE = false) and nothing is transmitted —
+// that default-off behavior is covered by its own test below.
+function newEnabledService(): AnalyticsService {
+  const svc = new AnalyticsService();
+  (svc as unknown as { releaseEnabled: boolean }).releaseEnabled = true;
+  return svc;
+}
+
 describe('AnalyticsService.trackInstall', () => {
   let service: AnalyticsService;
 
@@ -54,7 +64,16 @@ describe('AnalyticsService.trackInstall', () => {
     // Default: consent granted
     mockStorage['analytics_consent'] = 'granted';
 
-    service = new AnalyticsService();
+    service = newEnabledService();
+  });
+
+  it('is DISABLED by default in this release (kill-switch off → never sends)', async () => {
+    // A plain, non-overridden service must send nothing even with consent granted.
+    const releaseService = new AnalyticsService();
+    const promise = releaseService.trackInstall('1.0.0');
+    await vi.runAllTimersAsync();
+    await promise;
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   afterEach(() => {
@@ -80,7 +99,7 @@ describe('AnalyticsService.trackInstall', () => {
 
   it('does not send event when consent is denied', async () => {
     mockStorage['analytics_consent'] = 'denied';
-    service = new AnalyticsService();
+    service = newEnabledService();
 
     const promise = service.trackInstall('1.0.0');
     await vi.runAllTimersAsync();

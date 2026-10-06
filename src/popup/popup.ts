@@ -7,12 +7,20 @@
  */
 
 import type { ExtensionMessage } from '../types/messages';
+import { ANALYTICS_ENABLED_IN_RELEASE } from '../services/analytics-service';
 
 const autoStartToggle = document.getElementById('autoStartToggle') as HTMLInputElement;
 
 // Initialize
-checkAndShowConsentPrompt();
-initAnalyticsToggle();
+// Analytics is disabled for this release (see ANALYTICS_ENABLED_IN_RELEASE).
+// When disabled, we neither prompt for consent nor expose the analytics toggle,
+// so the UI never implies data collection that does not happen.
+if (ANALYTICS_ENABLED_IN_RELEASE) {
+  checkAndShowConsentPrompt();
+  initAnalyticsToggle();
+} else {
+  hideAnalyticsControls();
+}
 initAutoStartScan();
 
 // Auto Start Settings Management
@@ -97,6 +105,21 @@ async function handleConsentChoice(consent: 'granted' | 'denied', overlay: HTMLE
   if (toggle) {
     toggle.checked = consent === 'granted';
   }
+}
+
+// --- Analytics disabled for this release: hide the analytics UI ---
+
+function hideAnalyticsControls(): void {
+  // Hide the settings row container if present, else the toggle itself.
+  const container = document.querySelector('.analytics-setting') as HTMLElement | null;
+  if (container) {
+    container.style.display = 'none';
+    return;
+  }
+  const toggle = document.getElementById('analyticsToggle');
+  const row = toggle?.closest('.analytics-setting') as HTMLElement | null;
+  if (row) row.style.display = 'none';
+  else if (toggle) (toggle as HTMLElement).style.display = 'none';
 }
 
 // --- Analytics Settings Toggle ---

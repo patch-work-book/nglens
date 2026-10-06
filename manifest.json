@@ -1,13 +1,12 @@
 {
   "manifest_version": 3,
   "name": "ngLens",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "See WHEN things happen, WHY components re-render. Find bottlenecks instantly. All analysis is local.",
   "author": "ngLens Contributors",
   "homepage_url": "https://github.com/gowtham-labs/nglens",
 
   "permissions": [
-    "activeTab",
     "storage",
     "scripting"
   ],

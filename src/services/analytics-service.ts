@@ -4,11 +4,33 @@ import type { AnalyticsEvent, MeasurementProtocolPayload } from '../types/analyt
 import { ConsentManager } from './consent-manager';
 import { ClientIdManager } from './client-id-manager';
 
+/**
+ * RELEASE KILL-SWITCH (v1.2.0).
+ *
+ * Analytics is DISABLED for the first public release. This flag short-circuits
+ * isEnabled() to false unconditionally, so NO usage events are sent even if a
+ * build somehow includes a GA4 API secret and a user has granted consent.
+ *
+ * The analytics implementation (opt-in, anonymous, fail-closed) is intentionally
+ * left in place so it can be re-enabled in a future release by flipping this flag
+ * to true AND shipping a build with VITE_GA4_API_SECRET set AND surfacing the
+ * Chrome Web Store privacy disclosure. Do not flip without that disclosure.
+ */
+export const ANALYTICS_ENABLED_IN_RELEASE = false;
+
 export class AnalyticsService {
   private readonly endpoint = 'https://www.google-analytics.com/mp/collect';
   private readonly measurementId = 'G-0XE578T3EQ';
   private readonly apiSecret: string | undefined;
   private readonly timeoutMs = 5000;
+
+  /**
+   * Per-instance release gate. Defaults to the release kill-switch constant.
+   * Exposed as an instance field (not a bare const check) only so that tests
+   * which exercise the retry/backoff mechanism can enable it explicitly. In
+   * production nothing flips this, so analytics stays disabled for v1.2.0.
+   */
+  private readonly releaseEnabled: boolean = ANALYTICS_ENABLED_IN_RELEASE;
 
   private readonly consentManager: ConsentManager;
   private readonly clientIdManager: ClientIdManager;
@@ -24,6 +46,12 @@ export class AnalyticsService {
    * Returns true only when consent is granted AND the API secret is present.
    */
   async isEnabled(): Promise<boolean> {
+    // Release kill-switch: analytics is disabled for v1.2.0 regardless of
+    // consent or API secret. See ANALYTICS_ENABLED_IN_RELEASE.
+    if (!this.releaseEnabled) {
+      return false;
+    }
+
     if (!this.apiSecret) {
       return false;
     }
